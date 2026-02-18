@@ -1,0 +1,18 @@
+# LLM ve API Bağlantısı
+openai
+python-dotenv
+
+# Ontoloji ve Sembolik Yapay Zeka
+owlready2
+
+# Google API Entegrasyonu (Gmail ve Drive için)
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
+
+# Veri İşleme
+pandas
+numpy
+
+# Vektör Veritabanı (Dijital Ayak İzi / RAG için)
+chromadb

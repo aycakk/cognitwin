@@ -1,0 +1,21 @@
+# Özel ayarlar ve şifreler
+.env
+
+# Python kütüphane klasörü
+venv/
+env/
+bin/
+lib/
+
+# Geçici dosyalar ve cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Veritabanı dosyaları
+*.db
+*.sqlite3
+
+# İşletim sistemi dosyaları
+.DS_Store
+Thumbs.db
