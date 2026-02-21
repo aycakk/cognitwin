@@ -88,3 +88,4 @@ Ders: COM 8090 [USER_NAME_MASKED].
 
 [EMAIL][2026-02-21 16:30] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED]> Subject: Öğrenci işleri. Öğrenci no: [STUDENT_ID_MASKED]."
 [NOTE][2026-02-21 17:05] src=note course=COM8090 text="Agent cevapları kısa, akademik, net olmalı."
+[NOTE][2026-02-21 14:35] src=note course=COGNIWIN text="footprints update test"
