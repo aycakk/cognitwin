@@ -1,0 +1,50 @@
+@prefix : <http://cognitwin.org/student#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+### Classes
+:Student rdf:type owl:Class .
+:Course rdf:type owl:Class .
+:Exam rdf:type owl:Class .
+:Assignment rdf:type owl:Class .
+:Instructor rdf:type owl:Class .
+
+### Object Properties
+:takesCourse rdf:type owl:ObjectProperty ;
+             rdfs:domain :Student ;
+             rdfs:range :Course .
+
+:hasExam rdf:type owl:ObjectProperty ;
+         rdfs:domain :Course ;
+         rdfs:range :Exam .
+
+:hasAssignment rdf:type owl:ObjectProperty ;
+               rdfs:domain :Course ;
+               rdfs:range :Assignment .
+
+:hasInstructor rdf:type owl:ObjectProperty ;
+               rdfs:domain :Course ;
+               rdfs:range :Instructor .
+
+### Data Properties
+:credits rdf:type owl:DatatypeProperty ;
+         rdfs:domain :Course ;
+         rdfs:range xsd:integer .
+
+:hasExamDate rdf:type owl:DatatypeProperty ;
+             rdfs:domain :Exam ;
+             rdfs:range xsd:dateTime .
+
+:hasDeadline rdf:type owl:DatatypeProperty ;
+             rdfs:domain :Assignment ;
+             rdfs:range xsd:dateTime .
+
+:grade rdf:type owl:DatatypeProperty ;
+       rdfs:domain :Student ;
+       rdfs:range xsd:string .
+
+### Individuals
+:Midterm rdf:type :Exam .
+:Final rdf:type :Exam .
