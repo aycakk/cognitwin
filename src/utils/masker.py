@@ -17,7 +17,13 @@ class PIIMasker:
             "PHONE": r'\b(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b',
             
             # TC No veya benzeri 11 haneli hassas kimlik numaraları
-            "ID_NUMBER": r'\b\d{11}\b'
+            "ID_NUMBER": r'\b\d{11}\b',
+
+            # Student attendance 
+            "ATTENDANCE": r'\b(Present|Absent|Katıldı|Katılmadı|%\d{1,3})\b',
+
+            # Maaş veya bütçe gibi rakamsal veriler 
+            "FINANCIAL": r'\b\d{1,3}(\.\d{3})*(\,\d{2})?\s?(TL|USD|EUR|TRY)\b'
         }
 
     def mask_data(self, text):
