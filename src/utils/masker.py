@@ -5,25 +5,22 @@ class PIIMasker:
         # Genel akademik standartlara uygun Regex kalıpları
         self.patterns = {
             # İsim ve Soyisim (Büyük harfle başlayan iki kelime)
-            "USER_NAME": r'\b[A-ZÇĞİÖŞÜ][a-zçğıöşü]+\s[A-ZÇĞİÖŞÜ][a-zçğıöşü]+\b',
+            "USER_NAME": r'\b[A-ZÇĞİÖŞÜİ][a-zçğıöşüı]+(?:\s+[A-ZÇĞİÖŞÜİ][a-zçğıöşüı]+)+\b',
             
-            # Akademik E-posta (edu, edu.tr, ac.uk, vb. tüm akademik uzantılar)
-            "ACADEMIC_EMAIL": r'[\w\.-]+@[\w\.-]+\.(edu|edu\.tr|ac\.\w+|org\.tr)',
-            
-            # Öğrenci Numarası (Dünya genelinde yaygın 8-12 hane arası sayı dizileri)
-            "STUDENT_ID": r'\b\d{8,12}\b',
+            # email 11 rol için 
+            "EMAIL": r'[\w\.-]+@[\w\.-]+\.\w+',
             
             # Uluslararası Telefon Formatı (+ veya 0 ile başlayan)
-            "PHONE": r'\b(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b',
+            "PHONE": r'\b(\+90\s?)?(0?5\d{2})[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}\b',
             
-            # TC No veya benzeri 11 haneli hassas kimlik numaraları
-            "ID_NUMBER": r'\b\d{11}\b',
+            # KİMLİK NUMARALARI (Öğrenci No, Personel No veya TC No - 8-11 hane arası)
+           "ID_NUMBER": r'\b\d{8,11}\b',
 
             # Student attendance 
             "ATTENDANCE": r'\b(Present|Absent|Katıldı|Katılmadı|%\d{1,3})\b',
 
-            # Maaş veya bütçe gibi rakamsal veriler 
-            "FINANCIAL": r'\b\d{1,3}(\.\d{3})*(\,\d{2})?\s?(TL|USD|EUR|TRY)\b'
+            # Maaş veya bütçe gibi rakamsal veriler 11 rol için
+            "FINANCIAL": r'\b\d{1,3}(\.\d{3})*(\,\d{2})?\s?(TL|TL\.|₺|USD|EUR|TRY)\b'
         }
 
     def mask_data(self, text):
@@ -43,5 +40,8 @@ class PIIMasker:
 # Test etmek istersen burayı çalıştır
 if __name__ == "__main__":
     masker = PIIMasker()
-    sample = "Merhaba, ben Alex Smith. Öğrenci numaram 2024105060 ve mailim alex@university.edu"
-    print(f"Maskelenmiş Metin: {masker.mask_data(sample)}")
+    sample = "Ben İlayda Karahan. Öğrenci numaram 2024105060. Mailim ayca@uni.edu tel 0555 111 22 33. 12.500,00 TL. Durum: Katıldı."
+
+    print("KULLANILAN LABEL'LAR:", list(masker.patterns.keys()))
+    print("ÇALIŞAN DOSYA:", __file__)
+    print("Maskelenmiş Metin:", masker.mask_data(sample))
