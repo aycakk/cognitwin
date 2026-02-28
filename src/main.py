@@ -11,6 +11,7 @@ def test_infrastructure():
     print("--- Test Sonucu ---")
     print(f"Girdi: {raw_data}")
     print(f"Çıktı: {masked_data}")
+    print("---")
 
 if __name__ == "__main__":
     test_infrastructure()
