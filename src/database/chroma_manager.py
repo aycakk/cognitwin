@@ -3,30 +3,27 @@ import os
 
 class ChromaManager:
     def __init__(self):
+        
         # Veritabanı dosyalarını projenin 'data' klasöründe saklıyoruz
         db_path = os.path.join(os.getcwd(), "data", "database")
         self.client = chromadb.PersistentClient(path=db_path)
         
         # 'academic_memory' adında bir hafıza alanı oluşturuyoruz [cite: 39]
         self.collection = self.client.get_or_create_collection(name="academic_memory")
+    def _get_collection(self, info_type: str):
+     name = info_type if info_type else "default"
+     return self.client.get_or_create_collection(name=name)
+        
 
-    def add_academic_info(self, text, info_type, doc_id):
-        """Üye 2'den gelen maskelenmiş veriyi hafızaya kaydeder [cite: 39]"""
-        self.collection.add(
-            documents=[text],
-            metadatas=[{"category": info_type}],
-            ids=[doc_id]
-        )
-        print(f"Hafızaya kaydedildi: {text}")
+    def add_academic_info(self, text: str, info_type: str, doc_id: str):
+     collection = self._get_collection(info_type)
+     collection.add(documents=[text], ids=[doc_id])
+     print(f"Hafızaya kaydedildi: {text}")
 
-    def query_memory(self, question):
-        """Soruyla ilgili en yakın bilgiyi hafızadan bulur (RAG Akışı) [cite: 40]"""
-        results = self.collection.query(
-            query_texts=[question],
-            n_results=2
-        )
-        return results['documents'][0] if results['documents'] else ["Bilgi bulunamadı."]
-
+    def query_memory(self, question: str, info_type: str = "footprints", n_results: int = 5):
+     collection = self._get_collection(info_type)
+     res = collection.query(query_texts=[question], n_results=n_results)
+     return res.get("documents", [[]])[0]
 # --- TEST BÖLÜMÜ ---
 if __name__ == "__main__":
     db = ChromaManager()
