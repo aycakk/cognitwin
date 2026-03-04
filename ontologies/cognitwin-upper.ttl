@@ -1,0 +1,393 @@
+@prefix : <http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xml: <http://www.w3.org/XML/1998/namespace> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@base <http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/> .
+
+<http://cognitwin.org/upper> rdf:type owl:Ontology .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/aboutAgent
+:aboutAgent rdf:type owl:ObjectProperty ;
+            rdfs:subPropertyOf owl:topObjectProperty ;
+            rdfs:domain :Artifact ;
+            rdfs:range :Agent .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/aboutPerson
+:aboutPerson rdf:type owl:ObjectProperty ;
+             rdfs:subPropertyOf owl:topObjectProperty ;
+             rdfs:domain :Artifact ;
+             rdfs:range :Person .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/activityTime
+:activityTime rdf:type owl:ObjectProperty ;
+              rdfs:subPropertyOf owl:topObjectProperty ;
+              rdfs:domain :Activity ;
+              rdfs:range :TimeInterval .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/artifactTime
+:artifactTime rdf:type owl:ObjectProperty ;
+              rdfs:subPropertyOf owl:topObjectProperty ;
+              rdf:type owl:FunctionalProperty ;
+              rdfs:domain :Artifact ;
+              rdfs:range :TimeInstant .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/assignedTo
+:assignedTo rdf:type owl:ObjectProperty ;
+            rdfs:subPropertyOf owl:topObjectProperty ;
+            rdfs:domain :Task ;
+            rdfs:range :Person .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/containsPII
+:containsPII rdf:type owl:ObjectProperty ;
+             rdfs:subPropertyOf owl:topObjectProperty ;
+             rdfs:domain :Artifact ;
+             rdfs:range :PIIElement .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/createdBy
+:createdBy rdf:type owl:ObjectProperty ;
+           rdfs:subPropertyOf owl:topObjectProperty ;
+           rdfs:domain :Artifact ;
+           rdfs:range :Person .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/departmentPartOf
+:departmentPartOf rdf:type owl:ObjectProperty ;
+                  rdfs:subPropertyOf owl:topObjectProperty ;
+                  rdfs:domain :Department ;
+                  rdfs:range :Organization .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/endsAt
+:endsAt rdf:type owl:ObjectProperty ;
+        rdfs:subPropertyOf owl:topObjectProperty ;
+        rdf:type owl:FunctionalProperty ;
+        rdfs:domain :TimeInterval ;
+        rdfs:range :TimeInstant .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/hasAgent
+:hasAgent rdf:type owl:ObjectProperty ;
+          rdfs:subPropertyOf owl:topObjectProperty ;
+          owl:inverseOf :isAgentOf ;
+          rdf:type owl:FunctionalProperty ;
+          rdfs:domain :Person ;
+          rdfs:range :Agent .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/hasMaskLabel
+:hasMaskLabel rdf:type owl:ObjectProperty ;
+              rdfs:subPropertyOf owl:topObjectProperty ;
+              rdfs:domain :PIIElement ;
+              rdfs:range :MaskLabel .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/hasMember
+:hasMember rdf:type owl:ObjectProperty ;
+           rdfs:subPropertyOf owl:topObjectProperty ;
+           owl:inverseOf :memberOf ;
+           rdfs:domain :Organization ;
+           rdfs:range :Person .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/hasTime
+:hasTime rdf:type owl:ObjectProperty ;
+         rdfs:subPropertyOf owl:topObjectProperty ;
+         rdfs:domain :Task ;
+         rdfs:range :TimeInterval .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/isAgentOf
+:isAgentOf rdf:type owl:ObjectProperty ;
+           rdfs:subPropertyOf owl:topObjectProperty ;
+           rdfs:domain :Agent ;
+           rdfs:range :Person .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/memberOf
+:memberOf rdf:type owl:ObjectProperty ;
+          rdfs:subPropertyOf owl:topObjectProperty ;
+          rdfs:domain :Person ;
+          rdfs:range :Organization .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/participatesIn
+:participatesIn rdf:type owl:ObjectProperty ;
+                rdfs:subPropertyOf owl:topObjectProperty ;
+                rdfs:domain :Person ;
+                rdfs:range :Activity .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/startsAt
+:startsAt rdf:type owl:ObjectProperty ;
+          rdfs:subPropertyOf owl:topObjectProperty ;
+          rdf:type owl:FunctionalProperty ;
+          rdfs:domain :TimeInterval ;
+          rdfs:range :TimeInstant .
+
+
+###  http://www.w3.org/2002/07/owl#topObjectProperty
+owl:topObjectProperty rdfs:domain :Person ;
+                      rdfs:range :Agent .
+
+
+#################################################################
+#    Data properties
+#################################################################
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/maskCategory
+:maskCategory rdf:type owl:DatatypeProperty ;
+              rdfs:subPropertyOf owl:topDataProperty ;
+              rdfs:domain :MaskLabel ;
+              rdfs:range xsd:string .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/maskText
+:maskText rdf:type owl:DatatypeProperty ;
+          rdfs:subPropertyOf owl:topDataProperty ;
+          rdfs:domain :MaskLabel ;
+          rdfs:range xsd:string .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/status
+:status rdf:type owl:DatatypeProperty ;
+        rdfs:subPropertyOf owl:topDataProperty ;
+        rdfs:domain :Task ;
+        rdfs:range xsd:string .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/timestamp
+:timestamp rdf:type owl:DatatypeProperty ;
+           rdfs:subPropertyOf owl:topDataProperty ;
+           rdfs:domain :TimeInstant ;
+           rdfs:range xsd:dateTime .
+
+
+#################################################################
+#    Classes
+#################################################################
+
+###  http://cognitwin.org/upper#Assignment
+:Assignment rdf:type owl:Class ;
+            rdfs:subClassOf :Task .
+
+
+###  http://cognitwin.org/upper#Course
+:Course rdf:type owl:Class ;
+        rdfs:subClassOf :Artifact .
+
+
+###  http://cognitwin.org/upper#Exam
+:Exam rdf:type owl:Class ;
+      rdfs:subClassOf :Activity .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/AccountantAgent
+:AccountantAgent rdf:type owl:Class ;
+                 rdfs:subClassOf :Agent .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/Activity
+:Activity rdf:type owl:Class .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/Agent
+:Agent rdf:type owl:Class .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/Artifact
+:Artifact rdf:type owl:Class .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/CDOAgent
+:CDOAgent rdf:type owl:Class ;
+          rdfs:subClassOf :Agent .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/Dataset
+:Dataset rdf:type owl:Class ;
+         rdfs:subClassOf :Artifact .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/Department
+:Department rdf:type owl:Class ;
+            rdfs:subClassOf :Organization .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/Document
+:Document rdf:type owl:Class ;
+          rdfs:subClassOf :Artifact .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/FashionBuyerAgent
+:FashionBuyerAgent rdf:type owl:Class ;
+                   rdfs:subClassOf :Agent .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/FinanceManagerAgent
+:FinanceManagerAgent rdf:type owl:Class ;
+                     rdfs:subClassOf :Agent .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/HeadOfDepartmentAgent
+:HeadOfDepartmentAgent rdf:type owl:Class ;
+                       rdfs:subClassOf :Agent .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/InstructorAgent
+:InstructorAgent rdf:type owl:Class ;
+                 rdfs:subClassOf :Agent .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/MaskLabel
+:MaskLabel rdf:type owl:Class .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/Message
+:Message rdf:type owl:Class ;
+         rdfs:subClassOf :Artifact .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/Organization
+:Organization rdf:type owl:Class .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/PIIElement
+:PIIElement rdf:type owl:Class ;
+            rdfs:subClassOf [ rdf:type owl:Restriction ;
+                              owl:onProperty :hasMaskLabel ;
+                              owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+                              owl:onClass :MaskLabel
+                            ] .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/Person
+:Person rdf:type owl:Class ;
+        rdfs:subClassOf [ rdf:type owl:Restriction ;
+                          owl:onProperty :hasAgent ;
+                          owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+                          owl:onClass :Agent
+                        ] .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/ProjectManagerAgent
+:ProjectManagerAgent rdf:type owl:Class ;
+                     rdfs:subClassOf :Agent .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/RecruiterAgent
+:RecruiterAgent rdf:type owl:Class ;
+                rdfs:subClassOf :Agent .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/ResearcherAgent
+:ResearcherAgent rdf:type owl:Class ;
+                 rdfs:subClassOf :Agent .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/RetailStoreManagerAgent
+:RetailStoreManagerAgent rdf:type owl:Class ;
+                         rdfs:subClassOf :Agent .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/StudentAgent
+:StudentAgent rdf:type owl:Class ;
+              rdfs:subClassOf :Agent .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/Task
+:Task rdf:type owl:Class .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/Time
+:Time rdf:type owl:Class .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/TimeInstant
+:TimeInstant rdf:type owl:Class ;
+             rdfs:subClassOf :Time ;
+             owl:disjointWith :TimeInterval .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/TimeInterval
+:TimeInterval rdf:type owl:Class ;
+              rdfs:subClassOf :Time .
+
+
+#################################################################
+#    Individuals
+#################################################################
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/ATTENDANCE_MASKED
+:ATTENDANCE_MASKED rdf:type owl:NamedIndividual ;
+                   :maskCategory "ATTENDANCE" ;
+                   :maskText "[ATTENDANCE_MASKED]" .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/EMAIL_MASKED
+:EMAIL_MASKED rdf:type owl:NamedIndividual ;
+              :maskCategory "EMAIL" ;
+              :maskText "[EMAIL_MASKED]" .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/FINANCIAL_MASKED
+:FINANCIAL_MASKED rdf:type owl:NamedIndividual ;
+                  :maskCategory "FINANCIAL" ,
+                                "[FINANCIAL_MASKED]" .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/ID_NUMBER_MASKED
+:ID_NUMBER_MASKED rdf:type owl:NamedIndividual ;
+                  :maskCategory "ID_NUMBER" ;
+                  :maskText "[ID_NUMBER_MASKED]" .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/PHONE_MASKED
+:PHONE_MASKED rdf:type owl:NamedIndividual ;
+              :maskCategory "PHONE" ;
+              :maskText "[PHONE_MASKED]" .
+
+
+###  http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/USER_NAME_MASKED
+:USER_NAME_MASKED rdf:type owl:NamedIndividual ;
+                  :maskCategory "USER_NAME" ;
+                  :maskText "[USER_NAME_MASKED]" .
+
+
+#################################################################
+#    General axioms
+#################################################################
+
+[ rdf:type owl:AllDisjointClasses ;
+  owl:members ( :AccountantAgent
+                :CDOAgent
+                :FashionBuyerAgent
+                :FinanceManagerAgent
+                :ProjectManagerAgent
+                :RecruiterAgent
+                :RetailStoreManagerAgent
+              )
+] .
+
+
+[ rdf:type owl:AllDisjointClasses ;
+  owl:members ( :HeadOfDepartmentAgent
+                :InstructorAgent
+                :ResearcherAgent
+                :StudentAgent
+              )
+] .
+
+
+###  Generated by the OWL API (version 4.5.29.2024-05-13T12:11:03Z) https://github.com/owlcs/owlapi
