@@ -1,4 +1,5 @@
-from chroma_manager import ChromaManager
+from src.database.chroma_manager import ChromaManager
+
 
 def run_test():
     db = ChromaManager()
