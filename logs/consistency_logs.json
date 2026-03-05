@@ -1,0 +1,78 @@
+[
+    {
+        "timestamp": "2026-02-28T15:55:39.197206",
+        "details": {
+            "question": "Ders programım nedir?",
+            "matches": 5,
+            "unique_statements": 5,
+            "top_docs": [
+                "[DERS] vize sınavı 20 Mart'ta.",
+                "Hatırlatma: Yarın saat 14:00'te bitirme projesi sunum provası var.",
+                "Vize sınavı 25 Mart'ta.",
+                "Vize sınavı 20 Mart'ta.",
+                "[NOTE][2026-02-21 17:05] src=note course=COM8090 text=\"Agent cevapları kısa, akademik, net olmalı.\""
+            ],
+            "top_metadatas": [
+                {
+                    "category": "vize"
+                },
+                {
+                    "role": "student",
+                    "source": "footprints_masked"
+                },
+                {
+                    "category": "exam",
+                    "role": "student",
+                    "source": "consistency_test"
+                },
+                {
+                    "category": "exam",
+                    "role": "student",
+                    "source": "consistency_test"
+                },
+                {
+                    "role": "student",
+                    "source": "footprints_masked"
+                }
+            ]
+        }
+    },
+    {
+        "timestamp": "2026-02-28T15:55:39.328428",
+        "details": {
+            "question": "Vize sınavı ne zaman?",
+            "matches": 5,
+            "unique_statements": 5,
+            "top_docs": [
+                "Vize sınavı 25 Mart'ta.",
+                "Vize sınavı 20 Mart'ta.",
+                "[DERS] vize sınavı 20 Mart'ta.",
+                "E-posta: Hocam, vize sınavı tarihini öğrenebilir miyim?",
+                "[NOTE][2026-02-10 22:10] src=note course=COM8090 text=\"Vize hatırlatma sorusu demo: 'Vize saatim kaçtı?'\""
+            ],
+            "top_metadatas": [
+                {
+                    "category": "exam",
+                    "role": "student",
+                    "source": "consistency_test"
+                },
+                {
+                    "category": "exam",
+                    "role": "student",
+                    "source": "consistency_test"
+                },
+                {
+                    "category": "vize"
+                },
+                {
+                    "role": "student",
+                    "source": "footprints_masked"
+                },
+                {
+                    "role": "student",
+                    "source": "footprints_masked"
+                }
+            ]
+        }
+    }
+]
