@@ -1,91 +1,62 @@
-2026-02-10: COM 8090 dersi için [USER_NAME_MASKED] hocaya mail atıldı. 
-
-
-2026-02-15: Proje grubu Melih ve İlayda ile kütüphanede toplandık. 
-
-
-Hatırlatma: Yarın saat 14:00'te bitirme projesi sunum provası var. 
-
-
-[USER_NAME_MASKED]: Akademik ontoloji için OWL/RDF standartları kullanılacak. 
-
+2026-02-10: COM 8090 dersi için [USER_NAME_MASKED] hocaya mail atıldı.
+2026-02-15: Proje grubu Melih ve İlayda ile kütüphanede toplandık.
+Hatırlatma: Yarın saat 14:00'te bitirme projesi sunum provası var.
+[USER_NAME_MASKED]: Akademik ontoloji için OWL/RDF standartları kullanılacak.
 E-posta: Hocam, vize sınavı tarihini öğrenebilir miyim?
-2026-02-18: Proje grubunda [USER_NAME_MASKED], [USER_NAME_MASKED] ve [USER_NAME_MASKED] birlikte çalışıyor. 
-
-
-[USER_NAME_MASKED]: Ayça AI Engineer, [USER_NAME_MASKED]-Stack, İlayda ise [USER_NAME_MASKED] olarak belirlendi. 
-
-
+2026-02-18: Proje grubunda [USER_NAME_MASKED], [USER_NAME_MASKED] ve [USER_NAME_MASKED] birlikte çalışıyor.
+[USER_NAME_MASKED]: Ayça AI Engineer, [USER_NAME_MASKED]-Stack, İlayda ise [USER_NAME_MASKED] olarak belirlendi.
 Ders: COM 8090 [USER_NAME_MASKED].
-
-2026-02-18: [ACADEMIC_EMAIL_MASKED].tr adresinden [USER_NAME_MASKED]'ya proje taslağı gönderildi.
-[USER_NAME_MASKED] ([ACADEMIC_EMAIL_MASKED].tr) ve [USER_NAME_MASKED] ile gruptayız.
-
-[USER_NAME_MASKED] proje liderimiz, telefon numarası [STUDENT_ID_MASKED].
-[EMAIL][2026-02-03 09:10] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED]> Subject: Haftalık rapor. [USER_NAME_MASKED] 17:00'ye kadar raporu yükleyin."
+2026-02-18: [EMAIL_MASKED] adresinden [USER_NAME_MASKED]'ya proje taslağı gönderildi.
+[USER_NAME_MASKED] ([EMAIL_MASKED]) ve [USER_NAME_MASKED] ile gruptayız.
+[USER_NAME_MASKED] proje liderimiz, telefon numarası [PHONE_MASKED].
+[EMAIL][2026-02-03 09:10] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Haftalık rapor. [USER_NAME_MASKED] 17:00'ye kadar raporu yükleyin."
 [LMS][2026-02-03 23:55] src=lms course=COM8090 text="Assignment opened: Week-1 Report. Deadline: 2026-02-07 17:00."
-[CHAT][2026-02-04 10:02] src=chat course=COM8090 text="[USER_NAME_MASKED] Smith, öğrenci no: [STUDENT_ID_MASKED]. Hocam haftalık rapor formatı PDF mi?"
-[EMAIL][2026-02-04 10:20] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED].tr> Subject: Format. PDF kabul, dosya adı: COM8090_Week1_[STUDENTID]."
+[CHAT][2026-02-04 10:02] src=chat course=COM8090 text="[USER_NAME_MASKED], öğrenci no: [ID_NUMBER_MASKED]. Hocam haftalık rapor formatı PDF mi?"
+[EMAIL][2026-02-04 10:20] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Format. PDF kabul, dosya adı: COM8090_Week1_[STUDENTID]."
 [NOTE][2026-02-04 19:05] src=note course=COM8090 text="Sunum senaryosu: Ödev hatırlatma + sınav saati sorma. Agent akademik tonda konuşacak."
-
-[EMAIL][2026-02-05 08:30] src=mail course=OR701 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED]> Subject: Quiz. Quiz 1: 12 Şubat 09:00."
+[EMAIL][2026-02-05 08:30] src=mail course=OR701 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Quiz. Quiz 1: 12 Şubat 09:00."
 [LMS][2026-02-05 21:15] src=lms course=OR701 text="Lecture notes uploaded: [USER_NAME_MASKED] week."
 [CHAT][2026-02-06 11:40] src=chat course=OR701 text="Quiz 1 sınıfı C-101, saat 09:00 olarak yazıyor."
 [NOTE][2026-02-06 20:10] src=note course=OR701 text="Çalışma planı: Her gün 1 saat OR701, özellikle sınıflandırma ve kümeleme."
-[EMAIL][2026-02-07 16:20] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED]> Subject: Teslim. Week-1 raporu yüklendi."
-
+[EMAIL][2026-02-07 16:20] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Teslim. Week-1 raporu yüklendi."
 [LMS][2026-02-08 12:05] src=lms course=DM510 text="Assignment posted: K-Means clustering report. Due: 2026-02-18 23:59."
 [CHAT][2026-02-08 12:20] src=chat course=DM510 text="Hocam K-Means raporu için veri seti serbest mi?"
-[EMAIL][2026-02-08 13:10] src=mail course=DM510 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED]> Subject: Dataset. Telco churn dataset kullanabilirsiniz."
+[EMAIL][2026-02-08 13:10] src=mail course=DM510 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Dataset. Telco churn dataset kullanabilirsiniz."
 [NOTE][2026-02-08 18:00] src=note course=DM510 text="K-Means: ölçekleme önemli. PCA opsiyonel."
 [LMS][2026-02-09 09:30] src=lms course=DM510 text="Lab session announced: 2026-02-11 14:00 Lab-2."
-
-[EMAIL][2026-02-10 09:12] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED].tr> Subject: Vize. Vize 2026-03-03 13:00, sınıf B-203."
+[EMAIL][2026-02-10 09:12] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Vize. Vize 2026-03-03 13:00, sınıf B-203."
 [CHAT][2026-02-10 09:20] src=chat course=COM8090 text="Vize kapsamı: 1-4. haftalar."
 [NOTE][2026-02-10 22:10] src=note course=COM8090 text="Vize hatırlatma sorusu demo: 'Vize saatim kaçtı?'"
-
-[EMAIL][2026-02-11 10:05] src=mail course=OR701 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED]> Subject: Office hour. Perşembe 15:00-16:00."
+[EMAIL][2026-02-11 10:05] src=mail course=OR701 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Office hour. Perşembe 15:00-16:00."
 [CHAT][2026-02-11 10:20] src=chat course=OR701 text="Ofis saatinde karar ağaçlarını sor."
 [LMS][2026-02-11 18:40] src=lms course=OR701 text="Quiz 1 reminder: 2026-02-12 09:00 C-101."
 [NOTE][2026-02-11 23:10] src=note course=OR701 text="Quiz öncesi: 20 soru deneme çöz."
-
-[EMAIL][2026-02-12 07:50] src=mail course=OR701 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED]> Subject: Geliyorum. Quiz'e geliyorum."
+[EMAIL][2026-02-12 07:50] src=mail course=OR701 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Geliyorum. Quiz'e geliyorum."
 [CHAT][2026-02-12 09:55] src=chat course=OR701 text="Quiz bitti. Zor soru: entropy."
 [NOTE][2026-02-12 21:00] src=note course=OR701 text="Sonuçlar açıklanınca tekrar bak."
-
 [LMS][2026-02-13 09:00] src=lms course=COM8090 text="Project folder created: /agents /utils /data."
 [CHAT][2026-02-13 09:15] src=chat course=COM8090 text="Üye 2 masker yazdı: utils/masker.py"
 [NOTE][2026-02-13 12:00] src=note course=COM8090 text="Benim hedefim: 50 satır footprints + L1/L2 test."
-
-[EMAIL][2026-02-14 14:30] src=mail course=DM510 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED]> Subject: Lab-2. Lab-2 2026-02-11 14:00 Lab-2 odası D-202."
+[EMAIL][2026-02-14 14:30] src=mail course=DM510 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Lab-2. Lab-2 2026-02-11 14:00 Lab-2 odası D-202."
 [NOTE][2026-02-14 18:40] src=note course=DM510 text="K-Means raporu teslim: 2026-02-18 23:59."
 [CHAT][2026-02-14 19:00] src=chat course=DM510 text="Teslim gecikirse -10 puan."
-
-[EMAIL][2026-02-15 10:10] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED].tr> Subject: Sunum. Demo: Ödev hatırlatma + sınav saati sorma."
+[EMAIL][2026-02-15 10:10] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Sunum. Demo: Ödev hatırlatma + sınav saati sorma."
 [NOTE][2026-02-15 13:35] src=note course=COM8090 text="Demo akışı: Kullanıcı sorar, agent hafızadan çekip kısa yanıtlar."
-
 [LMS][2026-02-16 08:45] src=lms course=COM8090 text="Week-2 Report opened. Deadline: 2026-02-14 17:00 (geçmiş tarih notu)."
 [NOTE][2026-02-16 09:10] src=note course=COM8090 text="Takvim karışıklığı varsa agent kesin tarih söylemeli."
-
-[EMAIL][2026-02-17 16:50] src=mail course=DM510 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED]> Subject: Yardım. K-Means için normalizasyon yaptım."
+[EMAIL][2026-02-17 16:50] src=mail course=DM510 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Yardım. K-Means için normalizasyon yaptım."
 [NOTE][2026-02-17 21:20] src=note course=DM510 text="Rapor: giriş, yöntem, sonuç, yorum."
-
 [LMS][2026-02-18 23:40] src=lms course=DM510 text="Submission uploaded: kmeans_report.pdf"
-[EMAIL][2026-02-19 09:05] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED].tr> Subject: Hatırlatma. Haftalık raporlar Cuma 17:00."
+[EMAIL][2026-02-19 09:05] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Hatırlatma. Haftalık raporlar Cuma 17:00."
 [NOTE][2026-02-19 10:00] src=note course=COM8090 text="Sık sorulacaklar: 'Bu hafta hangi teslimler var?'"
-
 [CHAT][2026-02-20 11:05] src=chat course=COM8090 text="Benim telefonum: +90 [PHONE_MASKED] (test için)."
-[CHAT][2026-02-20 11:06] src=chat course=COM8090 text="Kimlik test: [STUDENT_ID_MASKED] (maskelenmeli)."
-[CHAT][2026-02-20 11:07] src=chat course=COM8090 text="E-posta test: [ACADEMIC_EMAIL_MASKED].tr (maskelenmeli)."
-
+[CHAT][2026-02-20 11:06] src=chat course=COM8090 text="Kimlik test: [ID_NUMBER_MASKED] (maskelenmeli)."
+[CHAT][2026-02-20 11:07] src=chat course=COM8090 text="E-posta test: [EMAIL_MASKED] (maskelenmeli)."
 [NOTE][2026-02-20 22:10] src=note course=COM8090 text="L2 test soruları: vize saati, sınıf, haftalık rapor teslim."
-[EMAIL][2026-02-21 09:10] src=mail course=OR701 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED]> Subject: Final. Final haftası 2026-06-10 civarı (tahmini)."
+[EMAIL][2026-02-21 09:10] src=mail course=OR701 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Final. Final haftası 2026-06-10 civarı (tahmini)."
 [NOTE][2026-02-21 11:30] src=note course=OR701 text="Final tarihi kesin değilse agent 'veride kesin yok' demeli."
-
 [CHAT][2026-02-21 12:15] src=chat course=COM8090 text="Sunum provası 2026-02-24 16:00 Zoom."
-[EMAIL][2026-02-21 12:20] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED].tr> Subject: Prova. 24 Şubat 16:00 Zoom linki gönderilecek."
+[EMAIL][2026-02-21 12:20] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Prova. 24 Şubat 16:00 Zoom linki gönderilecek."
 [NOTE][2026-02-21 13:00] src=note course=COM8090 text="Prova saatini sor senaryosu da eklenebilir."
-
-[EMAIL][2026-02-21 16:30] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[ACADEMIC_EMAIL_MASKED]> Subject: Öğrenci işleri. Öğrenci no: [STUDENT_ID_MASKED]."
+[EMAIL][2026-02-21 16:30] src=mail course=COM8090 text="From: [USER_NAME_MASKED] <[EMAIL_MASKED]> Subject: Öğrenci işleri. Öğrenci no: [ID_NUMBER_MASKED]."
 [NOTE][2026-02-21 17:05] src=note course=COM8090 text="Agent cevapları kısa, akademik, net olmalı."
-[NOTE][2026-02-21 14:35] src=note course=COGNIWIN text="footprints update test"
