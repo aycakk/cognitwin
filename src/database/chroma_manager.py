@@ -1,125 +1,119 @@
 import os
 import json
 import uuid
+import chromadb
 from datetime import datetime
 
-# Chroma telemetry kapat
+# Chroma telemetry kapat (Terminal kirliliğini engeller)
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
 os.environ["CHROMA_TELEMETRY"] = "False"
 
-import chromadb
-
-
 class ChromaManager:
+    """
+    CogniTwin - Vektör Veritabanı ve Hafıza Yönetim Merkezi.
+    Hem kalıcı veri saklama (Persistence) hem de tutarlılık denetimi (D-07) yapar.
+    """
+
     def __init__(self):
-        # Proje kök dizinini sabit olarak belirler
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-
-        # Veritabanı dosyalarını proje içindeki data/database klasöründe saklar
-        db_path = os.path.join(project_root, "data", "database")
-        os.makedirs(db_path, exist_ok=True)
-
-        print(f"[CHROMA] Using database path: {db_path}")
-
-        self.client = chromadb.PersistentClient(path=db_path)
-
-        # Tek bir sabit collection adı kullanılır
+        """
+        Veritabanı yolunu projenin ana dizinindeki 'static/chromadb' olarak mühürler.
+        Bu sayede proje hangi klasörden çalıştırılırsa çalıştırılsın aynı veriye erişir.
+        """
+        # Proje kök dizinine erişim (src -> database -> CogniTwin)
+        current_file_path = os.path.abspath(__file__)
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_path)))
+        
+        # Veritabanı ve Log yollarını sabitle
+        self.db_path = os.path.join(project_root, "static", "chromadb")
+        self.log_dir = os.path.join(project_root, "logs")
+        
+        # Klasörleri oluştur
+        os.makedirs(self.db_path, exist_ok=True)
+        os.makedirs(self.log_dir, exist_ok=True)
+            
+        # Kalıcı istemciyi başlat
+        self.client = chromadb.PersistentClient(path=self.db_path)
         self.collection = self.client.get_or_create_collection(name="academic_memory")
+        print(f"📂 [CHROMA INFO] DB Bağlantısı Başarılı: {self.db_path}")
 
     def add_academic_info(self, text, metadata=None, doc_id=None):
-        # Maskelenmiş veriyi hafızaya kaydeder
-        if metadata is None:
-            metadata = {}
+        """Akademik bilgiyi temizleyerek hafızaya kaydeder."""
+        if metadata is None: metadata = {}
+        if doc_id is None: doc_id = str(uuid.uuid4())
 
+        # Metadata temizliği (Chroma sadece basit tipleri kabul eder)
         safe_metadata = {}
         for k, v in metadata.items():
-            if v is None:
-                continue
-            if isinstance(v, (str, int, float, bool)):
+            if v is not None and isinstance(v, (str, int, float, bool)):
                 safe_metadata[str(k)] = v
             else:
                 safe_metadata[str(k)] = str(v)
-
-        if doc_id is None:
-            doc_id = str(uuid.uuid4())
 
         self.collection.add(
             documents=[text],
             metadatas=[safe_metadata],
             ids=[doc_id]
         )
-        print(f"[CHROMA] Saved: {doc_id}")
+        print(f"✅ Hafızaya mühürlendi: {doc_id}")
 
-    def query_memory(self, question, n_results=5):
-        # Soruyla ilgili en yakın bilgiyi hafızadan bulur
-        results = self.collection.query(
-            query_texts=[question],
-            n_results=n_results
-        )
-
-        documents = results.get("documents", [])
-        if documents and len(documents) > 0:
-            return documents[0]
-
-        return []
-
-    def log_consistency_check(self, details):
-        # Dashboard için sonuçları logs klasörüne JSON olarak kaydeder
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        log_dir = os.path.join(project_root, "logs")
-        os.makedirs(log_dir, exist_ok=True)
-
-        log_file = os.path.join(log_dir, "consistency_logs.json")
-
-        log_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "details": details
-        }
-
-        logs = []
-        if os.path.exists(log_file):
-            with open(log_file, "r", encoding="utf-8") as f:
-                try:
-                    logs = json.load(f)
-                except Exception:
-                    logs = []
-
-        logs.append(log_entry)
-
-        with open(log_file, "w", encoding="utf-8") as f:
-            json.dump(logs, f, indent=4, ensure_ascii=False)
+    def query_memory(self, question, n_results=10):
+        """Soruyla ilgili en yakın kayıtları döndürür."""
+        try:
+            results = self.collection.query(
+                query_texts=[question],
+                n_results=n_results
+            )
+            return results.get("documents", [[]])[0] or []
+        except Exception as e:
+            print(f"⚠️ Sorgu hatası: {e}")
+            return []
 
     def check_consistency(self, question, n_results=5):
-        # Hafızada çelişki denetimi yapar ve sonucu loglar
-        results = self.collection.query(
-            query_texts=[question],
-            n_results=n_results
-        )
-
+        """
+        D-07 Consistency Check: Hafızada çelişkili bilgi olup olmadığını denetler.
+        Örn: Aynı ders için iki farklı vize saati varsa True döner.
+        """
+        results = self.collection.query(query_texts=[question], n_results=n_results)
         docs = results.get("documents", [[]])[0] or []
         metas = results.get("metadatas", [[]])[0] or []
 
         if len(docs) <= 1:
-            return False, {"reason": "Yeterli sonuç yok", "matches": len(docs)}
+            return False, {"reason": "Yetersiz veri", "matches": len(docs)}
 
-        normalized = [d.strip().lower() for d in docs if isinstance(d, str)]
-        unique = list(dict.fromkeys(normalized))
-
-        has_conflict = len(unique) >= 2
+        # Küçük harf normalizasyonu ile benzersiz kayıtları bul
+        unique_statements = list(dict.fromkeys([d.strip().lower() for d in docs if isinstance(d, str)]))
+        has_conflict = len(unique_statements) >= 2
 
         details = {
             "question": question,
             "matches": len(docs),
-            "unique_statements": len(unique),
-            "top_docs": docs[:min(5, len(docs))],
-            "top_metadatas": metas[:min(5, len(metas))]
+            "conflict_detected": has_conflict,
+            "unique_count": len(unique_statements),
+            "top_docs": docs[:5]
         }
 
-        self.log_consistency_check(details)
-
+        self._log_to_json(details)
         return has_conflict, details
 
+    def _log_to_json(self, details):
+        """Dashboard entegrasyonu için JSON log üretir."""
+        log_file = os.path.join(self.log_dir, "consistency_logs.json")
+        log_entry = {"timestamp": datetime.now().isoformat(), "details": details}
+        
+        logs = []
+        if os.path.exists(log_file):
+            try:
+                with open(log_file, "r", encoding="utf-8") as f:
+                    logs = json.load(f)
+            except: logs = []
+        
+        logs.append(log_entry)
+        with open(log_file, "w", encoding="utf-8") as f:
+            json.dump(logs, f, indent=4, ensure_ascii=False)
+
+# Singleton Instance
+db_manager = ChromaManager()
 
 if __name__ == "__main__":
-    db = ChromaManager()
-    print("ChromaManager ready.")
+    count = db_manager.collection.count()
+    print(f"📊 Mevcut Hafıza Kaydı Sayısı: {count}")
