@@ -57,7 +57,7 @@ def bulk_ingest_masked_data(file_path: str):
 
 if __name__ == "__main__":
     # Veri kaynağı yolu 
-    target_file = "data/footprints/footprints_masked.txt" 
+    target_file = "src/data/masked/footprints_masked.txt" 
     
     bulk_ingest_masked_data(target_file)
 
