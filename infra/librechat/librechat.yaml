@@ -1,0 +1,10 @@
+version: "1.3.4"
+
+endpoints:
+  custom:
+    - name: "CogniTwin"
+      apiKey: "cognitwin"
+      baseURL: "http://host.docker.internal:8000/v1/"
+      models:
+        default:
+          - "llama3.2"

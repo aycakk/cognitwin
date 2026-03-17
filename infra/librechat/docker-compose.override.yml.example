@@ -1,0 +1,10 @@
+services:
+  api:
+    # Helpful on Windows when the default UID:GID mapping causes log-write errors.
+    user: "0:0"
+
+  mongodb:
+    user: "0:0"
+
+  meilisearch:
+    user: "0:0"
