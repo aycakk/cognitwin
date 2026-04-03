@@ -1,18 +1,23 @@
-# LLM ve API Bağlantısı
-openai
-python-dotenv
+# Web framework
+fastapi
+uvicorn[standard]
 
-# Ontoloji ve Sembolik Yapay Zeka
+# LLM (local Ollama runtime)
+ollama
+
+# Ontology & symbolic AI
 owlready2
+rdflib
 
-# Google API Entegrasyonu (Gmail ve Drive için)
-google-api-python-client
-google-auth-oauthlib
-google-auth-httplib2
+# Vector database
+chromadb
 
-# Veri İşleme
+# PII masking & data processing
+python-dotenv
 pandas
 numpy
 
-# Vektör Veritabanı (Dijital Ayak İzi / RAG için)
-chromadb
+# Google API integration (Gmail & Drive)
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2

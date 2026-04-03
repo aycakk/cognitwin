@@ -1,87 +1,555 @@
+"""
+pipeline.py — CogniTwin Production Pipeline (ZT4SWE v2.2)
+
+Architecture  : Hybrid (Vector Memory + Structured Ontology)
+Gate Array    : C1 ∧ C2 ∧ C3 ∧ C4 ∧ C5 ∧ C6 ∧ C7 ∧ C8
+Memory        : ChromaDB  (k=15)
+Ontology      : cognitwin-upper.ttl + student_ontology.ttl  (rdflib, lazy-loaded)
+LLM           : Ollama llama3.2  (local)
+
+Entry points (called by routes.py and openai_routes.py):
+  process_user_message(user_text, agent_role) -> dict
+"""
+
+from __future__ import annotations
+
+import os
 import re
 import uuid
+import datetime
 from pathlib import Path
+from typing import Optional
 
 from ollama import chat
+
 from src.utils.masker import PIIMasker
-from src.database.chroma_manager import ChromaManager
-from src.services.api.ttl_store import TTLStore
+from src.database.chroma_manager import db_manager  # shared singleton
 
-# --- TTL SETUP ---
-ttl = TTLStore()
+# ─────────────────────────────────────────────────────────────────────────────
+#  CONSTANTS
+# ─────────────────────────────────────────────────────────────────────────────
 
-BASE_DIR = Path(__file__).resolve().parents[3]  # CogniTwin kök klasörü
-TTL_DIR = BASE_DIR / "ontologies"
+VECTOR_TOP_K = 15
+CHROMA_PATH  = "static/chromadb"
 
-try:
-    ttl.load(
-        str(TTL_DIR / "student_ontology.ttl"),
-        str(TTL_DIR / "cognitwin-upper.ttl"),
-    )
-    print(f"[TTL] Loaded: {TTL_DIR}")
-except Exception as e:
-    print(f"[TTL] Load failed: {e}")
+ONTOLOGY_AGENT_ROLES: dict[str, set[str]] = {
+    "StudentAgent":          {"read_own_grades", "read_own_courses",
+                              "read_exam_dates", "read_assignment_deadlines"},
+    "InstructorAgent":       {"read_own_grades", "read_own_courses",
+                              "read_exam_dates", "read_assignment_deadlines",
+                              "read_all_student_grades", "manage_courses"},
+    "HeadOfDepartmentAgent": {"read_own_grades", "read_own_courses",
+                              "read_exam_dates", "read_assignment_deadlines",
+                              "read_all_student_grades", "manage_courses",
+                              "manage_department"},
+    "ResearcherAgent":       {"read_own_courses", "read_exam_dates",
+                              "read_assignment_deadlines"},
+}
 
-SYSTEM_PROMPT = (
-    "Sen bir Student ajanısın.\n"
-    "SADECE MEMORY bölümünde verilen bilgilere dayanarak cevap verebilirsin.\n"
-    "MEMORY'de ilgili bilgi yoksa aynen şu cümleyi yaz: 'Bunu hafızamda bulamadım.'\n"
-    "Tahmin yapma. Soru sorma. Kod yazma.\n"
+ASP_NEG_PATTERNS: list[tuple[str, re.Pattern]] = [
+    ("ASP-NEG-01_PII_UNMASK",    re.compile(r"\b\d{8,11}\b")),
+    ("ASP-NEG-02_HALLUCINATION", re.compile(r"tahminim|sanırım|galiba|muhtemelen", re.I)),
+    ("ASP-NEG-03_FALSE_PREMISE", re.compile(r"haklısınız|evet,?\s+öyle\s+söylemiştim", re.I)),
+    ("ASP-NEG-04_SOFTENED_FAIL", re.compile(r"yine de cevaplamaya çalışayım|bence şöyle olabilir", re.I)),
+    ("ASP-NEG-05_WEIGHT_ONLY",   re.compile(r"genel\s+bilgime\s+göre|eğitim\s+verilerime\s+göre", re.I)),
+]
+
+BLINDSPOT_TRIGGERS = re.compile(
+    r"hafızamda\s+bulamadım|bilmiyorum|emin\s+değilim|kayıt\s+yok",
+    re.I,
 )
 
-masker = PIIMasker()
-memory = ChromaManager()
+SYSTEM_PROMPT = """
+████████████████████████████████████████████████████████████████████████████
+          STUDENT AGENT — VERIFICATION FRAMEWORK v2.2
+          Conjunctive Gate: C1∧C2∧C3∧C4∧C5∧C6∧C7∧C8
+          Memory Backend  : ChromaDB (similarity search, k=15)
+          Ontology Engine : LIVE (rdflib — cognitwin-upper + student_ontology)
+████████████████████████████████████████████████████████████████████████████
+
+SECTION 0 ▸ AGENT IDENTITY
+══════════════════════════════════════════════════════════
+Sen bir üniversite bilgi sistemine entegre edilmiş "Student Agent"sın.
+İki yetkili bilgi kaynağın var:
+
+  • VECTOR MEMORY  → ChromaDB'den sorgu benzerliğiyle çekilen en alakalı
+                     129 akademik kayıttan k=15 snippet (maskeli).
+  • ONTOLOGY       → cognitwin-upper.ttl + student_ontology.ttl
+                     (Course, Exam, Assignment, Person→Agent hiyerarşisi)
+
+TEMEL KURAL: C1∧C2∧C3∧C4∧C5∧C6∧C7∧C8 = TRUE olmadan YANIT ÜRETME.
+
+SECTION 1 ▸ ANTI-SYCOPHANCY PROTOCOL (ASP)
+══════════════════════════════════════════════════════════
+[ASP-NEG-01] Ham PII ifşa etme → BLOKLANDI
+[ASP-NEG-02] Kanıtsız halüsinasyon → BLOKLANDI
+[ASP-NEG-03] Yanlış öncülü onaylama → BLOKLANDI
+[ASP-NEG-04] Sosyal baskıyla FAIL yumuşatma → BLOKLANDI
+[ASP-NEG-05] Eğitim ağırlıklarını kaynak gösterme → BLOKLANDI
+
+SECTION 2 ▸ RESPONSE PROTOCOL
+══════════════════════════════════════════════════════════
+• Yanıt VECTOR MEMORY'deyse: Kısa, akademik yanıt ver.
+• Yanıt Ontoloji çıkarımıysa: "Akademik yapıya göre…" ile başla.
+• İkisinde de yoksa: "Bunu hafızamda bulamadım." + BlindSpot bloğu.
+
+Son kural: Kanıtsız tahmin YÜRÜTME. Sycophantic yanıt BLOKLANDI.
+████████████████████████████████████████████████████████████████████████████
+"""
 
 
-def extract_course_code(text: str) -> str | None:
-    # COM8090, CS101 gibi
-    m = re.search(r"\b([A-Z]{2,4}\d{3,4})\b", (text or "").upper())
-    return m.group(1) if m else None
+# ─────────────────────────────────────────────────────────────────────────────
+#  MODULE-LEVEL SINGLETONS
+# ─────────────────────────────────────────────────────────────────────────────
+
+CHROMA  = db_manager
+_masker = PIIMasker()
 
 
-def process_user_message(user_text: str) -> dict:
-    if "title for the conversation" in user_text.lower():
-     return {"answer": "Conversation Title"}
+# ─────────────────────────────────────────────────────────────────────────────
+#  LAZY ONTOLOGY LOADING
+#  Loaded on first call to build_ontology_context() — never blocks startup.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_ONTOLOGY_GRAPH: Optional[object] = None
+_ONTOLOGY_TRIED: bool = False
+
+
+def _get_ontology_graph():
+    """Load and cache the rdflib Graph. Returns None if unavailable."""
+    global _ONTOLOGY_GRAPH, _ONTOLOGY_TRIED
+    if _ONTOLOGY_TRIED:
+        return _ONTOLOGY_GRAPH
+    _ONTOLOGY_TRIED = True
     try:
-        # 1) Mask
-        masked_text = masker.mask_data(user_text)
+        from rdflib import Graph
+        g = Graph()
+        # pipeline.py lives at src/services/api/ → parents[3] is project root
+        onto_dir = Path(__file__).resolve().parents[3] / "ontologies"
+        loaded = False
+        for fname in ("cognitwin-upper.ttl", "student_ontology.ttl"):
+            p = onto_dir / fname
+            if p.exists():
+                g.parse(str(p), format="turtle")
+                print(f"[ONTOLOGY] Loaded: {fname}")
+                loaded = True
+            else:
+                print(f"[ONTOLOGY] Not found: {p}")
+        _ONTOLOGY_GRAPH = g if loaded else None
+    except Exception as exc:
+        print(f"[ONTOLOGY] Load failed: {exc}")
+        _ONTOLOGY_GRAPH = None
+    return _ONTOLOGY_GRAPH
 
-        # 2) Save to Chroma
-        doc_id = f"chat_{uuid.uuid4().hex}"
-        memory.add_academic_info(
-          masked_text,
-          metadata={"type": "chat_footprint"},
-          doc_id=doc_id
-)
 
-        # 3) Retrieve
-        retrieved = memory.query_memory(masked_text, n_results=5)
-        if retrieved is None:
-            retrieved = []
+# ─────────────────────────────────────────────────────────────────────────────
+#  VECTOR MEMORY
+# ─────────────────────────────────────────────────────────────────────────────
 
-        context = "\n".join(retrieved[:5]) if retrieved else "Bunu hafızamda bulamadım."
+class VectorMemory:
+    """Thin ChromaDB wrapper that exposes retrieve(query, k) -> (str, bool)."""
 
-        # 4) LLM
-        resp = chat(
-            model="llama3.2",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"MEMORY:\n{context}\n\nSORU:\n{masked_text}"},
-            ],
+    def __init__(self) -> None:
+        self._chroma = CHROMA
+
+    def retrieve(self, query: str, k: int = VECTOR_TOP_K) -> tuple[str, bool]:
+        """Returns (context_block, is_empty)."""
+        if self._chroma is None:
+            return "", True
+        try:
+            documents = self._chroma.query_memory(query, n_results=k)
+            if not documents:
+                return "", True
+            lines = [f"=== VECTOR MEMORY (ChromaDB, k={k}) ==="]
+            for idx, doc in enumerate(documents, 1):
+                lines.append(f"\n[Result {idx}]")
+                lines.append(doc)
+                lines.append("---")
+            lines.append("=== END VECTOR MEMORY ===")
+            return "\n".join(lines), False
+        except Exception as exc:
+            return f"[ChromaDB query error: {exc}]", True
+
+
+VECTOR_MEM = VectorMemory()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  ONTOLOGY CONTEXT BUILDER
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _sparql(query: str) -> list[dict]:
+    g = _get_ontology_graph()
+    if g is None:
+        return []
+    qres = g.query(query)
+    return [{str(v): str(row[v]) for v in qres.vars} for row in qres]
+
+
+def build_ontology_context() -> str:
+    if _get_ontology_graph() is None:
+        return "[ONTOLOGY: unavailable]"
+
+    lines = ["=== ONTOLOGY CONTEXT ==="]
+
+    # Exam → Course relationships
+    for r in _sparql("""
+        PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX upper: <http://cognitwin.org/upper#>
+        PREFIX coode: <http://www.co-ode.org/ontologies/ont.owl#>
+        SELECT ?exam ?course WHERE {
+            ?exam rdf:type upper:Exam .
+            ?exam coode:activityPartOf ?course .
+        }"""):
+        exam   = r["exam"].split("/")[-1].split("#")[-1]
+        course = r["course"].split("/")[-1].split("#")[-1]
+        lines.append(f"  [Exam] {exam} belongs_to Course: {course}")
+
+    # Person → Agent links
+    for r in _sparql("""
+        PREFIX upper: <http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/>
+        SELECT ?person ?agent WHERE { ?person upper:hasAgent ?agent . }"""):
+        person = r["person"].split("/")[-1].split("#")[-1]
+        agent  = r["agent"].split("/")[-1].split("#")[-1]
+        lines.append(f"  [Person] {person} hasAgent: {agent}")
+
+    # Agent role assignments
+    for r in _sparql("""
+        PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX upper: <http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/>
+        SELECT ?agent ?role WHERE {
+            ?agent rdf:type ?role .
+            FILTER(?role IN (
+                upper:StudentAgent, upper:InstructorAgent,
+                upper:HeadOfDepartmentAgent, upper:ResearcherAgent
+            ))
+        }"""):
+        agent = r["agent"].split("/")[-1].split("#")[-1]
+        role  = r["role"].split("/")[-1].split("#")[-1]
+        lines.append(f"  [Role] {agent} is a: {role}")
+
+    if len(lines) == 1:
+        lines.append("  (No structured individuals found in ontology)")
+
+    lines.append("=== END ONTOLOGY CONTEXT ===")
+    return "\n".join(lines)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  GATE EVALUATORS  C1–C8
+# ─────────────────────────────────────────────────────────────────────────────
+
+def gate_c1_pii_masking(draft: str) -> tuple[bool, str]:
+    """C1 — No raw PII in emitted response."""
+    if re.search(r"\b\d{9,12}\b", draft):
+        return False, "Unmasked numeric ID detected."
+    if re.search(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}", draft):
+        return False, "Unmasked email detected."
+    return True, "No raw PII detected."
+
+
+def gate_c2_memory_grounding(
+    draft: str,
+    vector_context: str,
+    is_empty: bool,
+) -> tuple[bool, str]:
+    """C2 — Draft must be grounded in the retrieved vector context."""
+    if is_empty:
+        if "bulamadım" in draft.lower():
+            return True, "Vector memory empty; BlindSpot disclosure present."
+        return False, "Vector memory empty but no BlindSpot disclosure."
+
+    if "bulamadım" in draft.lower():
+        return True, "Draft issued BlindSpot — acceptable when query not in results."
+
+    context_words = {
+        w.lower() for w in re.findall(r"\b\w{6,}\b", vector_context)
+        if not re.match(r"\[.*_MASKED\]", w)
+    }
+    draft_words = {w.lower() for w in re.findall(r"\b\w{6,}\b", draft)}
+    overlap = context_words & draft_words
+
+    if len(overlap) >= 2:
+        return True, f"Grounding verified ({len(overlap)} shared content terms)."
+    return False, "Draft not grounded in vector context (overlap < 2 terms). Possible hallucination."
+
+
+def gate_c3_ontology_compliance(draft: str) -> tuple[bool, str]:
+    """C3 — Draft must not contradict ontology triples."""
+    if _get_ontology_graph() is None:
+        return True, "Ontology unavailable — provisional PASS."
+
+    for r in _sparql("""
+        PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX upper: <http://cognitwin.org/upper#>
+        PREFIX coode: <http://www.co-ode.org/ontologies/ont.owl#>
+        SELECT ?exam ?course WHERE {
+            ?exam rdf:type upper:Exam .
+            ?exam coode:activityPartOf ?course .
+        }"""):
+        exam_lbl   = r["exam"].split("/")[-1].split("#")[-1].lower()
+        course_lbl = r["course"].split("/")[-1].split("#")[-1].lower()
+        if exam_lbl in draft.lower():
+            for oc in re.findall(r"\bcs\d{3}\b", draft, re.I):
+                if oc.lower() != course_lbl:
+                    return False, (
+                        f"Ontology violation: '{exam_lbl}' paired with '{oc}', "
+                        f"expected '{course_lbl}'."
+                    )
+    return True, "No ontology rule violations detected."
+
+
+def gate_c4_hallucination(draft: str) -> tuple[bool, str]:
+    """C4 — No weight-only or hallucinatory claim markers."""
+    for label, pattern in ASP_NEG_PATTERNS:
+        if label in ("ASP-NEG-02_HALLUCINATION", "ASP-NEG-05_WEIGHT_ONLY"):
+            m = pattern.search(draft)
+            if m:
+                return False, f"[{label}] '{m.group()}'"
+    return True, "No hallucination markers detected."
+
+
+def gate_c5_role_permission(draft: str, agent_role: str) -> tuple[bool, str]:
+    """C5 — Role-permission boundary enforcement."""
+    permitted = ONTOLOGY_AGENT_ROLES.get(agent_role, set())
+
+    if re.search(r"tüm öğrencilerin notları|bütün öğrenciler", draft, re.I):
+        if "read_all_student_grades" not in permitted:
+            return False, f"'{agent_role}' lacks 'read_all_student_grades' permission."
+
+    if re.search(r"dersi güncelle|ders planını değiştir", draft, re.I):
+        if "manage_courses" not in permitted:
+            return False, f"'{agent_role}' lacks 'manage_courses' permission."
+
+    return True, f"Role '{agent_role}' — no boundary violations."
+
+
+def gate_c6_anti_sycophancy(draft: str) -> tuple[bool, str]:
+    """C6 — Full ASP-NEG pattern sweep."""
+    violations = [
+        f"[{lbl}] '{m.group()}'"
+        for lbl, pat in ASP_NEG_PATTERNS
+        if (m := pat.search(draft))
+    ]
+    if violations:
+        return False, "ASP violations: " + "; ".join(violations)
+    return True, "All ASP-NEG classifiers: NO_MATCH."
+
+
+def gate_c7_blindspot(draft: str, is_empty: bool) -> tuple[bool, str]:
+    """C7 — Unanswerable queries must carry a BlindSpot disclosure."""
+    if is_empty and "bulamadım" not in draft.lower():
+        return False, "Empty vector memory but BlindSpot phrase missing."
+    return True, "BlindSpot completeness verified."
+
+
+def gate_c8_redo_checksum(redo_log: list[dict]) -> tuple[bool, str]:
+    """C8 — No zombie REDO cycles (more than one open cycle is anomalous)."""
+    open_cycles = [r for r in redo_log if not r.get("closed_at")]
+    if len(open_cycles) > 1:
+        return False, f"Too many open REDO cycles: {len(open_cycles)}"
+    return True, "REDO cycle state clean."
+
+
+def evaluate_all_gates(
+    draft: str,
+    vector_context: str,
+    is_empty: bool,
+    agent_role: str,
+    redo_log: list[dict],
+) -> dict:
+    """Execute C1∧C2∧…∧C8 and return a structured report."""
+    gates = {
+        "C1": gate_c1_pii_masking(draft),
+        "C2": gate_c2_memory_grounding(draft, vector_context, is_empty),
+        "C3": gate_c3_ontology_compliance(draft),
+        "C4": gate_c4_hallucination(draft),
+        "C5": gate_c5_role_permission(draft, agent_role),
+        "C6": gate_c6_anti_sycophancy(draft),
+        "C7": gate_c7_blindspot(draft, is_empty),
+        "C8": gate_c8_redo_checksum(redo_log),
+    }
+    structured = {k: {"pass": v[0], "evidence": v[1]} for k, v in gates.items()}
+    return {
+        "conjunction": all(v[0] for v in gates.values()),
+        "gates": structured,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  REDO ENGINE
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _open_redo(redo_log: list[dict], trigger_gate: str, evidence: str) -> str:
+    redo_id = str(uuid.uuid4())[:8]
+    redo_log.append({
+        "redo_id":         redo_id,
+        "trigger_gate":    trigger_gate,
+        "failed_evidence": evidence,
+        "revision_action": None,
+        "closure_gates":   {},
+        "closed_at":       None,
+    })
+    return redo_id
+
+
+def _close_redo(
+    redo_log: list[dict],
+    redo_id: str,
+    action: str,
+    gate_results: dict,
+) -> None:
+    for rec in redo_log:
+        if rec["redo_id"] == redo_id:
+            rec["revision_action"] = action
+            rec["closure_gates"]   = {
+                k: "PASS" if v["pass"] else "FAIL"
+                for k, v in gate_results.items()
+            }
+            rec["closed_at"] = datetime.datetime.utcnow().isoformat()
+            return
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  BLINDSPOT DISCLOSURE
+# ─────────────────────────────────────────────────────────────────────────────
+
+def build_blindspot_block(query: str, memory_status: str = "BULUNAMADI") -> str:
+    q_short = query[:43]
+    m_short = memory_status[:43]
+    return (
+        "\n┌─────────────────────────────────────────────────────┐\n"
+        "│  ⚠ BLINDSPOT DISCLOSURE                             │\n"
+        f"│  Sorgu Bileşeni : {q_short:<45} │\n"
+        f"│  Hafıza Durumu  : {m_short:<45} │\n"
+        "│  Ontoloji Durumu: TRIPLE YOK                        │\n"
+        "│  Ajan Bildirimi : \"Bunu hafızamda bulamadım.\"       │\n"
+        "│  Öneri          : Akademik danışmanınıza başvurun.  │\n"
+        "└─────────────────────────────────────────────────────┘\n"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  4-STAGE ZT4SWE PIPELINE
+# ─────────────────────────────────────────────────────────────────────────────
+
+def run_pipeline(query: str, agent_role: str = "StudentAgent") -> str:
+    """
+    Execute the 4-stage ZT4SWE verification pipeline.
+
+    Stage 1 — Retrieval & Grounding  : ChromaDB (k=15) + ontology context
+    Stage 2 — Draft Synthesis        : LLM via Ollama llama3.2
+    Stage 3 — Compliance Verification: C1–C8 gate array + REDO loop (max 2)
+    Stage 4 — Emission               : BlindSpot prepended if needed
+
+    redo_log is per-request (thread-safe — no shared mutable state).
+    """
+    redo_log: list[dict] = []
+
+    # ── Stage 1 — Retrieval & Grounding ──────────────────────────────────────
+    vector_context, is_empty = VECTOR_MEM.retrieve(query, k=VECTOR_TOP_K)
+    ontology_context         = build_ontology_context()
+
+    if is_empty:
+        return (
+            build_blindspot_block(query, "VEKTÖR HAFIZA BOŞ")
+            + "Bunu hafızamda bulamadım."
         )
 
-        answer = resp.get("message", {}).get("content", "Bunu hafızamda bulamadım.")
+    # ── Stage 2 — Draft Synthesis ─────────────────────────────────────────────
+    user_message = (
+        f"{vector_context}\n\n"
+        f"{ontology_context}\n\n"
+        f"ROLE: {agent_role}\n\n"
+        f"SORU: {query}\n\n"
+        "INSTRUCTION: Answer ONLY from the VECTOR MEMORY and ONTOLOGY CONTEXT "
+        "above, in Turkish. "
+        "Combine VECTOR MEMORY (dates, grades, records) with ONTOLOGY "
+        "(course names, exam→course links, agent roles) for a complete answer. "
+        "If the answer is NOT in either source: \"Bunu hafızamda bulamadım.\" "
+        "Do NOT hallucinate. Do NOT unmask PII tokens. "
+        "Prefix ontology-only answers with \"Akademik yapıya göre…\""
+    )
+    base_messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user",   "content": user_message},
+    ]
 
-        return {
-            "masked_input": masked_text,
-            "saved_doc_id": doc_id,
-            "retrieved_top5": retrieved[:5] if retrieved else [],
-            "answer": answer,
-            "context": context,
-        }
+    resp  = chat(model="llama3.2", messages=base_messages)
+    draft = resp.message.content.strip()
 
-    except Exception as e:
-        return {
-            "answer": f"İşlem sırasında bir hata oluştu: {str(e)}",
-            "masked_input": user_text,
-        }
+    # ── Stage 3 — Compliance Verification ────────────────────────────────────
+    MAX_REDO       = 2
+    active_redo_id: Optional[str] = None
+
+    for attempt in range(MAX_REDO + 1):
+        gate_report = evaluate_all_gates(
+            draft, vector_context, is_empty, agent_role, redo_log
+        )
+
+        if gate_report["conjunction"]:
+            if active_redo_id:
+                _close_redo(
+                    redo_log,
+                    active_redo_id,
+                    "Draft passed all gates after revision.",
+                    gate_report["gates"],
+                )
+            break  # → Stage 4
+
+        first_fail = next(
+            (k for k, v in gate_report["gates"].items() if not v["pass"]),
+            "UNKNOWN",
+        )
+        fail_ev = gate_report["gates"].get(first_fail, {}).get("evidence", "")
+
+        if attempt == MAX_REDO:
+            _open_redo(redo_log, first_fail, fail_ev)
+            return (
+                build_blindspot_block(query, f"REDO LIMIT ({first_fail} FAIL)")
+                + f"⚠ Doğrulama başarısız (Gate {first_fail}). "
+                  "Yanıt güvenli biçimde teslim edilemiyor.\n"
+                  "Bunu hafızamda bulamadım."
+            )
+
+        active_redo_id = _open_redo(redo_log, first_fail, fail_ev)
+        redo_instruction = (
+            f"[REDO TRIGGERED — Gate {first_fail} FAILED]\n"
+            f"Evidence: {fail_ev}\n"
+            "Revise your previous draft to fix the failing dimension.\n"
+            "Rules: Do NOT hallucinate. Do NOT unmask PII. "
+            "Answer ONLY from VECTOR MEMORY and ONTOLOGY CONTEXT. "
+            "If not found: \"Bunu hafızamda bulamadım.\""
+        )
+        redo_resp = chat(
+            model="llama3.2",
+            messages=base_messages + [
+                {"role": "assistant", "content": draft},
+                {"role": "user",      "content": redo_instruction},
+            ],
+        )
+        draft = redo_resp.message.content.strip()
+
+    # ── Stage 4 — Emission ────────────────────────────────────────────────────
+    if BLINDSPOT_TRIGGERS.search(draft):
+        return build_blindspot_block(query) + draft
+    return draft
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  PUBLIC API  (called by routes.py and openai_routes.py)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def process_user_message(user_text: str, agent_role: str = "StudentAgent") -> dict:
+    """
+    Mask PII from user input, run the ZT4SWE pipeline, return {"answer": str}.
+    This is the sole entry point for the FastAPI layer.
+    """
+    if "title for the conversation" in user_text.lower():
+        return {"answer": "Conversation Title"}
+    try:
+        masked = _masker.mask_data(user_text)
+        answer = run_pipeline(masked, agent_role=agent_role)
+        return {"answer": answer}
+    except Exception as exc:
+        return {"answer": f"İşlem sırasında bir hata oluştu: {exc}"}
