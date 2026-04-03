@@ -34,7 +34,7 @@ class ChromaManager:
         # Kalıcı istemciyi başlat
         self.client = chromadb.PersistentClient(path=self.db_path)
         self.collection = self.client.get_or_create_collection(name="academic_memory")
-        print(f"📂 [CHROMA INFO] DB Bağlantısı Başarılı: {self.db_path}")
+        print(f"[CHROMA] DB connected: {self.db_path}")
 
     def add_academic_info(self, text, metadata=None, doc_id=None):
         """Akademik bilgiyi temizleyerek hafızaya kaydeder."""
@@ -54,7 +54,7 @@ class ChromaManager:
             metadatas=[safe_metadata],
             ids=[doc_id]
         )
-        print(f"✅ Hafızaya mühürlendi: {doc_id}")
+        print(f"[CHROMA] Saved: {doc_id}")
 
     def query_memory(self, question, n_results=10):
         """Soruyla ilgili en yakın kayıtları döndürür."""
@@ -65,7 +65,7 @@ class ChromaManager:
             )
             return results.get("documents", [[]])[0] or []
         except Exception as e:
-            print(f"⚠️ Sorgu hatası: {e}")
+            print(f"[CHROMA] Query error: {e}")
             return []
 
     def check_consistency(self, question, n_results=5):
@@ -116,4 +116,4 @@ db_manager = ChromaManager()
 
 if __name__ == "__main__":
     count = db_manager.collection.count()
-    print(f"📊 Mevcut Hafıza Kaydı Sayısı: {count}")
+    print(f"[CHROMA] Record count: {count}")

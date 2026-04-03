@@ -10,6 +10,11 @@ from __future__ import annotations
 import os
 import sys
 
+# Force UTF-8 stdout so box-drawing chars and Turkish text render correctly
+# on Windows terminals that default to a legacy code page (e.g. cp1254).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 # Ensure project root is on sys.path for src.* imports
 _src_dir      = os.path.dirname(os.path.abspath(__file__))
 _project_root = os.path.dirname(_src_dir)
