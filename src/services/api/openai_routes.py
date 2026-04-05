@@ -20,15 +20,17 @@ class ChatCompletionRequest(BaseModel):
 @openai_router.get("/v1/models")
 async def list_models():
     now = int(time.time())
+    model_ids = ["llama3.2", "cognitwin-student-llm", "cognitwin-developer"]
     payload = {
         "object": "list",
         "data": [
             {
-                "id": "llama3.2",
+                "id": mid,
                 "object": "model",
                 "created": now,
                 "owned_by": "cognitwin",
             }
+            for mid in model_ids
         ],
     }
     return Response(
@@ -50,7 +52,11 @@ async def chat_completions(req: ChatCompletionRequest):
 
     # 2) Pipeline çalıştır
     try:
-        result = process_user_message(user_text)
+        result = process_user_message(
+            user_text,
+            model=req.model or "llama3.2",
+            messages=req.messages,
+        )
 
         if isinstance(result, dict):
             final_answer = result.get("answer", "")

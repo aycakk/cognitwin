@@ -7,4 +7,15 @@ endpoints:
       baseURL: "http://host.docker.internal:8000/v1/"
       models:
         default:
-          - "llama3.2"
+          - "cognitwin-student-llm"
+        fetch: false
+      modelDisplayLabel: "CogniTwin Student"
+
+    - name: "CogniTwin Developer"
+      apiKey: "cognitwin"
+      baseURL: "http://host.docker.internal:8000/v1/"
+      models:
+        default:
+          - "cognitwin-developer"
+        fetch: false
+      modelDisplayLabel: "CogniTwin Developer"

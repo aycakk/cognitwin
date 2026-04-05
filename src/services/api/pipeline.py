@@ -1,14 +1,15 @@
 """
-pipeline.py — CogniTwin Production Pipeline (ZT4SWE v2.2)
+pipeline.py — CogniTwin Production Pipeline (ZT4SWE v2.3)
 
-Architecture  : Hybrid (Vector Memory + Structured Ontology)
-Gate Array    : C1 ∧ C2 ∧ C3 ∧ C4 ∧ C5 ∧ C6 ∧ C7 ∧ C8
+Architecture  : Multi-Agent Hybrid (Vector Memory + Structured Ontology)
+Gate Array    : C1 ∧ C2 ∧ C3 ∧ C4 ∧ C5 ∧ C6 ∧ C7 ∧ C8  (BOTH paths)
 Memory        : ChromaDB  (k=15)
 Ontology      : cognitwin-upper.ttl + student_ontology.ttl  (rdflib, lazy-loaded)
 LLM           : Ollama llama3.2  (local)
+Routing       : model name → student (default) | developer (cognitwin-developer)
 
 Entry points (called by routes.py and openai_routes.py):
-  process_user_message(user_text, agent_role) -> dict
+  process_user_message(user_text, agent_role, model, messages) -> dict
 """
 
 from __future__ import annotations
@@ -24,6 +25,9 @@ from ollama import chat
 
 from src.utils.masker import PIIMasker
 from src.database.chroma_manager import db_manager  # shared singleton
+from src.agents.developer_agent import DeveloperAgent
+from src.agents.developer_orchestrator import DeveloperOrchestrator
+from src.agents.developer_profile_store import DeveloperProfileStore
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -44,6 +48,9 @@ ONTOLOGY_AGENT_ROLES: dict[str, set[str]] = {
                               "manage_department"},
     "ResearcherAgent":       {"read_own_courses", "read_exam_dates",
                               "read_assignment_deadlines"},
+    "DeveloperAgent":        {"read_own_courses", "read_exam_dates",
+                              "read_assignment_deadlines", "read_all_student_grades",
+                              "manage_courses", "manage_department"},
 }
 
 ASP_NEG_PATTERNS: list[tuple[str, re.Pattern]] = [
@@ -56,6 +63,16 @@ ASP_NEG_PATTERNS: list[tuple[str, re.Pattern]] = [
 
 BLINDSPOT_TRIGGERS = re.compile(
     r"hafızamda\s+bulamadım|bilmiyorum|emin\s+değilim|kayıt\s+yok",
+    re.I,
+)
+
+# Strip internal retrieval labels that must never leak to end users
+_LABEL_RE = re.compile(
+    r"\[Result\s+\d+\]\s*"
+    r"|=== VECTOR MEMORY.*?===\s*"
+    r"|=== END VECTOR MEMORY ===\s*"
+    r"|=== ONTOLOGY CONTEXT ===\s*"
+    r"|=== END ONTOLOGY CONTEXT ===\s*",
     re.I,
 )
 
@@ -172,6 +189,143 @@ class VectorMemory:
 
 
 VECTOR_MEM = VectorMemory()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  ROUTING HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _safe_chat(model: str, messages: list) -> dict:
+    """
+    Wrap Ollama chat() so DeveloperOrchestrator receives a plain dict.
+
+    Ollama returns a ChatResponse object; orchestrator expects
+    {"message": {"content": str}}.  This wrapper normalises both shapes.
+    """
+    resp = chat(model=model, messages=messages)
+    if hasattr(resp, "message"):
+        return {"message": {"content": resp.message.content}}
+    if isinstance(resp, dict):
+        return resp
+    return {"message": {"content": str(resp)}}
+
+
+def _resolve_mode(model: str) -> tuple[str, str]:
+    """
+    Map the LibreChat model name to (mode, strategy).
+
+    mode     : 'student' | 'developer'
+    strategy : 'auto' (default for developer) | 'llm' (student always LLM)
+    """
+    model_lower = (model or "").lower()
+    if "developer" in model_lower:
+        return "developer", "auto"
+    return "student", "llm"
+
+
+def _sanitize_output(text: str) -> str:
+    """Strip internal retrieval labels that must not leak to end users."""
+    return _LABEL_RE.sub("", text).strip()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  DEVELOPER PATH
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _process_developer_message(
+    user_text: str,
+    strategy: str = "auto",
+    messages: list | None = None,
+    developer_id: str = "developer-default",
+) -> str:
+    """
+    Developer path: DeveloperOrchestrator (8-stage) → C1-C8 gates → REDO.
+
+    The orchestrator handles context retrieval, ontology constraints, profile
+    personalisation, and generation.  After the orchestrator returns its
+    solution, the same ZT4SWE gate array and REDO loop used by the student
+    path are applied to guarantee output integrity.
+    """
+    redo_log: list[dict] = []
+
+    # Stage 1 — Retrieve vector context (used only by gate evaluators)
+    vector_context, is_empty = VECTOR_MEM.retrieve(user_text, k=VECTOR_TOP_K)
+
+    # Stage 2 — DeveloperOrchestrator 8-stage pipeline
+    orchestrator = DeveloperOrchestrator(
+        memory_backend=CHROMA,
+        chat_fn=_safe_chat,
+        default_model="llama3.2",
+    )
+    result = orchestrator.run(
+        request=user_text,
+        developer_id=developer_id,
+        strategy=strategy,
+    )
+    draft = _sanitize_output(str(result.get("solution", "")))
+    if not draft:
+        draft = "Bunu hafızamda bulamadım."
+
+    # Stage 3 — C1-C8 gate array + REDO loop (same as student path)
+    MAX_REDO = 2
+    active_redo_id: Optional[str] = None
+    base_messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user",   "content": user_text},
+    ]
+
+    for attempt in range(MAX_REDO + 1):
+        gate_report = evaluate_all_gates(
+            draft, vector_context, is_empty, "DeveloperAgent", redo_log
+        )
+
+        if gate_report["conjunction"]:
+            if active_redo_id:
+                _close_redo(
+                    redo_log,
+                    active_redo_id,
+                    "Draft passed all gates after revision.",
+                    gate_report["gates"],
+                )
+            break
+
+        first_fail = next(
+            (k for k, v in gate_report["gates"].items() if not v["pass"]),
+            "UNKNOWN",
+        )
+        fail_ev = gate_report["gates"].get(first_fail, {}).get("evidence", "")
+
+        if attempt == MAX_REDO:
+            _open_redo(redo_log, first_fail, fail_ev)
+            return (
+                build_blindspot_block(user_text, f"REDO LIMIT ({first_fail} FAIL)")
+                + f"Dogrulama basarisiz (Gate {first_fail}). "
+                  "Yanit guvenli bicimde teslim edilemiyor.\n"
+                  "Bunu hafizamda bulamadim."
+            )
+
+        active_redo_id = _open_redo(redo_log, first_fail, fail_ev)
+        redo_instruction = (
+            f"[REDO TRIGGERED — Gate {first_fail} FAILED]\n"
+            f"Evidence: {fail_ev}\n"
+            "Revise your previous draft to fix the failing dimension.\n"
+            "Rules: Do NOT hallucinate. Do NOT unmask PII. "
+            "Answer ONLY from verified developer context. "
+            "If not found: \"Bunu hafizamda bulamadim.\""
+        )
+        redo_resp = chat(
+            model="llama3.2",
+            messages=base_messages + [
+                {"role": "assistant", "content": draft},
+                {"role": "user",      "content": redo_instruction},
+            ],
+        )
+        draft = _sanitize_output(redo_resp.message.content.strip())
+
+    # Stage 4 — Emission
+    if BLINDSPOT_TRIGGERS.search(draft):
+        return build_blindspot_block(user_text) + draft
+    return draft
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -540,16 +694,36 @@ def run_pipeline(query: str, agent_role: str = "StudentAgent") -> str:
 #  PUBLIC API  (called by routes.py and openai_routes.py)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def process_user_message(user_text: str, agent_role: str = "StudentAgent") -> dict:
+def process_user_message(
+    user_text: str,
+    agent_role: str = "StudentAgent",
+    model: str = "llama3.2",
+    messages: list | None = None,
+) -> dict:
     """
-    Mask PII from user input, run the ZT4SWE pipeline, return {"answer": str}.
-    This is the sole entry point for the FastAPI layer.
+    Mask PII, resolve routing mode, execute the appropriate pipeline.
+
+    Routing:
+      model contains 'developer'  →  DeveloperOrchestrator + C1-C8 + REDO
+      all other models             →  Student ZT4SWE pipeline (C1-C8 + REDO)
+
+    Returns {"answer": str} for the FastAPI layer.
     """
     if "title for the conversation" in user_text.lower():
         return {"answer": "Conversation Title"}
     try:
         masked = _masker.mask_data(user_text)
-        answer = run_pipeline(masked, agent_role=agent_role)
+        mode, strategy = _resolve_mode(model)
+
+        if mode == "developer":
+            answer = _process_developer_message(
+                user_text=masked,
+                strategy=strategy,
+                messages=messages,
+            )
+        else:
+            answer = run_pipeline(masked, agent_role=agent_role)
+
         return {"answer": answer}
     except Exception as exc:
         return {"answer": f"İşlem sırasında bir hata oluştu: {exc}"}
