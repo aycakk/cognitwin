@@ -192,6 +192,77 @@ VECTOR_MEM = VectorMemory()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  CODEBASE CONTEXT INJECTION
+#  Reads actual source files so the developer path can answer questions
+#  about this repository instead of falling back to LLM training weights.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# keyword → source file(s) to include when that keyword appears in the query
+_DEV_CONTEXT_MAP: list[tuple[frozenset, str]] = [
+    (frozenset({"routing", "route", "api", "endpoint", "librechat", "openai",
+                "completions", "models", "v1"}),
+     "src/services/api/openai_routes.py"),
+    (frozenset({"pipeline", "gate", "c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8",
+                "redo", "blindspot", "grounding", "architecture", "repository",
+                "codebase", "this project", "this repo",
+                "student path", "developer path", "both paths",
+                "student and developer", "compare path",
+                "branch", "branches", "worktree", "merge",
+                "debug", "bug", "fix issue", "traceback", "exception",
+                "stack trace", "error in"}),
+     "src/services/api/pipeline.py"),
+    (frozenset({"orchestrator", "developer orchestrator", "8-stage", "8 stage",
+                "understand", "footprint", "profile"}),
+     "src/agents/developer_orchestrator.py"),
+    (frozenset({"developer agent", "role packet", "role library", "blueprint"}),
+     "src/agents/developer_agent.py"),
+    (frozenset({"student agent", "student path", "student pipeline", "studentagent"}),
+     "src/agents/student_agent.py"),
+    (frozenset({"chroma", "chromadb", "vector memory", "vector store", "memory backend"}),
+     "src/database/chroma_manager.py"),
+    (frozenset({"masker", "pii", "mask", "anonymi"}),
+     "src/utils/masker.py"),
+]
+
+# chars read per file — enough for full small files, first section of large ones
+_CODE_SNIPPET_CHARS = 4000
+
+
+def _build_codebase_context(query: str) -> str:
+    """
+    Build a source-code context block for developer queries about this repo.
+
+    Matches keywords in the query against a file map, reads the relevant
+    source files (truncated), and returns a formatted context string.
+    Returns an empty string when no codebase keywords are found so that
+    the orchestrator's footprint logic is not bypassed unnecessarily.
+    """
+    text = query.lower()
+    project_root = Path(__file__).resolve().parents[3]
+
+    collected: dict[str, str] = {}   # rel_path → content, insertion-ordered dedup
+    for keywords, rel_path in _DEV_CONTEXT_MAP:
+        if any(kw in text for kw in keywords):
+            if rel_path not in collected:
+                abs_path = project_root / rel_path
+                if abs_path.exists():
+                    raw = abs_path.read_text(encoding="utf-8", errors="replace")
+                    collected[rel_path] = raw[:_CODE_SNIPPET_CHARS]
+
+    if not collected:
+        return ""
+
+    parts = ["=== CODEBASE CONTEXT (live source files) ==="]
+    for rel_path, content in collected.items():
+        parts.append(f"\n--- {rel_path} ---")
+        parts.append(content)
+        if len(content) >= _CODE_SNIPPET_CHARS:
+            parts.append("... [truncated]")
+    parts.append("\n=== END CODEBASE CONTEXT ===")
+    return "\n".join(parts)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  ROUTING HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -252,6 +323,10 @@ def _process_developer_message(
     vector_context, is_empty = VECTOR_MEM.retrieve(user_text, k=VECTOR_TOP_K)
 
     # Stage 2 — DeveloperOrchestrator 8-stage pipeline
+    # Inject actual source file snippets so the LLM can answer codebase
+    # questions rather than falling back to generic training knowledge.
+    codebase_context = _build_codebase_context(user_text)
+
     orchestrator = DeveloperOrchestrator(
         memory_backend=CHROMA,
         chat_fn=_safe_chat,
@@ -261,6 +336,7 @@ def _process_developer_message(
         request=user_text,
         developer_id=developer_id,
         strategy=strategy,
+        memory_context=codebase_context,   # non-empty → used directly in generate()
     )
     draft = _sanitize_output(str(result.get("solution", "")))
     if not draft:
