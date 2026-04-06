@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any, Callable
@@ -9,6 +10,21 @@ from src.agents.developer_profile_store import DeveloperProfileStore
 
 
 MEMORY_NOT_FOUND_TEXT = "Bunu hafizamda bulamadim."
+
+# ── Structured debug output schema ───────────────────────────────────────────
+# Used by _generate_direct_solution() to request machine-parseable analysis.
+_DEBUG_SCHEMA = """\
+{
+  "entry_point": "<first route/function called for this request, or empty string>",
+  "files_used": ["<relative path from project root, e.g. src/services/api/pipeline.py>"],
+  "functions_used": ["<exact function name as it appears in the source>"],
+  "execution_path": ["<step 1: description>", "<step 2: description>"],
+  "suspected_root_cause": "<concise root cause, or empty string if none found>",
+  "evidence": ["<direct quote or line reference from the codebase context>"],
+  "fix": "<proposed fix, or empty string>",
+  "confidence": 0.0,
+  "speculative": false
+}"""
 
 
 class DeveloperOrchestrator:
@@ -420,6 +436,50 @@ class DeveloperOrchestrator:
                 error_message=str(exc),
             )
 
+    @staticmethod
+    def _extract_json_block(text: str) -> str:
+        """
+        Extract the first valid JSON object from an LLM response.
+
+        llama3.2 often wraps JSON in prose or code fences. Three attempts:
+          1. Direct parse — model output is already clean JSON.
+          2. ```json ... ``` fence — extract inner block.
+          3. First { ... } span — pull outermost braces regardless of fencing.
+
+        Returns the raw JSON string if a valid object is found, else "".
+        """
+        stripped = text.strip()
+
+        # Attempt 1: already clean JSON
+        try:
+            json.loads(stripped)
+            return stripped
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # Attempt 2: fenced block  ```json ... ``` or ``` ... ```
+        m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", stripped, re.DOTALL)
+        if m:
+            candidate = m.group(1).strip()
+            try:
+                json.loads(candidate)
+                return candidate
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        # Attempt 3: outermost { ... } span
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start != -1 and end > start:
+            candidate = stripped[start : end + 1]
+            try:
+                json.loads(candidate)
+                return candidate
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        return ""
+
     def _generate_direct_solution(
         self,
         *,
@@ -429,6 +489,15 @@ class DeveloperOrchestrator:
         model: str,
         system_prompt_override: str = "",
     ) -> str:
+        """
+        Generate a direct technical answer for the given request.
+
+        When codebase context is available (memory_context non-empty and not the
+        MEMORY_NOT_FOUND sentinel), the model is asked to return a structured JSON
+        object matching _DEBUG_SCHEMA so that the caller can machine-validate the
+        cited files and functions.  If JSON extraction fails the raw prose is
+        returned as a fallback so the function never silently drops a response.
+        """
         if self.chat_fn is None:
             if language == "tr":
                 return (
@@ -440,7 +509,34 @@ class DeveloperOrchestrator:
                 "is not configured (ollama is not installed)."
             )
 
-        if language == "tr":
+        # Use structured JSON output when real codebase context has been injected.
+        # Fall back to prose when there is no codebase context (no code to reason about).
+        has_codebase = (
+            memory_context.strip()
+            and memory_context.strip() != MEMORY_NOT_FOUND_TEXT
+            and "CODEBASE CONTEXT" in memory_context
+        )
+
+        if has_codebase and not system_prompt_override:
+            system_prompt = (
+                "You are the CogniTwin Developer Agent performing a structured code analysis.\n"
+                "You will be given source code from the actual repository.\n"
+                "Return ONLY a single raw JSON object — no prose, no markdown, no code fences.\n"
+                "The JSON must match this exact schema:\n"
+                + _DEBUG_SCHEMA
+                + "\n\nRules:\n"
+                "- Only include files and functions that explicitly appear in the CODEBASE CONTEXT.\n"
+                "- If a file or function is not visible in the context, do not invent it.\n"
+                "- Set speculative=true if you cannot find direct textual evidence.\n"
+                "- confidence must be between 0.0 and 1.0.\n"
+                "- evidence items must be direct quotes or identifiers from the source code shown."
+            )
+            user_prompt = (
+                f"REQUEST: {request}\n\n"
+                "CODEBASE CONTEXT (only use what is shown here):\n"
+                f"{memory_context}"
+            )
+        elif language == "tr":
             system_prompt = (
                 "Sen CogniTwin Developer Agent'sin. Kullanicinin teknik istegine dogrudan final cevap ver. "
                 "Asla wrapper formatlar kullanma: 'Yeniden Yapilandirilmis Prompt v1', "
@@ -456,7 +552,8 @@ class DeveloperOrchestrator:
         else:
             system_prompt = (
                 "You are the CogniTwin Developer Agent. Return a direct final technical response. "
-                "Never output wrappers such as 'Restructured Prompt v1', 'Yeniden Yapilandirilmis Prompt v1', "
+                "Never output wrappers such as 'Restructured Prompt v1', "
+                "'Yeniden Yapilandirilmis Prompt v1', "
                 "'Execution Plan v1', 'TASK MODE', 'STEP 0', 'ADIM 0', or 'run it'."
             )
             user_prompt = (
@@ -465,6 +562,7 @@ class DeveloperOrchestrator:
                 "MEMORY CONTEXT:\n"
                 f"{memory_context}"
             )
+
         if system_prompt_override:
             system_prompt = system_prompt_override
 
@@ -476,10 +574,20 @@ class DeveloperOrchestrator:
                     {"role": "user", "content": user_prompt},
                 ],
             )
-            answer = str((response or {}).get("message", {}).get("content", "")).strip()
-            if answer:
-                return answer
-            raise ValueError("Empty direct response")
+            raw = str((response or {}).get("message", {}).get("content", "")).strip()
+            if not raw:
+                raise ValueError("Empty direct response")
+
+            # When structured output was requested, try to extract the JSON block.
+            # If extraction fails, fall back to raw prose — never drop the answer.
+            if has_codebase and not system_prompt_override:
+                json_str = self._extract_json_block(raw)
+                if json_str:
+                    return json_str
+                # Extraction failed: return prose but mark it as unstructured
+                return raw
+
+            return raw
         except Exception as exc:
             if language == "tr":
                 return f"Dogrudan teknik yanit uretilemedi ({exc})."

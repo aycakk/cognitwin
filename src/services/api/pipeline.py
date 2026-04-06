@@ -14,6 +14,7 @@ Entry points (called by routes.py and openai_routes.py):
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import uuid
@@ -303,6 +304,115 @@ def _sanitize_output(text: str) -> str:
 #  DEVELOPER PATH
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _validate_debug_result(parsed: dict, project_root: Path) -> dict:
+    """
+    Machine-verify the files and functions reported by the LLM.
+
+    For every path in files_used: check the file exists under project_root.
+    For every name in functions_used: check it appears as an identifier in
+    the source of the cited files (simple text search — not AST).
+
+    Returns the input dict extended with a '_validation' key and, if any
+    files were invented, sets speculative=True.
+    """
+    files_used     = [str(f) for f in (parsed.get("files_used") or []) if f]
+    functions_used = [str(f) for f in (parsed.get("functions_used") or []) if f]
+
+    invalid_files     : list[str] = []
+    unverified_funcs  : list[str] = []
+
+    for rel_path in files_used:
+        if not (project_root / rel_path).exists():
+            invalid_files.append(rel_path)
+
+    valid_files = [f for f in files_used if (project_root / f).exists()]
+    for func_name in functions_used:
+        found_in_any = False
+        pattern = re.compile(rf"\b{re.escape(func_name)}\b")
+        for rel_path in valid_files:
+            try:
+                content = (project_root / rel_path).read_text(
+                    encoding="utf-8", errors="replace"
+                )
+                if pattern.search(content):
+                    found_in_any = True
+                    break
+            except Exception:
+                pass
+        if not found_in_any:
+            unverified_funcs.append(func_name)
+
+    all_verified = not invalid_files and not unverified_funcs
+    result = dict(parsed)
+    result["_validation"] = {
+        "invalid_files":    invalid_files,
+        "unverified_funcs": unverified_funcs,
+        "files_ok":         len(invalid_files) == 0,
+        "functions_ok":     len(unverified_funcs) == 0,
+        "all_verified":     all_verified,
+    }
+    if invalid_files:
+        result["speculative"] = True   # invented paths → force speculative flag
+    return result
+
+
+def _format_debug_result(v: dict) -> str:
+    """
+    Render a validated structured debug dict as clean, readable text.
+    Marks any invented/unverified items explicitly so the user sees them.
+    """
+    val   = v.get("_validation", {})
+    lines = []
+
+    if v.get("entry_point"):
+        lines.append(f"Entry Point: {v['entry_point']}")
+
+    if v.get("files_used"):
+        lines.append("\nFiles:")
+        bad = set(val.get("invalid_files") or [])
+        for f in v["files_used"]:
+            tag = "  [NOT FOUND IN REPO]" if f in bad else ""
+            lines.append(f"  - {f}{tag}")
+
+    if v.get("functions_used"):
+        lines.append("\nFunctions:")
+        unv = set(val.get("unverified_funcs") or [])
+        for fn in v["functions_used"]:
+            tag = "  [NOT VERIFIED IN FILES]" if fn in unv else ""
+            lines.append(f"  - {fn}{tag}")
+
+    if v.get("execution_path"):
+        lines.append("\nExecution Path:")
+        for i, step in enumerate(v["execution_path"], 1):
+            lines.append(f"  {i}. {step}")
+
+    if v.get("suspected_root_cause"):
+        lines.append(f"\nRoot Cause: {v['suspected_root_cause']}")
+
+    if v.get("evidence"):
+        lines.append("\nEvidence:")
+        for e in v["evidence"]:
+            lines.append(f"  - {e}")
+
+    if v.get("fix"):
+        lines.append(f"\nFix: {v['fix']}")
+
+    conf = float(v.get("confidence") or 0.0)
+    spec = bool(v.get("speculative", False))
+    spec_tag = " (SPECULATIVE)" if spec else ""
+    lines.append(f"\nConfidence: {conf:.2f}{spec_tag}")
+
+    if not val.get("all_verified", True):
+        lines.append(
+            "\n[Validation] Some reported files or functions could not be "
+            "verified in the repository. Treat this analysis with caution."
+        )
+    else:
+        lines.append("\n[Validation] All reported files and functions verified in repository.")
+
+    return "\n".join(lines)
+
+
 def _process_developer_message(
     user_text: str,
     strategy: str = "auto",
@@ -341,6 +451,19 @@ def _process_developer_message(
     draft = _sanitize_output(str(result.get("solution", "")))
     if not draft:
         draft = "Bunu hafızamda bulamadım."
+
+    # Stage 2b — Structured debug validation
+    # If the orchestrator returned a JSON debug object, validate the cited
+    # files and functions against the actual repository before emitting.
+    if codebase_context:
+        try:
+            parsed = json.loads(draft)
+            if isinstance(parsed, dict) and "files_used" in parsed:
+                project_root = Path(__file__).resolve().parents[3]
+                validated    = _validate_debug_result(parsed, project_root)
+                draft        = _format_debug_result(validated)
+        except (json.JSONDecodeError, ValueError):
+            pass  # prose response — skip validation, continue normally
 
     # Stage 3 — C1-C8 gate array + REDO loop (same as student path)
     MAX_REDO = 2
