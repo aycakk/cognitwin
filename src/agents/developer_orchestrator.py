@@ -150,6 +150,8 @@ class DeveloperOrchestrator:
         task_type = str(runtime.get("task_type") or self._infer_task_type(request))
         language = str(runtime.get("language") or "en").lower()
         strategy = str(runtime.get("strategy") or "auto").lower()
+        if strategy == "auto":
+            strategy = self._infer_strategy(request)
         is_execution_phase = bool(runtime.get("is_execution_phase", False))
 
         source_prompt = str(runtime.get("source_prompt") or request or "")
@@ -638,6 +640,53 @@ class DeveloperOrchestrator:
             return answer
         localized = answer.replace("Restructured Prompt v1", "Yeniden Yapilandirilmis Prompt v1")
         return localized.replace("Execution Plan v1", "Yurutme Plani v1")
+
+    def _infer_strategy(self, request: str) -> str:
+        """
+        Resolve 'auto' strategy to a concrete generation path based on intent.
+
+        direct — analytic, explanatory, debug, comparison requests
+                 → _generate_direct_solution() (LLM answers the question)
+        rules  — explicit meta-prompt / restructure requests
+                 → deterministic restructured-prompt template
+        direct — default (safe: always better to answer than to produce a meta-prompt)
+        """
+        text = (request or "").lower()
+
+        # Explicit meta-prompt requests only → rules path
+        restructure_hints = (
+            "rewrite this prompt",
+            "restructure this",
+            "restructure prompt",
+            "turn into execution prompt",
+            "turn this into a prompt",
+            "execution prompt",
+            "zero-time prompt",
+            "yeniden yapilandir",
+            "prompt yapilandir",
+            "sifir zaman prompt",
+        )
+        if any(hint in text for hint in restructure_hints):
+            return "rules"
+
+        # Analytical / direct-answer requests → direct path
+        direct_hints = (
+            "analyze", "analyse", "explain", "debug", "compare",
+            "describe", "what is", "what are", "what does", "what's",
+            "how does", "how do", "how is", "how to",
+            "why does", "why is", "why",
+            "show me", "list", "summarize", "review", "check",
+            "diagnose", "trace", "find", "locate", "identify",
+            "difference", "vs",
+            # Turkish equivalents
+            "analiz", "acikla", "incele", "karsilastir",
+            "nedir", "nasil", "neden", "goster", "bul", "kontrol",
+        )
+        if any(hint in text for hint in direct_hints):
+            return "direct"
+
+        # Default: direct — avoids the meta-prompt trap on ambiguous input
+        return "direct"
 
     def _infer_task_type(self, user_text: str) -> str:
         text = (user_text or "").lower()
