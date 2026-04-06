@@ -406,8 +406,19 @@ def gate_c2_memory_grounding(
     draft: str,
     vector_context: str,
     is_empty: bool,
+    agent_role: str = "StudentAgent",
 ) -> tuple[bool, str]:
-    """C2 — Draft must be grounded in the retrieved vector context."""
+    """C2 — Draft must be grounded in the retrieved vector context.
+
+    DeveloperAgent is exempt: its context is self-contained (rule-based
+    task packets, ontology constraints, profile signals) and has no
+    semantic overlap with student ChromaDB records.  Applying the
+    word-overlap test there would guarantee a false FAIL on every
+    developer response and trigger unlimited REDO cycles.
+    """
+    if agent_role == "DeveloperAgent":
+        return True, "DeveloperAgent: C2 grounding not applicable (developer context is self-contained)."
+
     if is_empty:
         if "bulamadım" in draft.lower():
             return True, "Vector memory empty; BlindSpot disclosure present."
@@ -515,7 +526,7 @@ def evaluate_all_gates(
     """Execute C1∧C2∧…∧C8 and return a structured report."""
     gates = {
         "C1": gate_c1_pii_masking(draft),
-        "C2": gate_c2_memory_grounding(draft, vector_context, is_empty),
+        "C2": gate_c2_memory_grounding(draft, vector_context, is_empty, agent_role),
         "C3": gate_c3_ontology_compliance(draft),
         "C4": gate_c4_hallucination(draft),
         "C5": gate_c5_role_permission(draft, agent_role),
