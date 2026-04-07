@@ -34,6 +34,7 @@ from src.shared.patterns import ASP_NEG_PATTERNS, PII_PATTERNS
 from src.gates.c5_role_permission import check_role_permission as _check_c5
 from src.gates.c4_hallucination import check_hallucination as _check_c4
 from src.gates.c6_anti_sycophancy import check_anti_sycophancy as _check_c6
+from src.gates.c7_blindspot import check_blindspot as _check_c7
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -706,10 +707,19 @@ def gate_c6_anti_sycophancy(draft: str) -> tuple[bool, str]:
 
 
 def gate_c7_blindspot(draft: str, is_empty: bool) -> tuple[bool, str]:
-    """C7 — Unanswerable queries must carry a BlindSpot disclosure."""
-    if is_empty and "bulamadım" not in draft.lower():
-        return False, "Empty vector memory but BlindSpot phrase missing."
-    return True, "BlindSpot completeness verified."
+    """C7 — Unanswerable queries must carry a BlindSpot disclosure.
+
+    Decision logic lives in src.gates.c7_blindspot. This wrapper
+    preserves the original English messages byte-for-byte.
+
+    Note: student_agent._gate_c7_blindspot uses a different policy
+    (both_empty = vector AND ontology empty) and is not wired to this
+    shared module — see Step 2.4 audit for details.
+    """
+    passed, reason = _check_c7(draft, is_empty)
+    if passed:
+        return True, "BlindSpot completeness verified."
+    return False, "Empty vector memory but BlindSpot phrase missing."
 
 
 def gate_a1_redo_checksum(redo_log: list[dict]) -> tuple[bool, str]:
