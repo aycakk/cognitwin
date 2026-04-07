@@ -32,6 +32,7 @@ from src.shared.patterns import (
     ASP_NEG_PATTERNS as _ASP_NEG_PATTERNS,
 )
 from src.gates.c5_role_permission import check_role_permission as _check_c5
+from src.gates.c4_hallucination import check_hallucination as _check_c4
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -417,13 +418,15 @@ class StudentAgent:
 
     # C4 — Synthesis (hallucination absence)
     def _gate_c4_synthesis(self, draft: str) -> tuple[bool, str]:
-        """Detect hallucination / weight-only claim markers."""
-        for label, pattern in _ASP_NEG_PATTERNS:
-            if label in ("ASP-NEG-02_HALLUCINATION", "ASP-NEG-05_WEIGHT_ONLY"):
-                m = pattern.search(draft)
-                if m:
-                    return False, f"Kanıtsız ifade tespit edildi: '{m.group()}'"
-        return True, "Sentez doğrulaması geçti."
+        """Detect hallucination / weight-only claim markers.
+
+        Decision logic lives in src.gates.c4_hallucination. This wrapper
+        preserves the original Turkish messages byte-for-byte.
+        """
+        passed, _label, matched = _check_c4(draft)
+        if passed:
+            return True, "Sentez doğrulaması geçti."
+        return False, f"Kanıtsız ifade tespit edildi: '{matched}'"
 
     # C5 — Role-permission boundary
     def _gate_c5_role_permission(self, draft: str) -> tuple[bool, str]:

@@ -32,6 +32,7 @@ from src.agents.developer_profile_store import DeveloperProfileStore
 from src.shared.permissions import ONTOLOGY_AGENT_ROLES
 from src.shared.patterns import ASP_NEG_PATTERNS, PII_PATTERNS
 from src.gates.c5_role_permission import check_role_permission as _check_c5
+from src.gates.c4_hallucination import check_hallucination as _check_c4
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -661,13 +662,15 @@ def gate_c3_ontology_compliance(draft: str) -> tuple[bool, str]:
 
 
 def gate_c4_hallucination(draft: str) -> tuple[bool, str]:
-    """C4 — No weight-only or hallucinatory claim markers."""
-    for label, pattern in ASP_NEG_PATTERNS:
-        if label in ("ASP-NEG-02_HALLUCINATION", "ASP-NEG-05_WEIGHT_ONLY"):
-            m = pattern.search(draft)
-            if m:
-                return False, f"[{label}] '{m.group()}'"
-    return True, "No hallucination markers detected."
+    """C4 — No weight-only or hallucinatory claim markers.
+
+    Decision logic lives in src.gates.c4_hallucination. This wrapper
+    preserves the original English messages byte-for-byte.
+    """
+    passed, label, matched = _check_c4(draft)
+    if passed:
+        return True, "No hallucination markers detected."
+    return False, f"[{label}] '{matched}'"
 
 
 def gate_c5_role_permission(draft: str, agent_role: str) -> tuple[bool, str]:
