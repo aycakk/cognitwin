@@ -33,6 +33,7 @@ from src.shared.permissions import ONTOLOGY_AGENT_ROLES
 from src.shared.patterns import ASP_NEG_PATTERNS, PII_PATTERNS
 from src.gates.c5_role_permission import check_role_permission as _check_c5
 from src.gates.c4_hallucination import check_hallucination as _check_c4
+from src.gates.c2_grounding import check_grounding as _check_c2
 from src.gates.c6_anti_sycophancy import check_anti_sycophancy as _check_c6
 from src.gates.c7_blindspot import check_blindspot as _check_c7
 
@@ -609,32 +610,30 @@ def gate_c2_memory_grounding(
 ) -> tuple[bool, str]:
     """C2 — Draft must be grounded in the retrieved vector context.
 
-    DeveloperAgent is exempt: its context is self-contained (rule-based
-    task packets, ontology constraints, profile signals) and has no
-    semantic overlap with student ChromaDB records.  Applying the
-    word-overlap test there would guarantee a false FAIL on every
-    developer response and trigger unlimited REDO cycles.
+    Decision logic lives in src.gates.c2_grounding. This wrapper
+    preserves the original English messages byte-for-byte.
+
+    The DeveloperAgent exemption is expressed as the `exempt` flag
+    passed to check_grounding rather than a hardcoded string comparison
+    inside the shared module, keeping c2_grounding.py agent-agnostic.
     """
-    if agent_role == "DeveloperAgent":
+    passed, reason, overlap_count = _check_c2(
+        draft,
+        vector_context,
+        vector_empty=is_empty,
+        exempt=(agent_role == "DeveloperAgent"),
+    )
+    if reason == "exempt":
         return True, "DeveloperAgent: C2 grounding not applicable (developer context is self-contained)."
-
-    if is_empty:
-        if "bulamadım" in draft.lower():
-            return True, "Vector memory empty; BlindSpot disclosure present."
+    if reason == "empty_pass":
+        return True, "Vector memory empty; BlindSpot disclosure present."
+    if reason == "empty_fail":
         return False, "Vector memory empty but no BlindSpot disclosure."
-
-    if "bulamadım" in draft.lower():
+    if reason == "blindspot":
         return True, "Draft issued BlindSpot — acceptable when query not in results."
-
-    context_words = {
-        w.lower() for w in re.findall(r"\b\w{6,}\b", vector_context)
-        if not re.match(r"\[.*_MASKED\]", w)
-    }
-    draft_words = {w.lower() for w in re.findall(r"\b\w{6,}\b", draft)}
-    overlap = context_words & draft_words
-
-    if len(overlap) >= 2:
-        return True, f"Grounding verified ({len(overlap)} shared content terms)."
+    if reason == "overlap_pass":
+        return True, f"Grounding verified ({overlap_count} shared content terms)."
+    # reason == "overlap_fail"
     return False, "Draft not grounded in vector context (overlap < 2 terms). Possible hallucination."
 
 
