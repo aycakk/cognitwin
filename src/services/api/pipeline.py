@@ -37,7 +37,7 @@ from src.gates.c2_grounding import check_grounding as _check_c2
 from src.gates.c3_ontology_compliance import check_ontology_compliance as _check_c3
 from src.gates.c6_anti_sycophancy import check_anti_sycophancy as _check_c6
 from src.gates.c7_blindspot import check_blindspot as _check_c7
-from src.pipeline.redo import _open_redo, _close_redo
+from src.pipeline.redo import run_redo_loop
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -453,60 +453,31 @@ def _process_developer_message(
             pass  # prose response — skip validation, continue normally
 
     # Stage 3 — C1-C8 gate array + REDO loop (same as student path)
-    MAX_REDO = 2
-    active_redo_id: Optional[str] = None
     base_messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user",   "content": user_text},
     ]
 
-    for attempt in range(MAX_REDO + 1):
-        gate_report = evaluate_all_gates(
-            draft, vector_context, is_empty, "DeveloperAgent", redo_log
-        )
-
-        if gate_report["conjunction"]:
-            if active_redo_id:
-                _close_redo(
-                    redo_log,
-                    active_redo_id,
-                    "Draft passed all gates after revision.",
-                    gate_report["gates"],
-                )
-            break
-
-        first_fail = next(
-            (k for k, v in gate_report["gates"].items() if not v["pass"]),
-            "UNKNOWN",
-        )
-        fail_ev = gate_report["gates"].get(first_fail, {}).get("evidence", "")
-
-        if attempt == MAX_REDO:
-            _open_redo(redo_log, first_fail, fail_ev)
-            return (
-                build_blindspot_block(user_text, f"REDO LIMIT ({first_fail} FAIL)")
-                + f"Dogrulama basarisiz (Gate {first_fail}). "
-                  "Yanit guvenli bicimde teslim edilemiyor.\n"
-                  "Bunu hafizamda bulamadim."
-            )
-
-        active_redo_id = _open_redo(redo_log, first_fail, fail_ev)
-        redo_instruction = (
-            f"[REDO TRIGGERED — Gate {first_fail} FAILED]\n"
-            f"Evidence: {fail_ev}\n"
-            "Revise your previous draft to fix the failing dimension.\n"
-            "Rules: Do NOT hallucinate. Do NOT unmask PII. "
+    draft, limit_hit = run_redo_loop(
+        draft, base_messages, vector_context, is_empty, redo_log,
+        agent_role="DeveloperAgent",
+        query=user_text,
+        redo_rules=(
             "Answer ONLY from verified developer context. "
             "If not found: \"Bunu hafizamda bulamadim.\""
-        )
-        redo_resp = chat(
-            model="llama3.2",
-            messages=base_messages + [
-                {"role": "assistant", "content": draft},
-                {"role": "user",      "content": redo_instruction},
-            ],
-        )
-        draft = _sanitize_output(redo_resp.message.content.strip())
+        ),
+        limit_message_template=(
+            "Dogrulama basarisiz (Gate {gate}). "
+            "Yanit guvenli bicimde teslim edilemiyor.\n"
+            "Bunu hafizamda bulamadim."
+        ),
+        post_process=_sanitize_output,
+        gate_fn=evaluate_all_gates,
+        chat_fn=chat,
+        blindspot_fn=build_blindspot_block,
+    )
+    if limit_hit:
+        return draft
 
     # Stage 4 — Emission
     if BLINDSPOT_TRIGGERS.search(draft):
@@ -774,10 +745,10 @@ def evaluate_all_gates(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  REDO ENGINE  (imported from src.pipeline.redo — Step 3.1)
+#  REDO ENGINE  (imported from src.pipeline.redo — Step 3.2)
 # ─────────────────────────────────────────────────────────────────────────────
-# _open_redo and _close_redo are imported at the top of this file.
-# They are referenced by run_pipeline and _process_developer_message below.
+# run_redo_loop is imported at the top of this file.
+# Both run_pipeline and _process_developer_message delegate to it.
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -849,56 +820,26 @@ def run_pipeline(query: str, agent_role: str = "StudentAgent") -> str:
     draft = resp.message.content.strip()
 
     # ── Stage 3 — Compliance Verification ────────────────────────────────────
-    MAX_REDO       = 2
-    active_redo_id: Optional[str] = None
-
-    for attempt in range(MAX_REDO + 1):
-        gate_report = evaluate_all_gates(
-            draft, vector_context, is_empty, agent_role, redo_log
-        )
-
-        if gate_report["conjunction"]:
-            if active_redo_id:
-                _close_redo(
-                    redo_log,
-                    active_redo_id,
-                    "Draft passed all gates after revision.",
-                    gate_report["gates"],
-                )
-            break  # → Stage 4
-
-        first_fail = next(
-            (k for k, v in gate_report["gates"].items() if not v["pass"]),
-            "UNKNOWN",
-        )
-        fail_ev = gate_report["gates"].get(first_fail, {}).get("evidence", "")
-
-        if attempt == MAX_REDO:
-            _open_redo(redo_log, first_fail, fail_ev)
-            return (
-                build_blindspot_block(query, f"REDO LIMIT ({first_fail} FAIL)")
-                + f"⚠ Doğrulama başarısız (Gate {first_fail}). "
-                  "Yanıt güvenli biçimde teslim edilemiyor.\n"
-                  "Bunu hafızamda bulamadım."
-            )
-
-        active_redo_id = _open_redo(redo_log, first_fail, fail_ev)
-        redo_instruction = (
-            f"[REDO TRIGGERED — Gate {first_fail} FAILED]\n"
-            f"Evidence: {fail_ev}\n"
-            "Revise your previous draft to fix the failing dimension.\n"
-            "Rules: Do NOT hallucinate. Do NOT unmask PII. "
+    draft, limit_hit = run_redo_loop(
+        draft, base_messages, vector_context, is_empty, redo_log,
+        agent_role=agent_role,
+        query=query,
+        redo_rules=(
             "Answer ONLY from VECTOR MEMORY and ONTOLOGY CONTEXT. "
             "If not found: \"Bunu hafızamda bulamadım.\""
-        )
-        redo_resp = chat(
-            model="llama3.2",
-            messages=base_messages + [
-                {"role": "assistant", "content": draft},
-                {"role": "user",      "content": redo_instruction},
-            ],
-        )
-        draft = redo_resp.message.content.strip()
+        ),
+        limit_message_template=(
+            "⚠ Doğrulama başarısız (Gate {gate}). "
+            "Yanıt güvenli biçimde teslim edilemiyor.\n"
+            "Bunu hafızamda bulamadım."
+        ),
+        post_process=lambda s: s,
+        gate_fn=evaluate_all_gates,
+        chat_fn=chat,
+        blindspot_fn=build_blindspot_block,
+    )
+    if limit_hit:
+        return draft
 
     # ── Stage 4 — Emission ────────────────────────────────────────────────────
     if BLINDSPOT_TRIGGERS.search(draft):
