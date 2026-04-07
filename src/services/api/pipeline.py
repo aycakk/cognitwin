@@ -38,6 +38,7 @@ from src.gates.c3_ontology_compliance import check_ontology_compliance as _check
 from src.gates.c6_anti_sycophancy import check_anti_sycophancy as _check_c6
 from src.gates.c7_blindspot import check_blindspot as _check_c7
 from src.pipeline.redo import run_redo_loop
+from src.pipeline.router import resolve_mode
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -268,18 +269,6 @@ def _safe_chat(model: str, messages: list) -> dict:
         return resp
     return {"message": {"content": str(resp)}}
 
-
-def _resolve_mode(model: str) -> tuple[str, str]:
-    """
-    Map the LibreChat model name to (mode, strategy).
-
-    mode     : 'student' | 'developer'
-    strategy : 'auto' (default for developer) | 'llm' (student always LLM)
-    """
-    model_lower = (model or "").lower()
-    if "developer" in model_lower:
-        return "developer", "auto"
-    return "student", "llm"
 
 
 def _sanitize_output(text: str) -> str:
@@ -870,7 +859,7 @@ def process_user_message(
         return {"answer": "Conversation Title"}
     try:
         masked = _masker.mask_data(user_text)
-        mode, strategy = _resolve_mode(model)
+        mode, strategy = resolve_mode(model)
 
         if mode == "developer":
             answer = _process_developer_message(
