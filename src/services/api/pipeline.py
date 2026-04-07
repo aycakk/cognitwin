@@ -34,6 +34,7 @@ from src.shared.patterns import ASP_NEG_PATTERNS, PII_PATTERNS
 from src.gates.c5_role_permission import check_role_permission as _check_c5
 from src.gates.c4_hallucination import check_hallucination as _check_c4
 from src.gates.c2_grounding import check_grounding as _check_c2
+from src.gates.c3_ontology_compliance import check_ontology_compliance as _check_c3
 from src.gates.c6_anti_sycophancy import check_anti_sycophancy as _check_c6
 from src.gates.c7_blindspot import check_blindspot as _check_c7
 
@@ -638,28 +639,35 @@ def gate_c2_memory_grounding(
 
 
 def gate_c3_ontology_compliance(draft: str) -> tuple[bool, str]:
-    """C3 — Draft must not contradict ontology triples."""
+    """C3 — Draft must not contradict ontology triples.
+
+    Decision logic lives in src.gates.c3_ontology_compliance. This
+    wrapper owns the two infrastructure concerns:
+      1. Checking whether the rdflib graph is available.
+      2. Running the SPARQL query and passing the plain result list
+         to the shared function (which has no rdflib dependency).
+    Messages are preserved byte-for-byte.
+    """
     if _get_ontology_graph() is None:
         return True, "Ontology unavailable — provisional PASS."
 
-    for r in _sparql("""
+    pairs = _sparql("""
         PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX upper: <http://cognitwin.org/upper#>
         PREFIX coode: <http://www.co-ode.org/ontologies/ont.owl#>
         SELECT ?exam ?course WHERE {
             ?exam rdf:type upper:Exam .
             ?exam coode:activityPartOf ?course .
-        }"""):
-        exam_lbl   = r["exam"].split("/")[-1].split("#")[-1].lower()
-        course_lbl = r["course"].split("/")[-1].split("#")[-1].lower()
-        if exam_lbl in draft.lower():
-            for oc in re.findall(r"\bcs\d{3}\b", draft, re.I):
-                if oc.lower() != course_lbl:
-                    return False, (
-                        f"Ontology violation: '{exam_lbl}' paired with '{oc}', "
-                        f"expected '{course_lbl}'."
-                    )
-    return True, "No ontology rule violations detected."
+        }""")
+
+    passed, reason, detail = _check_c3(draft, pairs)
+    if passed:
+        return True, "No ontology rule violations detected."
+    exam_lbl, bad_oc, expected = detail
+    return False, (
+        f"Ontology violation: '{exam_lbl}' paired with '{bad_oc}', "
+        f"expected '{expected}'."
+    )
 
 
 def gate_c4_hallucination(draft: str) -> tuple[bool, str]:
