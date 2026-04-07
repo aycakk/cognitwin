@@ -5,7 +5,7 @@
 ║   Architecture  : Hybrid (Unstructured Memory + Structured Ontology)        ║
 ║   Memory Source : ChromaDB  (vector similarity, k=15)                       ║
 ║   Ontology      : cognitwin-upper.ttl  +  student_ontology.ttl  (rdflib)    ║
-║   Gate Array    : C1 ∧ C2 ∧ C3 ∧ C4 ∧ C5 ∧ C6 ∧ C7 ∧ C8                  ║
+║   Gate Array    : C1 ∧ C2 ∧ C4 ∧ C5 ∧ C6 ∧ C7 ∧ C8 ∧ C9                  ║
 ║   Response Lang : Turkish  (internal reasoning in English for LLM stability)║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
@@ -232,7 +232,7 @@ class StudentAgent:
         gates = {
             "C1": self._gate_c1_pii(draft),
             "C2": self._gate_c2_grounding(draft, memory, ontology_context),
-            "C3": self._gate_c3_ontology_prefix(draft, ontology_context),
+            "C9": self._gate_c9_ontology_attribution(draft, ontology_context),
             "C4": self._gate_c4_synthesis(draft),
             "C5": self._gate_c5_role_permission(draft),
             "C6": self._gate_c6_anti_sycophancy(draft),
@@ -380,8 +380,8 @@ class StudentAgent:
             "(< 2 ortak terim). Olası üretim hatası.",
         )
 
-    # C3 — Ontology reasoning prefix
-    def _gate_c3_ontology_prefix(
+    # C9 — Ontology attribution (prefix compliance)
+    def _gate_c9_ontology_attribution(
         self,
         draft: str,
         ontology_context: str,
