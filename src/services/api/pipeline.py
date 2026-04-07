@@ -37,6 +37,7 @@ from src.gates.c2_grounding import check_grounding as _check_c2
 from src.gates.c3_ontology_compliance import check_ontology_compliance as _check_c3
 from src.gates.c6_anti_sycophancy import check_anti_sycophancy as _check_c6
 from src.gates.c7_blindspot import check_blindspot as _check_c7
+from src.pipeline.redo import _open_redo, _close_redo
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -773,37 +774,10 @@ def evaluate_all_gates(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  REDO ENGINE
+#  REDO ENGINE  (imported from src.pipeline.redo — Step 3.1)
 # ─────────────────────────────────────────────────────────────────────────────
-
-def _open_redo(redo_log: list[dict], trigger_gate: str, evidence: str) -> str:
-    redo_id = str(uuid.uuid4())[:8]
-    redo_log.append({
-        "redo_id":         redo_id,
-        "trigger_gate":    trigger_gate,
-        "failed_evidence": evidence,
-        "revision_action": None,
-        "closure_gates":   {},
-        "closed_at":       None,
-    })
-    return redo_id
-
-
-def _close_redo(
-    redo_log: list[dict],
-    redo_id: str,
-    action: str,
-    gate_results: dict,
-) -> None:
-    for rec in redo_log:
-        if rec["redo_id"] == redo_id:
-            rec["revision_action"] = action
-            rec["closure_gates"]   = {
-                k: "PASS" if v["pass"] else "FAIL"
-                for k, v in gate_results.items()
-            }
-            rec["closed_at"] = datetime.datetime.utcnow().isoformat()
-            return
+# _open_redo and _close_redo are imported at the top of this file.
+# They are referenced by run_pipeline and _process_developer_message below.
 
 
 # ─────────────────────────────────────────────────────────────────────────────
