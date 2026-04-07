@@ -31,6 +31,7 @@ from src.agents.developer_orchestrator import DeveloperOrchestrator
 from src.agents.developer_profile_store import DeveloperProfileStore
 from src.shared.permissions import ONTOLOGY_AGENT_ROLES
 from src.shared.patterns import ASP_NEG_PATTERNS
+from src.gates.c5_role_permission import check_role_permission as _check_c5
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -654,18 +655,21 @@ def gate_c4_hallucination(draft: str) -> tuple[bool, str]:
 
 
 def gate_c5_role_permission(draft: str, agent_role: str) -> tuple[bool, str]:
-    """C5 — Role-permission boundary enforcement."""
-    permitted = ONTOLOGY_AGENT_ROLES.get(agent_role, set())
+    """C5 — Role-permission boundary enforcement.
 
-    if re.search(r"tüm öğrencilerin notları|bütün öğrenciler", draft, re.I):
-        if "read_all_student_grades" not in permitted:
-            return False, f"'{agent_role}' lacks 'read_all_student_grades' permission."
-
-    if re.search(r"dersi güncelle|ders planını değiştir", draft, re.I):
-        if "manage_courses" not in permitted:
-            return False, f"'{agent_role}' lacks 'manage_courses' permission."
-
-    return True, f"Role '{agent_role}' — no boundary violations."
+    Decision logic lives in src.gates.c5_role_permission. This wrapper
+    preserves the original English messages byte-for-byte so existing
+    callers and golden tests see identical return values.
+    """
+    passed, kind = _check_c5(draft, agent_role)
+    if passed:
+        return True, f"Role '{agent_role}' — no boundary violations."
+    if kind == "bulk_grades":
+        return False, f"'{agent_role}' lacks 'read_all_student_grades' permission."
+    if kind == "manage_courses":
+        return False, f"'{agent_role}' lacks 'manage_courses' permission."
+    # Unreachable: _check_c5 returns only the codes handled above.
+    return passed, f"Role '{agent_role}' — unspecified violation ({kind})."
 
 
 def gate_c6_anti_sycophancy(draft: str) -> tuple[bool, str]:

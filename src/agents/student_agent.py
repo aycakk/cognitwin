@@ -31,6 +31,7 @@ from src.shared.patterns import (
     PII_PATTERNS as _PII_PATTERNS,
     ASP_NEG_PATTERNS as _ASP_NEG_PATTERNS,
 )
+from src.gates.c5_role_permission import check_role_permission as _check_c5
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -428,19 +429,17 @@ class StudentAgent:
     def _gate_c5_role_permission(self, draft: str) -> tuple[bool, str]:
         """
         Coarse permission check derived from ONTOLOGY_AGENT_ROLES.
-        StudentAgent may not see bulk grade lists or course management actions.
+        Decision logic lives in src.gates.c5_role_permission. This wrapper
+        preserves the original Turkish messages byte-for-byte.
         """
-        permitted = ONTOLOGY_AGENT_ROLES.get(self.agent_role, set())
-
-        if re.search(r"tüm öğrencilerin notları|bütün öğrenciler", draft, re.I):
-            if "read_all_student_grades" not in permitted:
-                return False, f"'{self.agent_role}' rolü toplu not erişimine yetkili değil."
-
-        if re.search(r"dersi güncelle|ders planını değiştir", draft, re.I):
-            if "manage_courses" not in permitted:
-                return False, f"'{self.agent_role}' rolü ders yönetimine yetkili değil."
-
-        return True, f"'{self.agent_role}' rol sınırı ihlali yok."
+        passed, kind = _check_c5(draft, self.agent_role)
+        if passed:
+            return True, f"'{self.agent_role}' rol sınırı ihlali yok."
+        if kind == "bulk_grades":
+            return False, f"'{self.agent_role}' rolü toplu not erişimine yetkili değil."
+        if kind == "manage_courses":
+            return False, f"'{self.agent_role}' rolü ders yönetimine yetkili değil."
+        return passed, f"'{self.agent_role}' belirsiz ihlal ({kind})."
 
     # C6 — Anti-sycophancy
     def _gate_c6_anti_sycophancy(self, draft: str) -> tuple[bool, str]:
