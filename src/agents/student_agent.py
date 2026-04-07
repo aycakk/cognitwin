@@ -26,27 +26,19 @@ import uuid
 import datetime
 from typing import Optional
 
+from src.shared.permissions import ONTOLOGY_AGENT_ROLES
+from src.shared.patterns import (
+    PII_PATTERNS as _PII_PATTERNS,
+    ASP_NEG_PATTERNS as _ASP_NEG_PATTERNS,
+)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  SECTION 0 ▸  INTERNAL PATTERN REGISTRY
-#  (never exposed to the user; used only by gate evaluators)
+#  PII / ASP-NEG patterns are now imported from src.shared.patterns
+#  (single source of truth — previously duplicated with pipeline.py).
+#  Only agent-local patterns remain below.
 # ─────────────────────────────────────────────────────────────────────────────
-
-# --- PII leak patterns (C1) --------------------------------------------------
-_PII_PATTERNS: list[re.Pattern] = [
-    re.compile(r"\b\d{9,12}\b"),                                         # student / TC ID
-    re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}"),        # e-mail
-    re.compile(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b"),                   # phone
-]
-
-# --- Anti-sycophancy patterns (C6) -------------------------------------------
-_ASP_NEG_PATTERNS: list[tuple[str, re.Pattern]] = [
-    ("ASP-NEG-01_PII_UNMASK",    re.compile(r"\b\d{8,11}\b")),
-    ("ASP-NEG-02_HALLUCINATION", re.compile(r"sanırım|galiba|muhtemelen|tahminim", re.I)),
-    ("ASP-NEG-03_FALSE_PREMISE", re.compile(r"haklısınız|evet,?\s+öyle\s+söylemiştim", re.I)),
-    ("ASP-NEG-04_SOFTENED_FAIL", re.compile(r"yine de cevaplamaya çalışayım|bence şöyle olabilir", re.I)),
-    ("ASP-NEG-05_WEIGHT_ONLY",   re.compile(r"genel\s+bilgime\s+göre|eğitim\s+verilerime\s+göre", re.I)),
-]
 
 # --- Internal-jargon leak patterns (C8 / stability) -------------------------
 _JARGON_LEAK_PATTERNS: list[re.Pattern] = [
@@ -438,20 +430,7 @@ class StudentAgent:
         Coarse permission check derived from ONTOLOGY_AGENT_ROLES.
         StudentAgent may not see bulk grade lists or course management actions.
         """
-        _permissions: dict[str, set[str]] = {
-            "StudentAgent":          {"read_own_grades", "read_own_courses",
-                                      "read_exam_dates", "read_assignment_deadlines"},
-            "InstructorAgent":       {"read_own_grades", "read_own_courses",
-                                      "read_exam_dates", "read_assignment_deadlines",
-                                      "read_all_student_grades", "manage_courses"},
-            "HeadOfDepartmentAgent": {"read_own_grades", "read_own_courses",
-                                      "read_exam_dates", "read_assignment_deadlines",
-                                      "read_all_student_grades", "manage_courses",
-                                      "manage_department"},
-            "ResearcherAgent":       {"read_own_courses", "read_exam_dates",
-                                      "read_assignment_deadlines"},
-        }
-        permitted = _permissions.get(self.agent_role, set())
+        permitted = ONTOLOGY_AGENT_ROLES.get(self.agent_role, set())
 
         if re.search(r"tüm öğrencilerin notları|bütün öğrenciler", draft, re.I):
             if "read_all_student_grades" not in permitted:

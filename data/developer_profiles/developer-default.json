@@ -1,0 +1,57 @@
+{
+  "developer_id": "developer-default",
+  "preferred_frameworks": [],
+  "coding_style": {
+    "preferred_language": "en",
+    "task_type": "other",
+    "strategy": "direct",
+    "planning_style": "mvp-focused"
+  },
+  "architecture_preferences": [],
+  "error_handling_style": {},
+  "documentation_style": {
+    "verbosity": "balanced"
+  },
+  "decision_history": [
+    {
+      "timestamp": "2026-04-07T17:54:43+00:00",
+      "request_summary": "Analyze pipeline architecture",
+      "task_type": "other",
+      "strategy": "direct",
+      "planning_style": "analysis-first",
+      "confidence": 0.99
+    },
+    {
+      "timestamp": "2026-04-07T17:54:43+00:00",
+      "request_summary": "Help me debug this repository",
+      "task_type": "other",
+      "strategy": "direct",
+      "planning_style": "mvp-focused",
+      "confidence": 0.99
+    },
+    {
+      "timestamp": "2026-04-07T18:03:49+00:00",
+      "request_summary": "Analyze pipeline architecture",
+      "task_type": "other",
+      "strategy": "direct",
+      "planning_style": "analysis-first",
+      "confidence": 0.99
+    },
+    {
+      "timestamp": "2026-04-07T18:03:49+00:00",
+      "request_summary": "Help me debug this repository",
+      "task_type": "other",
+      "strategy": "direct",
+      "planning_style": "mvp-focused",
+      "confidence": 0.99
+    }
+  ],
+  "style_vector": [
+    0.0,
+    0.0,
+    4.0,
+    0.99,
+    0.6
+  ],
+  "last_updated": "2026-04-07T18:03:49+00:00"
+}

@@ -29,6 +29,8 @@ from src.database.chroma_manager import db_manager  # shared singleton
 from src.agents.developer_agent import DeveloperAgent
 from src.agents.developer_orchestrator import DeveloperOrchestrator
 from src.agents.developer_profile_store import DeveloperProfileStore
+from src.shared.permissions import ONTOLOGY_AGENT_ROLES
+from src.shared.patterns import ASP_NEG_PATTERNS
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -37,30 +39,8 @@ from src.agents.developer_profile_store import DeveloperProfileStore
 VECTOR_TOP_K = 15
 CHROMA_PATH  = "static/chromadb"
 
-ONTOLOGY_AGENT_ROLES: dict[str, set[str]] = {
-    "StudentAgent":          {"read_own_grades", "read_own_courses",
-                              "read_exam_dates", "read_assignment_deadlines"},
-    "InstructorAgent":       {"read_own_grades", "read_own_courses",
-                              "read_exam_dates", "read_assignment_deadlines",
-                              "read_all_student_grades", "manage_courses"},
-    "HeadOfDepartmentAgent": {"read_own_grades", "read_own_courses",
-                              "read_exam_dates", "read_assignment_deadlines",
-                              "read_all_student_grades", "manage_courses",
-                              "manage_department"},
-    "ResearcherAgent":       {"read_own_courses", "read_exam_dates",
-                              "read_assignment_deadlines"},
-    "DeveloperAgent":        {"read_own_courses", "read_exam_dates",
-                              "read_assignment_deadlines", "read_all_student_grades",
-                              "manage_courses", "manage_department"},
-}
-
-ASP_NEG_PATTERNS: list[tuple[str, re.Pattern]] = [
-    ("ASP-NEG-01_PII_UNMASK",    re.compile(r"\b\d{8,11}\b")),
-    ("ASP-NEG-02_HALLUCINATION", re.compile(r"tahminim|sanırım|galiba|muhtemelen", re.I)),
-    ("ASP-NEG-03_FALSE_PREMISE", re.compile(r"haklısınız|evet,?\s+öyle\s+söylemiştim", re.I)),
-    ("ASP-NEG-04_SOFTENED_FAIL", re.compile(r"yine de cevaplamaya çalışayım|bence şöyle olabilir", re.I)),
-    ("ASP-NEG-05_WEIGHT_ONLY",   re.compile(r"genel\s+bilgime\s+göre|eğitim\s+verilerime\s+göre", re.I)),
-]
+# ONTOLOGY_AGENT_ROLES and ASP_NEG_PATTERNS are imported from src.shared
+# (single source of truth — see src/shared/permissions.py and patterns.py).
 
 BLINDSPOT_TRIGGERS = re.compile(
     r"hafızamda\s+bulamadım|bilmiyorum|emin\s+değilim|kayıt\s+yok",
