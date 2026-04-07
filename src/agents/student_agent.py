@@ -33,6 +33,7 @@ from src.shared.patterns import (
 )
 from src.gates.c5_role_permission import check_role_permission as _check_c5
 from src.gates.c4_hallucination import check_hallucination as _check_c4
+from src.gates.c6_anti_sycophancy import check_anti_sycophancy as _check_c6
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -446,15 +447,16 @@ class StudentAgent:
 
     # C6 — Anti-sycophancy
     def _gate_c6_anti_sycophancy(self, draft: str) -> tuple[bool, str]:
-        """Sweep all ASP-NEG patterns."""
-        violations = [
-            f"'{m.group()}'"
-            for label, pat in _ASP_NEG_PATTERNS
-            if (m := pat.search(draft))
-        ]
-        if violations:
-            return False, "Onay güdümlü ifade tespit edildi: " + ", ".join(violations)
-        return True, "Onay denetimi geçti."
+        """Sweep all ASP-NEG patterns.
+
+        Decision logic lives in src.gates.c6_anti_sycophancy. This wrapper
+        preserves the original Turkish messages byte-for-byte.
+        """
+        passed, violations = _check_c6(draft)
+        if passed:
+            return True, "Onay denetimi geçti."
+        rendered = [f"'{match}'" for _label, match in violations]
+        return False, "Onay güdümlü ifade tespit edildi: " + ", ".join(rendered)
 
     # C7 — BlindSpot completeness
     def _gate_c7_blindspot(

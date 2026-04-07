@@ -33,6 +33,7 @@ from src.shared.permissions import ONTOLOGY_AGENT_ROLES
 from src.shared.patterns import ASP_NEG_PATTERNS, PII_PATTERNS
 from src.gates.c5_role_permission import check_role_permission as _check_c5
 from src.gates.c4_hallucination import check_hallucination as _check_c4
+from src.gates.c6_anti_sycophancy import check_anti_sycophancy as _check_c6
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -692,15 +693,16 @@ def gate_c5_role_permission(draft: str, agent_role: str) -> tuple[bool, str]:
 
 
 def gate_c6_anti_sycophancy(draft: str) -> tuple[bool, str]:
-    """C6 — Full ASP-NEG pattern sweep."""
-    violations = [
-        f"[{lbl}] '{m.group()}'"
-        for lbl, pat in ASP_NEG_PATTERNS
-        if (m := pat.search(draft))
-    ]
-    if violations:
-        return False, "ASP violations: " + "; ".join(violations)
-    return True, "All ASP-NEG classifiers: NO_MATCH."
+    """C6 — Full ASP-NEG pattern sweep.
+
+    Decision logic lives in src.gates.c6_anti_sycophancy. This wrapper
+    preserves the original English messages byte-for-byte.
+    """
+    passed, violations = _check_c6(draft)
+    if passed:
+        return True, "All ASP-NEG classifiers: NO_MATCH."
+    rendered = [f"[{label}] '{match}'" for label, match in violations]
+    return False, "ASP violations: " + "; ".join(rendered)
 
 
 def gate_c7_blindspot(draft: str, is_empty: bool) -> tuple[bool, str]:
