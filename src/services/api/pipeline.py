@@ -30,7 +30,7 @@ from src.agents.developer_agent import DeveloperAgent
 from src.agents.developer_orchestrator import DeveloperOrchestrator
 from src.agents.developer_profile_store import DeveloperProfileStore
 from src.shared.permissions import ONTOLOGY_AGENT_ROLES
-from src.shared.patterns import ASP_NEG_PATTERNS
+from src.shared.patterns import ASP_NEG_PATTERNS, PII_PATTERNS
 from src.gates.c5_role_permission import check_role_permission as _check_c5
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -578,11 +578,23 @@ def build_ontology_context() -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def gate_c1_pii_masking(draft: str) -> tuple[bool, str]:
-    """C1 — No raw PII in emitted response."""
-    if re.search(r"\b\d{9,12}\b", draft):
-        return False, "Unmasked numeric ID detected."
-    if re.search(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}", draft):
-        return False, "Unmasked email detected."
+    """C1 — No raw PII in emitted response.
+
+    Now sweeps the shared PII_PATTERNS superset (numeric ID, e-mail,
+    phone). Previously the pipeline copy checked only ID + e-mail,
+    which meant phone numbers could leak on the developer path while
+    the student path caught them. Unified in Step 2 of the migration
+    plan per explicit approval.
+    """
+    for pattern in PII_PATTERNS:
+        m = pattern.search(draft)
+        if m:
+            matched = m.group()
+            if "@" in matched:
+                return False, "Unmasked email detected."
+            if re.fullmatch(r"\d{9,12}", matched):
+                return False, "Unmasked numeric ID detected."
+            return False, "Unmasked phone number detected."
     return True, "No raw PII detected."
 
 
