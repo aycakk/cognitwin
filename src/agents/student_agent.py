@@ -235,7 +235,7 @@ class StudentAgent:
             "C5": self._gate_c5_role_permission(draft),
             "C6": self._gate_c6_anti_sycophancy(draft),
             "C7": self._gate_c7_blindspot(draft, memory, ontology_context),
-            "C8": self._gate_c8_jargon_stability(draft),
+            "C8": self._gate_c8_stability(draft),
         }
         return {
             "conjunction": all(v[0] for v in gates.values()),
@@ -474,10 +474,17 @@ class StudentAgent:
             )
         return True, "BlindSpot bütünlüğü doğrulandı."
 
-    # C8 — Stability / no jargon leak
-    def _gate_c8_jargon_stability(self, draft: str) -> tuple[bool, str]:
+    # C8 — Output stability (jargon leak + length cap)
+    def _gate_c8_stability(self, draft: str) -> tuple[bool, str]:
         """
-        Ensure no internal technical jargon bleeds into the final response.
+        Canonical C8: response-content stability check.
+
+        Renamed from _gate_c8_jargon_stability to align with the new
+        gate-series convention (C-series = content gates). The runtime
+        REDO-checksum audit that previously also called itself "C8"
+        in pipeline.py has been renamed to A1.
+
+        Ensures no internal technical jargon bleeds into the final response.
         Also catches runaway / excessively long drafts that suggest a REDO loop.
         """
         # Jargon leak check

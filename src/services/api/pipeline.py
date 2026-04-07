@@ -570,7 +570,11 @@ def build_ontology_context() -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  GATE EVALUATORS  C1–C8
+#  GATE EVALUATORS  C1–C7  +  A1 (REDO audit)
+#
+#  C-series = response-content gates (operate on the draft text).
+#  A-series = orchestration audit gates (operate on the runtime state).
+#  A1 was previously misnamed "C8" — see commit message for rationale.
 # ─────────────────────────────────────────────────────────────────────────────
 
 def gate_c1_pii_masking(draft: str) -> tuple[bool, str]:
@@ -691,8 +695,13 @@ def gate_c7_blindspot(draft: str, is_empty: bool) -> tuple[bool, str]:
     return True, "BlindSpot completeness verified."
 
 
-def gate_c8_redo_checksum(redo_log: list[dict]) -> tuple[bool, str]:
-    """C8 — No zombie REDO cycles (more than one open cycle is anomalous)."""
+def gate_a1_redo_checksum(redo_log: list[dict]) -> tuple[bool, str]:
+    """A1 — No zombie REDO cycles (more than one open cycle is anomalous).
+
+    Renamed from gate_c8_redo_checksum: this is an orchestration-layer
+    audit gate, not a content gate. It inspects the REDO log, not the
+    draft text, so it does not belong in the C-series.
+    """
     open_cycles = [r for r in redo_log if not r.get("closed_at")]
     if len(open_cycles) > 1:
         return False, f"Too many open REDO cycles: {len(open_cycles)}"
@@ -706,7 +715,12 @@ def evaluate_all_gates(
     agent_role: str,
     redo_log: list[dict],
 ) -> dict:
-    """Execute C1∧C2∧…∧C8 and return a structured report."""
+    """Execute C1∧C2∧…∧C7 ∧ A1 and return a structured report.
+
+    The "A1" key is the REDO-checksum audit gate (formerly mislabeled
+    "C8"). Downstream consumers that previously read report["gates"]["C8"]
+    must now read report["gates"]["A1"].
+    """
     gates = {
         "C1": gate_c1_pii_masking(draft),
         "C2": gate_c2_memory_grounding(draft, vector_context, is_empty, agent_role),
@@ -715,7 +729,7 @@ def evaluate_all_gates(
         "C5": gate_c5_role_permission(draft, agent_role),
         "C6": gate_c6_anti_sycophancy(draft),
         "C7": gate_c7_blindspot(draft, is_empty),
-        "C8": gate_c8_redo_checksum(redo_log),
+        "A1": gate_a1_redo_checksum(redo_log),
     }
     structured = {k: {"pass": v[0], "evidence": v[1]} for k, v in gates.items()}
     return {
