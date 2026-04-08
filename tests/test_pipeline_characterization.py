@@ -32,7 +32,7 @@ def fake_db_manager():
     return manager
 
 
-@patch("src.services.api.pipeline.chat")
+@patch("src.pipeline.student_runner.chat")
 @patch("src.pipeline.shared.db_manager")
 def test_student_query_basic_behavior(mock_db_manager, mock_chat, fake_chat_response, fake_db_manager):
     mock_chat.return_value = fake_chat_response
@@ -49,7 +49,7 @@ def test_student_query_basic_behavior(mock_db_manager, mock_chat, fake_chat_resp
     assert isinstance(result, dict)
 
 
-@patch("src.services.api.pipeline.chat")
+@patch("src.pipeline.developer_runner.chat")
 @patch("src.pipeline.shared.db_manager")
 def test_developer_query_basic_behavior(mock_db_manager, mock_chat, fake_chat_response, fake_db_manager):
     mock_chat.return_value = fake_chat_response
@@ -66,7 +66,7 @@ def test_developer_query_basic_behavior(mock_db_manager, mock_chat, fake_chat_re
     assert isinstance(result, dict)
 
 
-@patch("src.services.api.pipeline.chat")
+@patch("src.pipeline.student_runner.chat")
 @patch("src.pipeline.shared.db_manager")
 def test_empty_vector_case_does_not_crash(mock_db_manager, mock_chat, fake_chat_response):
     mock_chat.return_value = fake_chat_response
@@ -83,7 +83,7 @@ def test_empty_vector_case_does_not_crash(mock_db_manager, mock_chat, fake_chat_
     assert isinstance(result, dict)
 
 
-@patch("src.services.api.pipeline.chat")
+@patch("src.pipeline.student_runner.chat")
 @patch("src.pipeline.shared.db_manager")
 def test_pii_query_does_not_crash(mock_db_manager, mock_chat, fake_chat_response, fake_db_manager):
     mock_chat.return_value = fake_chat_response
@@ -100,7 +100,7 @@ def test_pii_query_does_not_crash(mock_db_manager, mock_chat, fake_chat_response
     assert isinstance(result, dict)
 
 
-@patch("src.services.api.pipeline.chat")
+@patch("src.pipeline.developer_runner.chat")
 @patch("src.pipeline.shared.db_manager")
 def test_routing_edge_case_with_developer_model(mock_db_manager, mock_chat, fake_chat_response, fake_db_manager):
     mock_chat.return_value = fake_chat_response
@@ -117,7 +117,7 @@ def test_routing_edge_case_with_developer_model(mock_db_manager, mock_chat, fake
     assert isinstance(result, dict)
 
 
-@patch("src.services.api.pipeline.chat")
+@patch("src.pipeline.student_runner.chat")
 @patch("src.pipeline.shared.db_manager")
 def test_blank_like_query_does_not_crash(mock_db_manager, mock_chat, fake_chat_response):
     mock_chat.return_value = fake_chat_response
