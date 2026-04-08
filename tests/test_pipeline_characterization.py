@@ -33,7 +33,7 @@ def fake_db_manager():
 
 
 @patch("src.services.api.pipeline.chat")
-@patch("src.services.api.pipeline.db_manager")
+@patch("src.pipeline.shared.db_manager")
 def test_student_query_basic_behavior(mock_db_manager, mock_chat, fake_chat_response, fake_db_manager):
     mock_chat.return_value = fake_chat_response
     mock_db_manager.search = fake_db_manager.search
@@ -50,7 +50,7 @@ def test_student_query_basic_behavior(mock_db_manager, mock_chat, fake_chat_resp
 
 
 @patch("src.services.api.pipeline.chat")
-@patch("src.services.api.pipeline.db_manager")
+@patch("src.pipeline.shared.db_manager")
 def test_developer_query_basic_behavior(mock_db_manager, mock_chat, fake_chat_response, fake_db_manager):
     mock_chat.return_value = fake_chat_response
     mock_db_manager.search = fake_db_manager.search
@@ -67,7 +67,7 @@ def test_developer_query_basic_behavior(mock_db_manager, mock_chat, fake_chat_re
 
 
 @patch("src.services.api.pipeline.chat")
-@patch("src.services.api.pipeline.db_manager")
+@patch("src.pipeline.shared.db_manager")
 def test_empty_vector_case_does_not_crash(mock_db_manager, mock_chat, fake_chat_response):
     mock_chat.return_value = fake_chat_response
     mock_db_manager.search.return_value = []
@@ -84,7 +84,7 @@ def test_empty_vector_case_does_not_crash(mock_db_manager, mock_chat, fake_chat_
 
 
 @patch("src.services.api.pipeline.chat")
-@patch("src.services.api.pipeline.db_manager")
+@patch("src.pipeline.shared.db_manager")
 def test_pii_query_does_not_crash(mock_db_manager, mock_chat, fake_chat_response, fake_db_manager):
     mock_chat.return_value = fake_chat_response
     mock_db_manager.search = fake_db_manager.search
@@ -101,7 +101,7 @@ def test_pii_query_does_not_crash(mock_db_manager, mock_chat, fake_chat_response
 
 
 @patch("src.services.api.pipeline.chat")
-@patch("src.services.api.pipeline.db_manager")
+@patch("src.pipeline.shared.db_manager")
 def test_routing_edge_case_with_developer_model(mock_db_manager, mock_chat, fake_chat_response, fake_db_manager):
     mock_chat.return_value = fake_chat_response
     mock_db_manager.search = fake_db_manager.search
@@ -118,7 +118,7 @@ def test_routing_edge_case_with_developer_model(mock_db_manager, mock_chat, fake
 
 
 @patch("src.services.api.pipeline.chat")
-@patch("src.services.api.pipeline.db_manager")
+@patch("src.pipeline.shared.db_manager")
 def test_blank_like_query_does_not_crash(mock_db_manager, mock_chat, fake_chat_response):
     mock_chat.return_value = fake_chat_response
     mock_db_manager.search.return_value = []
