@@ -88,6 +88,10 @@ def run_pipeline(query: str, agent_role: str = "StudentAgent") -> str:
         return draft
 
     # ── Stage 4 — Emission ────────────────────────────────────────────────────
-    if BLINDSPOT_TRIGGERS.search(draft):
+    # Only prepend a blindspot block when retrieval was genuinely empty.
+    # Checking draft text alone is wrong: the LLM may say "Bunu hafızamda
+    # bulamadım" for a sub-topic it couldn't resolve even though memory docs
+    # *were* retrieved, which should not produce the blindspot wrapper.
+    if is_empty and BLINDSPOT_TRIGGERS.search(draft):
         return build_blindspot_block(query) + draft
     return draft
