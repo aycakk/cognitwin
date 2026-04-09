@@ -1,0 +1,52 @@
+services:
+  api:
+    image: ghcr.io/danny-avila/librechat:latest
+    container_name: librechat-api
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+      - meilisearch
+    ports:
+      - "${PORT:-3900}:${PORT:-3900}"
+    environment:
+      HOST: "${HOST:-0.0.0.0}"
+      PORT: "${PORT:-3900}"
+      DOMAIN_CLIENT: "${DOMAIN_CLIENT:-http://localhost:3900}"
+      DOMAIN_SERVER: "${DOMAIN_SERVER:-http://localhost:3900}"
+      MONGO_URI: "${MONGO_URI:-mongodb://mongodb:27017/LibreChat}"
+      MEILI_HOST: "http://meilisearch:7700"
+      MEILI_MASTER_KEY: "${MEILI_MASTER_KEY:-change-me}"
+      DEBUG_LOGGING: "${DEBUG_LOGGING:-true}"
+      DEBUG_CONSOLE: "${DEBUG_CONSOLE:-false}"
+      ALLOW_REGISTRATION: "${ALLOW_REGISTRATION:-true}"
+      NO_INDEX: "${NO_INDEX:-true}"
+      TRUST_PROXY: "${TRUST_PROXY:-1}"
+      JWT_SECRET: "${JWT_SECRET:-change-this-jwt-secret}"
+      JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:-change-this-jwt-refresh-secret}"
+    volumes:
+      - ./librechat.yaml:/app/librechat.yaml:ro
+      - librechat_images:/app/client/public/images
+      - librechat_logs:/app/api/logs
+
+  mongodb:
+    image: mongo:7
+    container_name: librechat-mongodb
+    restart: unless-stopped
+    volumes:
+      - librechat_mongodb:/data/db
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    container_name: librechat-meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: "${MEILI_MASTER_KEY:-change-me}"
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - librechat_meilisearch:/meili_data
+
+volumes:
+  librechat_mongodb:
+  librechat_meilisearch:
+  librechat_images:
+  librechat_logs:
