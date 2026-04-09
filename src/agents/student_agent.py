@@ -5,7 +5,7 @@
 ║   Architecture  : Hybrid (Unstructured Memory + Structured Ontology)        ║
 ║   Memory Source : ChromaDB  (vector similarity, k=15)                       ║
 ║   Ontology      : cognitwin-upper.ttl  +  student_ontology.ttl  (rdflib)    ║
-║   Gate Array    : C1 ∧ C2 ∧ C3 ∧ C4 ∧ C5 ∧ C6 ∧ C7 ∧ C8                  ║
+║   Gate Array    : C1 ∧ C2 ∧ C4 ∧ C5 ∧ C6 ∧ C7 ∧ C8 ∧ C9                  ║
 ║   Response Lang : Turkish  (internal reasoning in English for LLM stability)║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
@@ -31,6 +31,9 @@ from src.shared.patterns import (
     PII_PATTERNS as _PII_PATTERNS,
     ASP_NEG_PATTERNS as _ASP_NEG_PATTERNS,
 )
+from src.gates.c5_role_permission import check_role_permission as _check_c5
+from src.gates.c4_hallucination import check_hallucination as _check_c4
+from src.gates.c6_anti_sycophancy import check_anti_sycophancy as _check_c6
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -229,12 +232,12 @@ class StudentAgent:
         gates = {
             "C1": self._gate_c1_pii(draft),
             "C2": self._gate_c2_grounding(draft, memory, ontology_context),
-            "C3": self._gate_c3_ontology_prefix(draft, ontology_context),
+            "C9": self._gate_c9_ontology_attribution(draft, ontology_context),
             "C4": self._gate_c4_synthesis(draft),
             "C5": self._gate_c5_role_permission(draft),
             "C6": self._gate_c6_anti_sycophancy(draft),
             "C7": self._gate_c7_blindspot(draft, memory, ontology_context),
-            "C8": self._gate_c8_jargon_stability(draft),
+            "C8": self._gate_c8_stability(draft),
         }
         return {
             "conjunction": all(v[0] for v in gates.values()),
@@ -377,8 +380,8 @@ class StudentAgent:
             "(< 2 ortak terim). Olası üretim hatası.",
         )
 
-    # C3 — Ontology reasoning prefix
-    def _gate_c3_ontology_prefix(
+    # C9 — Ontology attribution (prefix compliance)
+    def _gate_c9_ontology_attribution(
         self,
         draft: str,
         ontology_context: str,
@@ -416,43 +419,44 @@ class StudentAgent:
 
     # C4 — Synthesis (hallucination absence)
     def _gate_c4_synthesis(self, draft: str) -> tuple[bool, str]:
-        """Detect hallucination / weight-only claim markers."""
-        for label, pattern in _ASP_NEG_PATTERNS:
-            if label in ("ASP-NEG-02_HALLUCINATION", "ASP-NEG-05_WEIGHT_ONLY"):
-                m = pattern.search(draft)
-                if m:
-                    return False, f"Kanıtsız ifade tespit edildi: '{m.group()}'"
-        return True, "Sentez doğrulaması geçti."
+        """Detect hallucination / weight-only claim markers.
+
+        Decision logic lives in src.gates.c4_hallucination. This wrapper
+        preserves the original Turkish messages byte-for-byte.
+        """
+        passed, _label, matched = _check_c4(draft)
+        if passed:
+            return True, "Sentez doğrulaması geçti."
+        return False, f"Kanıtsız ifade tespit edildi: '{matched}'"
 
     # C5 — Role-permission boundary
     def _gate_c5_role_permission(self, draft: str) -> tuple[bool, str]:
         """
         Coarse permission check derived from ONTOLOGY_AGENT_ROLES.
-        StudentAgent may not see bulk grade lists or course management actions.
+        Decision logic lives in src.gates.c5_role_permission. This wrapper
+        preserves the original Turkish messages byte-for-byte.
         """
-        permitted = ONTOLOGY_AGENT_ROLES.get(self.agent_role, set())
-
-        if re.search(r"tüm öğrencilerin notları|bütün öğrenciler", draft, re.I):
-            if "read_all_student_grades" not in permitted:
-                return False, f"'{self.agent_role}' rolü toplu not erişimine yetkili değil."
-
-        if re.search(r"dersi güncelle|ders planını değiştir", draft, re.I):
-            if "manage_courses" not in permitted:
-                return False, f"'{self.agent_role}' rolü ders yönetimine yetkili değil."
-
-        return True, f"'{self.agent_role}' rol sınırı ihlali yok."
+        passed, kind = _check_c5(draft, self.agent_role)
+        if passed:
+            return True, f"'{self.agent_role}' rol sınırı ihlali yok."
+        if kind == "bulk_grades":
+            return False, f"'{self.agent_role}' rolü toplu not erişimine yetkili değil."
+        if kind == "manage_courses":
+            return False, f"'{self.agent_role}' rolü ders yönetimine yetkili değil."
+        return passed, f"'{self.agent_role}' belirsiz ihlal ({kind})."
 
     # C6 — Anti-sycophancy
     def _gate_c6_anti_sycophancy(self, draft: str) -> tuple[bool, str]:
-        """Sweep all ASP-NEG patterns."""
-        violations = [
-            f"'{m.group()}'"
-            for label, pat in _ASP_NEG_PATTERNS
-            if (m := pat.search(draft))
-        ]
-        if violations:
-            return False, "Onay güdümlü ifade tespit edildi: " + ", ".join(violations)
-        return True, "Onay denetimi geçti."
+        """Sweep all ASP-NEG patterns.
+
+        Decision logic lives in src.gates.c6_anti_sycophancy. This wrapper
+        preserves the original Turkish messages byte-for-byte.
+        """
+        passed, violations = _check_c6(draft)
+        if passed:
+            return True, "Onay denetimi geçti."
+        rendered = [f"'{match}'" for _label, match in violations]
+        return False, "Onay güdümlü ifade tespit edildi: " + ", ".join(rendered)
 
     # C7 — BlindSpot completeness
     def _gate_c7_blindspot(
@@ -475,10 +479,17 @@ class StudentAgent:
             )
         return True, "BlindSpot bütünlüğü doğrulandı."
 
-    # C8 — Stability / no jargon leak
-    def _gate_c8_jargon_stability(self, draft: str) -> tuple[bool, str]:
+    # C8 — Output stability (jargon leak + length cap)
+    def _gate_c8_stability(self, draft: str) -> tuple[bool, str]:
         """
-        Ensure no internal technical jargon bleeds into the final response.
+        Canonical C8: response-content stability check.
+
+        Renamed from _gate_c8_jargon_stability to align with the new
+        gate-series convention (C-series = content gates). The runtime
+        REDO-checksum audit that previously also called itself "C8"
+        in pipeline.py has been renamed to A1.
+
+        Ensures no internal technical jargon bleeds into the final response.
         Also catches runaway / excessively long drafts that suggest a REDO loop.
         """
         # Jargon leak check
