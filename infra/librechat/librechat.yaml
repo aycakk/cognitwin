@@ -19,3 +19,12 @@ endpoints:
           - "cognitwin-developer"
         fetch: false
       modelDisplayLabel: "CogniTwin Developer"
+
+    - name: "CogniTwin Scrum"
+      apiKey: "cognitwin"
+      baseURL: "http://host.docker.internal:8011/v1/"
+      models:
+        default:
+          - "cognitwin-scrum"
+        fetch: false
+      modelDisplayLabel: "CogniTwin Scrum Master"

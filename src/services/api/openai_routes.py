@@ -20,7 +20,7 @@ class ChatCompletionRequest(BaseModel):
 @openai_router.get("/v1/models")
 async def list_models():
     now = int(time.time())
-    model_ids = ["llama3.2", "cognitwin-student-llm", "cognitwin-developer"]
+    model_ids = ["llama3.2", "cognitwin-student-llm", "cognitwin-developer", "cognitwin-scrum"]
     payload = {
         "object": "list",
         "data": [
@@ -41,8 +41,6 @@ async def list_models():
 
 @openai_router.post("/v1/chat/completions")
 async def chat_completions(req: ChatCompletionRequest):
-    print("OPENAI_ROUTE_HIT ✅")
-
     # 1) En son USER mesajını güvenli seç (son eleman her zaman user olmayabilir)
     user_text = ""
     for m in reversed(req.messages or []):
