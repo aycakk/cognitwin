@@ -31,6 +31,7 @@ from src.agents.developer_orchestrator import DeveloperOrchestrator
 from src.agents.developer_profile_store import DeveloperProfileStore
 from src.shared.permissions import ONTOLOGY_AGENT_ROLES
 from src.shared.patterns import ASP_NEG_PATTERNS
+from src.services.api.router import QueryRouter, Route
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -102,6 +103,8 @@ Son kural: Kanıtsız tahmin YÜRÜTME. Sycophantic yanıt BLOKLANDI.
 
 CHROMA  = db_manager
 _masker = PIIMasker()
+
+NO_DATA_FALLBACK = "Veri kaynaklarında tanımlanmamıştır."
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -508,6 +511,109 @@ def _process_developer_message(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  QUERY ROUTER — Pre-routing layer for student path
+#  ONTOLOGY_DIRECT → ontoloji yeterli, LLM formatlar
+#  TASK            → eylem komutu (henüz uygulanmadı)
+#  MEMORY_RAG      → ZT4SWE pipeline'a devam
+#  MODEL_FALLBACK  → ZT4SWE pipeline'a devam
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _router_ontology_lookup(query: str) -> tuple[str, float]:
+    """QueryRouter ontology adapter — SPARQL triple lookup + confidence."""
+    g = _get_ontology_graph()
+    if g is None:
+        return ("", 0.0)
+    from rdflib import RDF, RDFS, OWL
+    q_lower = query.lower()
+    q_tokens = set(re.findall(r"\b[a-zA-Z0-9çğıöşüÇĞİÖŞÜ]{3,}\b", q_lower))
+
+    results = []
+    try:
+        for s, p, o in g:
+            s_str = str(s).split("/")[-1].split("#")[-1]
+            p_str = str(p).split("/")[-1].split("#")[-1]
+            o_str = str(o).split("/")[-1].split("#")[-1]
+            s_low, p_low, o_low = s_str.lower(), p_str.lower(), o_str.lower()
+            score = 0.0
+            for tok in q_tokens:
+                if tok in s_low: score += 1.5
+                if tok in o_low: score += 1.5
+                if tok in p_low: score += 0.8
+            if score > 0:
+                results.append((score, f"TRIPLE: {s_str} | {p_str} | {o_str}"))
+    except Exception:
+        return ("", 0.0)
+
+    if not results:
+        return ("", 0.0)
+    results.sort(key=lambda x: x[0], reverse=True)
+    top = results[:3]
+    context = "\n".join(line for _, line in top)
+    confidence = min(top[0][0] / 5.0, 1.0)
+    return (context, confidence)
+
+
+def _router_memory_lookup(query: str, user_id: str) -> list[str]:
+    """QueryRouter memory adapter — ChromaDB vector search."""
+    if CHROMA is None:
+        return []
+    try:
+        docs = CHROMA.query_memory(query, n_results=5)
+        return [d for d in (docs or []) if d and d.strip()]
+    except Exception:
+        return []
+
+
+_query_router = QueryRouter(
+    ontology_lookup_fn=_router_ontology_lookup,
+    memory_search_fn=_router_memory_lookup,
+)
+
+
+def _ontology_answer(query: str, ontology_context: str) -> str:
+    """Convert raw TRIPLE lines into natural Turkish via LLM."""
+    if not ontology_context.strip():
+        return NO_DATA_FALLBACK
+    try:
+        resp = chat(
+            model="llama3.2",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are CogniTwin Ontology Interpreter. Convert "
+                        "structured ontology facts (TRIPLE lines) into clear, natural Turkish.\n\n"
+                        "TRIPLE Format: TRIPLE: Subject | Predicate | Object\n\n"
+                        "Examples:\n"
+                        "- TRIPLE: COM8090 | type | Course → COM8090 bir kurstur\n"
+                        "- TRIPLE: com8090Midterm | activityPartOf | COM8090 → "
+                        "com8090Midterm, COM8090 dersinin bir parçasıdır\n\n"
+                        "Rules:\n"
+                        "1. Synthesize all TRIPLE lines into coherent Turkish text\n"
+                        "2. Keep entity names EXACTLY as shown\n"
+                        "3. Do NOT add information beyond the TRIPLEs\n"
+                        "4. If no TRIPLE lines exist, return: Veri kaynaklarında tanımlanmamıştır.\n\n"
+                        "Output ONLY the Turkish answer."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Ontology Facts:\n{ontology_context}\n\n"
+                        f"User Question: {query}\n\n"
+                        "Convert the facts above to a natural Turkish answer."
+                    ),
+                },
+            ],
+        )
+        out = resp.message.content.strip() if hasattr(resp, "message") else ""
+        return out or NO_DATA_FALLBACK
+    except Exception as e:
+        print(f"[_ontology_answer] LLM failed: {e}")
+        return NO_DATA_FALLBACK
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  ONTOLOGY CONTEXT BUILDER
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -779,7 +885,13 @@ def build_blindspot_block(query: str, memory_status: str = "BULUNAMADI") -> str:
 
 def run_pipeline(query: str, agent_role: str = "StudentAgent") -> str:
     """
-    Execute the 4-stage ZT4SWE verification pipeline.
+    Execute the 4-stage ZT4SWE verification pipeline with QueryRouter pre-routing.
+
+    Pre-Route (QueryRouter):
+      ONTOLOGY_DIRECT → ontoloji yeterli, LLM ile doğal Türkçeye çevir, ZT4SWE atla
+      TASK            → eylem komutu, henüz desteklenmiyor mesajı
+      MEMORY_RAG      → ZT4SWE pipeline'a devam
+      MODEL_FALLBACK  → ZT4SWE pipeline'a devam
 
     Stage 1 — Retrieval & Grounding  : ChromaDB (k=15) + ontology context
     Stage 2 — Draft Synthesis        : LLM via Ollama llama3.2
@@ -788,9 +900,25 @@ def run_pipeline(query: str, agent_role: str = "StudentAgent") -> str:
 
     redo_log is per-request (thread-safe — no shared mutable state).
     """
-    redo_log: list[dict] = []
+    # ── Pre-Route (QueryRouter) ──────────────────────────────────────────────
+    decision = _query_router.route(query, user_id="student")
+    print(f"[ROUTER] route={decision.route.value} "
+          f"ont_conf={decision.ontology_confidence:.2f} "
+          f"mem_lines={len(decision.memory_lines)}")
+
+    if decision.route == Route.TASK:
+        return (
+            f"'{decision.task_type}' görevi henüz desteklenmiyor. "
+            "Bu özellik yakında eklenecek."
+        )
+
+    if decision.route == Route.ONTOLOGY_DIRECT:
+        natural = _ontology_answer(query, decision.ontology_context)
+        if natural and natural != NO_DATA_FALLBACK:
+            return f"{natural}\n[source: ontology]"
 
     # ── Stage 1 — Retrieval & Grounding ──────────────────────────────────────
+    redo_log: list[dict] = []
     vector_context, is_empty = VECTOR_MEM.retrieve(query, k=VECTOR_TOP_K)
     ontology_context         = build_ontology_context()
 

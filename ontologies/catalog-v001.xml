@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <catalog prefer="public" xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
-    <uri id="Imports Wizard Entry" name="http://cognitwin.org/upper" uri="cognitwin-upper.ttl"/>
-    <group id="Folder Repository, directory=, recursive=true, Auto-Update=true, version=2" prefer="public" xml:base=""/>
+    <!-- Üst ontoloji -->
+    <uri id="cognitwin-upper"     name="http://cognitwin.org/upper"     uri="cognitwin-upper.ttl"/>
+    <!-- Aktif domain ontolojileri -->
+    <uri id="cognitwin-student"   name="http://cognitwin.org/student"   uri="student_ontology.ttl"/>
+    <uri id="cognitwin-developer" name="http://cognitwin.org/developer" uri="developer_ontology.ttl"/>
+    <uri id="cognitwin-pm"        name="http://cognitwin.org/pm"        uri="pm_ontology.ttl"/>
+    <!-- Dizin taraması -->
+    <group id="Folder Repository, directory=, recursive=true, Auto-Update=true, version=2"
+           prefer="public" xml:base=""/>
 </catalog>

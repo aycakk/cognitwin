@@ -1,0 +1,128 @@
+@prefix : <http://cognitwin.org/developer#> .
+@prefix upper: <http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@base <http://cognitwin.org/developer#> .
+
+<http://cognitwin.org/developer> rdf:type owl:Ontology ;
+    owl:imports <http://cognitwin.org/upper> ;
+    rdfs:comment "CogniTwin Developer Domain Ontology — yazılım geliştirici persona." .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+###  hasRepository — WorkItem'ın bağlı olduğu kod deposu
+:hasRepository rdf:type owl:ObjectProperty ;
+               rdfs:subPropertyOf owl:topObjectProperty ;
+               rdfs:domain upper:WorkItem ;
+               rdfs:range :CodeRepository ;
+               rdfs:comment "İş kaleminin ilgili olduğu kod deposunu gösterir." .
+
+###  resolvesBug — PullRequest'in kapattığı Bug
+:resolvesBug rdf:type owl:ObjectProperty ;
+             rdfs:subPropertyOf owl:topObjectProperty ;
+             rdfs:domain :PullRequest ;
+             rdfs:range :Bug ;
+             rdfs:comment "PR'ın düzelttiği bug/issue." .
+
+###  reviewedBy — PR'ı inceleyen kişi
+:reviewedBy rdf:type owl:ObjectProperty ;
+            rdfs:subPropertyOf owl:topObjectProperty ;
+            rdfs:domain :PullRequest ;
+            rdfs:range upper:Person ;
+            rdfs:comment "PR'ı code review yapan kişi." .
+
+###  partOfSprint — WorkItem'ın planlandığı sprint
+:partOfSprint rdf:type owl:ObjectProperty ;
+              rdfs:subPropertyOf owl:topObjectProperty ;
+              rdfs:domain upper:WorkItem ;
+              rdfs:range upper:Sprint ;
+              rdfs:comment "İş kaleminin dahil olduğu sprint." .
+
+
+#################################################################
+#    Data properties
+#################################################################
+
+###  branchName — PR veya WorkItem'ın ilgili Git branch'i
+:branchName rdf:type owl:DatatypeProperty ;
+            rdfs:subPropertyOf owl:topDataProperty ;
+            rdfs:range xsd:string ;
+            rdfs:comment "Git branch adı." .
+
+###  commitCount — Sprint veya WorkItem boyunca yapılan commit sayısı
+:commitCount rdf:type owl:DatatypeProperty ;
+             rdfs:subPropertyOf owl:topDataProperty ;
+             rdfs:range xsd:integer ;
+             rdfs:comment "Bağlı commit sayısı." .
+
+###  reviewStatus — PR inceleme durumu
+:reviewStatus rdf:type owl:DatatypeProperty ;
+              rdfs:subPropertyOf owl:topDataProperty ;
+              rdfs:domain :PullRequest ;
+              rdfs:range xsd:string ;
+              rdfs:comment "PR durumu: Open / Approved / Merged / Closed." .
+
+###  techStack — Projede kullanılan teknoloji yığını
+:techStack rdf:type owl:DatatypeProperty ;
+           rdfs:subPropertyOf owl:topDataProperty ;
+           rdfs:domain :SoftwareProject ;
+           rdfs:range xsd:string ;
+           rdfs:comment "Virgülle ayrılmış teknoloji listesi (örn. Python, FastAPI, React)." .
+
+
+#################################################################
+#    Classes
+#################################################################
+
+###  SoftwareProject — Yazılım geliştirme projesi
+:SoftwareProject rdf:type owl:Class ;
+                 rdfs:subClassOf upper:Project ;
+                 rdfs:comment "Yazılım geliştirme sürecini kapsayan proje." .
+
+###  Bug — Hata / defect iş kalemi
+:Bug rdf:type owl:Class ;
+     rdfs:subClassOf upper:WorkItem ;
+     rdfs:comment "Düzeltilmesi gereken yazılım hatası." .
+
+###  UserStory — Kullanıcı hikayesi
+:UserStory rdf:type owl:Class ;
+           rdfs:subClassOf upper:WorkItem ;
+           rdfs:comment "Kullanıcı perspektifinden yazılan iş gereksinimi." .
+
+###  CodeRepository — Kod deposu
+:CodeRepository rdf:type owl:Class ;
+                rdfs:subClassOf upper:Artifact ;
+                rdfs:comment "Git veya benzeri versiyon kontrol deposu." .
+
+###  PullRequest — Kod birleştirme talebi
+:PullRequest rdf:type owl:Class ;
+             rdfs:subClassOf upper:Artifact ;
+             rdfs:comment "Bir branch'ten ana dala birleştirme talebi." .
+
+###  CodeReview — Kod inceleme aktivitesi
+:CodeReview rdf:type owl:Class ;
+            rdfs:subClassOf upper:Activity ;
+            rdfs:comment "Bir PR'ın incelenmesi süreci." .
+
+###  TechnicalDebt — Teknik borç kaydı
+:TechnicalDebt rdf:type owl:Class ;
+               rdfs:subClassOf upper:WorkItem ;
+               rdfs:comment "Kısayol alınarak biriken teknik kalite sorunu." .
+
+
+#################################################################
+#    General axioms
+#################################################################
+
+[ rdf:type owl:AllDisjointClasses ;
+  owl:members ( :Bug
+                :UserStory
+                :TechnicalDebt
+              )
+] .
+
+###  CogniTwin Developer Ontology v1.0 (2026-04)
