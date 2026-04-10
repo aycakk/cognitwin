@@ -34,7 +34,8 @@ def run_pipeline(query: str, agent_role: str = "StudentAgent") -> str:
     redo_log: list[dict] = []
 
     # ── Stage 1 — Retrieval & Grounding ──────────────────────────────────────
-    vector_context, is_empty = VECTOR_MEM.retrieve(query, k=VECTOR_TOP_K)
+    # namespace="academic" isolates student queries from developer/agile data.
+    vector_context, is_empty = VECTOR_MEM.retrieve(query, k=VECTOR_TOP_K, namespace="academic")
     ontology_context         = build_ontology_context()
 
     if is_empty:

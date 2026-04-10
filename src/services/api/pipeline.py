@@ -18,7 +18,7 @@ from src.utils.masker import PIIMasker
 from src.shared.permissions import ONTOLOGY_AGENT_ROLES
 from src.gates.evaluator import evaluate_all_gates  # noqa: F401 (re-exported for main_cli)
 from src.ontology.loader import _get_ontology_graph, _sparql  # noqa: F401 (re-exported for main_cli)
-from src.pipeline.router import resolve_mode
+from src.pipeline.router import resolve_mode, UnknownModelError
 from src.pipeline.shared import (           # noqa: F401 (several re-exported for main_cli)
     VECTOR_TOP_K,
     BLINDSPOT_TRIGGERS,
@@ -104,5 +104,9 @@ def process_user_message(
             answer = run_pipeline(masked, agent_role=agent_role)
 
         return {"answer": answer}
+    except UnknownModelError as exc:
+        # Do NOT swallow this — it means LibreChat sent a model name we have
+        # never seen.  Return a clear message so the user (and logs) know.
+        return {"answer": f"[Yönlendirme Hatası] {exc}"}
     except Exception as exc:
         return {"answer": f"İşlem sırasında bir hata oluştu: {exc}"}

@@ -13,6 +13,9 @@ rdflib==7.0.0
 # Vector database
 chromadb==0.6.3
 
+# File locking (sprint_state.json concurrent access safety)
+filelock==3.16.1
+
 # PII masking & data processing
 python-dotenv==1.0.1
 pandas

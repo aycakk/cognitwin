@@ -15,7 +15,6 @@ import re
 
 from ollama import chat
 
-from src.agents.scrum_master_agent import ScrumMasterAgent
 from src.database.chroma_manager import db_manager
 from src.ontology.loader import _get_ontology_graph, _sparql
 
@@ -86,20 +85,40 @@ CHROMA = db_manager
 
 
 class VectorMemory:
-    """Thin ChromaDB wrapper that exposes retrieve(query, k) -> (str, bool)."""
+    """
+    Namespace-aware ChromaDB wrapper.
+
+    retrieve(query, k, namespace) returns (context_block, is_empty).
+
+    namespace must be one of the keys in chroma_manager.NAMESPACE_MAP:
+      "academic"  — student path (default; backward compatible)
+      "developer" — developer path
+      "agile"     — scrum/agile path
+    """
 
     def __init__(self) -> None:
         self._chroma = CHROMA
 
-    def retrieve(self, query: str, k: int = VECTOR_TOP_K) -> tuple[str, bool]:
-        """Returns (context_block, is_empty)."""
+    def retrieve(
+        self,
+        query: str,
+        k: int = VECTOR_TOP_K,
+        namespace: str = "academic",
+    ) -> tuple[str, bool]:
+        """Returns (context_block, is_empty).
+
+        Uses the namespace-specific collection so that student queries
+        never see developer codebase snippets and vice-versa.
+        """
         if self._chroma is None:
             return "", True
         try:
-            documents = self._chroma.query_memory(query, n_results=k)
+            documents = self._chroma.query_by_namespace(
+                question=query, namespace=namespace, n_results=k
+            )
             if not documents:
                 return "", True
-            lines = [f"=== VECTOR MEMORY (ChromaDB, k={k}) ==="]
+            lines = [f"=== VECTOR MEMORY (ChromaDB, ns={namespace!r}, k={k}) ==="]
             for idx, doc in enumerate(documents, 1):
                 lines.append(f"\n[Result {idx}]")
                 lines.append(doc)
@@ -111,8 +130,6 @@ class VectorMemory:
 
 
 VECTOR_MEM = VectorMemory()
-
-SCRUM_AGENT = ScrumMasterAgent()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

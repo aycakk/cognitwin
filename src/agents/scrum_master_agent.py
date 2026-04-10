@@ -10,10 +10,28 @@ ScrumMasterAgent.get_current_assignments() to read the active task list.
 from __future__ import annotations
 
 import json
+import logging
 import re
+import threading
+import warnings
+from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Generator
+
+try:
+    from filelock import FileLock as _FileLock
+    _FILELOCK_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _FILELOCK_AVAILABLE = False
+    warnings.warn(
+        "filelock is not installed. sprint_state.json writes are NOT safe under "
+        "concurrent access. Install it with: pip install filelock",
+        RuntimeWarning,
+        stacklevel=1,
+    )
+
+logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Sprint state location
@@ -83,6 +101,35 @@ class ScrumMasterAgent:
     def __init__(self) -> None:
         _SPRINT_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
+        # Thread-level reentrant lock — guards same-process concurrent requests.
+        # RLock (not Lock) because _load_state can call _save_state when the file
+        # is missing, and both run under the same acquired context.
+        self._thread_lock: threading.RLock = threading.RLock()
+
+        # Process-level file lock — guards multi-worker deployments (uvicorn --workers N).
+        # Falls back to a no-op context if filelock is not installed.
+        _lock_path = _SPRINT_STATE_PATH.with_suffix(".json.lock")
+        self._file_lock = _FileLock(str(_lock_path)) if _FILELOCK_AVAILABLE else None
+
+    @contextmanager
+    def _state_lock(self) -> Generator[None, None, None]:
+        """
+        Acquire both the thread lock and the file lock before any
+        read-modify-write cycle.  Releases both on exit regardless of exceptions.
+
+        Usage:
+            with self._state_lock():
+                state = self._load_state()
+                ...mutate state...
+                self._save_state(state)
+        """
+        with self._thread_lock:
+            if self._file_lock is not None:
+                with self._file_lock:
+                    yield
+            else:
+                yield
+
     # ─────────────────────────────────────────────────────────────────────────
     #  Public API (called by scrum_master_runner and external callers)
     # ─────────────────────────────────────────────────────────────────────────
@@ -91,30 +138,39 @@ class ScrumMasterAgent:
         """
         Route the query to the appropriate rule handler and return a
         structured text response.  No LLM is called here.
+
+        The entire load → modify → save cycle runs under _state_lock so
+        that concurrent requests cannot interleave their read-modify-write
+        operations and silently overwrite each other's changes.
         """
         intent = self._detect_intent(query)
-        state  = self._load_state()
 
-        handlers = {
-            "assign":        lambda: self._handle_assign(query, state),
-            "blockers":      lambda: self._handle_blockers(state),
-            "sprint_status": lambda: self._handle_sprint_status(state),
-            "standup":       lambda: self._handle_standup(state),
-            "retrospective": lambda: self._handle_retrospective(state),
-            "review":        lambda: self._handle_review(state),
-            "delegate":      lambda: self._handle_delegate(query, state),
-            "add_task":      lambda: self._handle_add_task(query, state),
-            "update_task":   lambda: self._handle_update_task(query, state),
-            "set_goal":      lambda: self._handle_set_goal(query, state),
-        }
-        return handlers.get(intent, lambda: self._handle_general(state))()
+        with self._state_lock():
+            state = self._load_state()
+            handlers = {
+                "assign":        lambda: self._handle_assign(query, state),
+                "blockers":      lambda: self._handle_blockers(state),
+                "sprint_status": lambda: self._handle_sprint_status(state),
+                "standup":       lambda: self._handle_standup(state),
+                "retrospective": lambda: self._handle_retrospective(state),
+                "review":        lambda: self._handle_review(state),
+                "delegate":      lambda: self._handle_delegate(query, state),
+                "add_task":      lambda: self._handle_add_task(query, state),
+                "update_task":   lambda: self._handle_update_task(query, state),
+                "set_goal":      lambda: self._handle_set_goal(query, state),
+            }
+            result = handlers.get(intent, lambda: self._handle_general(state))()
+
+        logger.debug("scrum: intent=%r query=%r", intent, query[:80])
+        return result
 
     def get_current_assignments(self) -> list[dict]:
         """
         Return non-done assigned tasks for consumption by other pipeline
         components (e.g. developer_runner sprint context injection).
         """
-        state = self._load_state()
+        with self._state_lock():
+            state = self._load_state()
         return [
             t for t in state.get("tasks", [])
             if t.get("assignee") and t.get("status") != "done"
@@ -122,16 +178,19 @@ class ScrumMasterAgent:
 
     def get_sprint_goal(self) -> str:
         """Return the current sprint goal string."""
-        return self._load_state().get("sprint", {}).get(
-            "goal", "Sprint hedefi tanımlanmamış."
-        )
+        with self._state_lock():
+            state = self._load_state()
+        return state.get("sprint", {}).get("goal", "Sprint hedefi tanımlanmamış.")
 
     def get_blocked_tasks(self) -> list[dict]:
         """Return all blocked tasks (for external monitoring)."""
-        return [
-            t for t in self._load_state().get("tasks", [])
-            if t.get("status") == "blocked"
-        ]
+        with self._state_lock():
+            state = self._load_state()
+        return [t for t in state.get("tasks", []) if t.get("status") == "blocked"]
+
+    def detect_intent(self, query: str) -> str:
+        """Public entry point for intent detection (delegates to _detect_intent)."""
+        return self._detect_intent(query)
 
     # ─────────────────────────────────────────────────────────────────────────
     #  State I/O

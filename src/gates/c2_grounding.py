@@ -6,22 +6,20 @@ Policy (pipeline): the draft must be lexically grounded in the vector
 context. "Grounded" means ≥ 2 content words (6+ chars, non-masked)
 appear in both the context and the draft.
 
-Roles that are exempt from this check (e.g. DeveloperAgent) are
-identified by the caller via the `exempt` flag rather than by
-hard-coding an agent name here. This keeps the module agnostic to
-agent-specific knowledge.
+Exemptions (e.g. DeveloperAgent) are handled by GATE_POLICY in
+src/governance/policy.py — roles that are exempt simply do not have
+C2 in their gate list, so this function is never called for them.
 
 Why only the pipeline copy is extracted:
   student_agent._gate_c2_grounding uses a different policy —
-  combined vector+ontology corpus, different empty-source definition,
-  no exemption concept — and has no production caller. It is left
-  untouched pending a separate policy decision (see Step 2.6 audit).
+  combined vector+ontology corpus, different empty-source definition —
+  and has no production caller. It is left untouched pending a
+  separate policy decision (see Step 2.6 audit).
 
 Return contract:
   (passed: bool, reason_code: str, overlap_count: int)
 
   reason_code values and meanings:
-    "exempt"       → caller marked this role as exempt; always PASS
     "empty_pass"   → vector empty AND draft issued BlindSpot phrase; PASS
     "empty_fail"   → vector empty AND draft missing BlindSpot phrase; FAIL
     "blindspot"    → vector non-empty but draft issued BlindSpot; PASS
@@ -42,7 +40,6 @@ def check_grounding(
     draft: str,
     vector_context: str,
     vector_empty: bool,
-    exempt: bool,
 ) -> tuple[bool, str, int]:
     """Decide whether `draft` is grounded in `vector_context`.
 
@@ -51,15 +48,13 @@ def check_grounding(
     draft:          the LLM-produced response text to evaluate
     vector_context: raw ChromaDB result block (may contain [*_MASKED] tokens)
     vector_empty:   True when the vector store returned no documents
-    exempt:         True when the caller's role is exempt from grounding
-                    (e.g. pipeline passes `agent_role == "DeveloperAgent"`)
+
+    Exemptions are handled by GATE_POLICY — roles not requiring C2 simply
+    never have this function called for them.
 
     Returns (passed, reason_code, overlap_count). See module docstring
     for the full reason_code → message mapping.
     """
-    if exempt:
-        return True, "exempt", 0
-
     if vector_empty:
         if "bulamadım" in draft.lower():
             return True, "empty_pass", 0

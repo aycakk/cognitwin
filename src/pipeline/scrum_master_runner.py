@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import re
 
-from src.pipeline.shared import SCRUM_AGENT as _agent
+from src.agents.scrum_master_agent import ScrumMasterAgent
+
+_agent = ScrumMasterAgent()
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Gate patterns (local copies — no import from shared to keep the runner

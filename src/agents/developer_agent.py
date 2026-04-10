@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from textwrap import dedent
-from typing import Iterable
+from typing import Callable, Iterable, Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -18,15 +21,30 @@ class RoleBlueprint:
 
 class DeveloperAgent:
     """
-    Team-internal builder agent for COGNITWIN.
+    Developer agent for COGNITWIN.
 
-    This agent does not answer end-user questions. It helps the team turn a
-    target role into a structured delivery packet containing ontology concepts,
-    competency questions, validation ideas, and a compact agent specification.
+    Dual responsibility
+    -------------------
+    1. Blueprint library (template layer, no LLM):
+       build_role_packet(), render_role_packet(), generate_restructured_prompt(),
+       build_agent_spec(), etc.  These are deterministic and never call an LLM.
+
+    2. LLM generation (agent layer):
+       process(request, context, language) calls the LLM directly via chat_fn
+       and returns a generated response.  This is the entry point used by the
+       orchestrator's "direct" strategy and by any future agent-to-agent handoff.
+
+    chat_fn injection
+    -----------------
+    Pass a callable with signature  chat_fn(model, messages) -> dict  to enable
+    LLM generation.  If chat_fn is None, process() falls back to the deterministic
+    generate_restructured_prompt() output so the class remains fully usable in
+    tests and offline environments.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, chat_fn: Optional[Callable] = None) -> None:
         self.agent_name = "COGNITWIN Developer Agent"
+        self.chat_fn = chat_fn
         self._role_library = self._build_role_library()
         self._required_files = {
             "ontology": [
@@ -46,6 +64,69 @@ class DeveloperAgent:
 
     def supported_roles(self) -> list[str]:
         return sorted(self._role_library.keys())
+
+    # ------------------------------------------------------------------
+    # LLM agent entry point
+    # ------------------------------------------------------------------
+
+    def process(
+        self,
+        request: str,
+        context: str = "",
+        language: str = "en",
+        model: str = "llama3.2",
+    ) -> str:
+        """
+        Generate a developer-mode response for *request*.
+
+        When chat_fn is available: calls the LLM with a system prompt built
+        from the agent's blueprint library + the supplied context block.
+
+        When chat_fn is None: falls back to the deterministic
+        generate_restructured_prompt() output so the method is always safe
+        to call in tests or offline environments.
+
+        Parameters
+        ----------
+        request : the user's raw developer request (already PII-masked)
+        context : optional pre-built context block (codebase, sprint state, …)
+        language: "en" or "tr"
+        model   : Ollama model name (default llama3.2)
+        """
+        if self.chat_fn is None:
+            logger.debug(
+                "DeveloperAgent.process: no chat_fn — falling back to "
+                "deterministic restructured prompt."
+            )
+            return self.generate_restructured_prompt(request=request, language=language)
+
+        system_prompt = self.build_system_prompt_template(task_type="other")
+        context_block = f"\n\n{context}\n\n" if context.strip() else ""
+        user_content = (
+            ("Lütfen Türkçe yanıt ver.\n\n" if language == "tr" else "")
+            + context_block
+            + request
+        )
+
+        try:
+            response = self.chat_fn(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user",   "content": user_content},
+                ],
+            )
+            answer = str((response or {}).get("message", {}).get("content", "")).strip()
+            if not answer:
+                raise ValueError("Empty LLM response from DeveloperAgent.process()")
+            return answer
+        except Exception as exc:
+            logger.warning("DeveloperAgent.process: LLM call failed (%s) — using fallback.", exc)
+            return self.generate_restructured_prompt(request=request, language=language)
+
+    # ------------------------------------------------------------------
+    # Blueprint / template layer (deterministic, no LLM)
+    # ------------------------------------------------------------------
 
     def build_role_packet(self, target_role: str, constraints: str = "") -> dict:
         normalized_role = self._normalize_role(target_role)

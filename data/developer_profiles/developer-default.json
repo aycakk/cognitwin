@@ -44,14 +44,62 @@
       "strategy": "direct",
       "planning_style": "mvp-focused",
       "confidence": 0.99
+    },
+    {
+      "timestamp": "2026-04-10T15:01:59+00:00",
+      "request_summary": "Analyze pipeline architecture",
+      "task_type": "other",
+      "strategy": "direct",
+      "planning_style": "analysis-first",
+      "confidence": 0.99
+    },
+    {
+      "timestamp": "2026-04-10T15:02:00+00:00",
+      "request_summary": "Help me debug this repository",
+      "task_type": "other",
+      "strategy": "direct",
+      "planning_style": "mvp-focused",
+      "confidence": 0.99
+    },
+    {
+      "timestamp": "2026-04-10T15:02:31+00:00",
+      "request_summary": "Analyze pipeline architecture",
+      "task_type": "other",
+      "strategy": "direct",
+      "planning_style": "analysis-first",
+      "confidence": 0.99
+    },
+    {
+      "timestamp": "2026-04-10T15:02:31+00:00",
+      "request_summary": "Help me debug this repository",
+      "task_type": "other",
+      "strategy": "direct",
+      "planning_style": "mvp-focused",
+      "confidence": 0.99
+    },
+    {
+      "timestamp": "2026-04-10T15:03:22+00:00",
+      "request_summary": "Analyze pipeline architecture",
+      "task_type": "other",
+      "strategy": "direct",
+      "planning_style": "analysis-first",
+      "confidence": 0.99
+    },
+    {
+      "timestamp": "2026-04-10T15:03:22+00:00",
+      "request_summary": "Help me debug this repository",
+      "task_type": "other",
+      "strategy": "direct",
+      "planning_style": "mvp-focused",
+      "confidence": 0.99
     }
   ],
   "style_vector": [
     0.0,
     0.0,
-    4.0,
+    10.0,
     0.99,
     0.6
   ],
-  "last_updated": "2026-04-07T18:03:49+00:00"
+  "last_updated": "2026-04-10T15:03:22+00:00"
 }

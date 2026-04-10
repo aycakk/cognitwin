@@ -24,6 +24,8 @@ import datetime
 import uuid
 from typing import Callable, Optional
 
+from src.pipeline.redo_audit import append_session
+
 
 def _open_redo(redo_log: list[dict], trigger_gate: str, evidence: str) -> str:
     """Append a new open REDO cycle to redo_log and return its ID."""
@@ -53,7 +55,7 @@ def _close_redo(
                 k: "PASS" if v["pass"] else "FAIL"
                 for k, v in gate_results.items()
             }
-            rec["closed_at"] = datetime.datetime.utcnow().isoformat()
+            rec["closed_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
             return
 
 
@@ -72,6 +74,7 @@ def run_redo_loop(
     gate_fn: Callable,
     chat_fn: Callable,
     blindspot_fn: Callable,
+    session_id: Optional[str] = None,
 ) -> tuple[str, bool]:
     """Run the gate-verification + REDO loop shared by both pipeline paths.
 
@@ -135,6 +138,13 @@ def run_redo_loop(
 
         if attempt == MAX_REDO:
             _open_redo(redo_log, first_fail, fail_ev)
+            append_session(
+                redo_log=redo_log,
+                agent_role=agent_role,
+                masked_query=query,
+                limit_hit=True,
+                session_id=session_id,
+            )
             return (
                 blindspot_fn(query, f"REDO LIMIT ({first_fail} FAIL)")
                 + limit_message_template.format(gate=first_fail)
@@ -157,4 +167,12 @@ def run_redo_loop(
         )
         draft = post_process(redo_resp.message.content.strip())
 
+    # Persist the audit trail (only if REDO was actually triggered).
+    append_session(
+        redo_log=redo_log,
+        agent_role=agent_role,
+        masked_query=query,
+        limit_hit=False,
+        session_id=session_id,
+    )
     return draft, False

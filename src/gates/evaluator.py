@@ -15,8 +15,10 @@ evaluate_all_gates aggregates all wrappers into a structured report dict.
 
 from __future__ import annotations
 
+import logging
 import re
 
+from src.governance.policy import GATE_POLICY, DEFAULT_GATE_POLICY
 from src.shared.patterns import PII_PATTERNS
 from src.gates.c2_grounding import check_grounding as _check_c2
 from src.gates.c3_ontology_compliance import check_ontology_compliance as _check_c3
@@ -24,7 +26,9 @@ from src.gates.c4_hallucination import check_hallucination as _check_c4
 from src.gates.c5_role_permission import check_role_permission as _check_c5
 from src.gates.c6_anti_sycophancy import check_anti_sycophancy as _check_c6
 from src.gates.c7_blindspot import check_blindspot as _check_c7
-from src.ontology.loader import _get_ontology_graph, _sparql
+from src.ontology.loader import _get_ontology_graph, _sparql, OntologyLoadError
+
+logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -56,25 +60,21 @@ def gate_c2_memory_grounding(
     draft: str,
     vector_context: str,
     is_empty: bool,
-    agent_role: str = "StudentAgent",
 ) -> tuple[bool, str]:
     """C2 — Draft must be grounded in the retrieved vector context.
 
     Decision logic lives in src.gates.c2_grounding. This wrapper
     preserves the original English messages byte-for-byte.
 
-    The DeveloperAgent exemption is expressed as the `exempt` flag
-    passed to check_grounding rather than a hardcoded string comparison
-    inside the shared module, keeping c2_grounding.py agent-agnostic.
+    Exemptions (e.g. DeveloperAgent) are handled by GATE_POLICY in
+    src/governance/policy.py — those roles simply do not have C2 in
+    their gate list, so this function is never called for them.
     """
     passed, reason, overlap_count = _check_c2(
         draft,
         vector_context,
         vector_empty=is_empty,
-        exempt=(agent_role == "DeveloperAgent"),
     )
-    if reason == "exempt":
-        return True, "DeveloperAgent: C2 grounding not applicable (developer context is self-contained)."
     if reason == "empty_pass":
         return True, "Vector memory empty; BlindSpot disclosure present."
     if reason == "empty_fail":
@@ -95,10 +95,30 @@ def gate_c3_ontology_compliance(draft: str) -> tuple[bool, str]:
       1. Checking whether the rdflib graph is available.
       2. Running the SPARQL query and passing the plain result list
          to the shared function (which has no rdflib dependency).
-    Messages are preserved byte-for-byte.
+
+    Degraded-mode policy
+    --------------------
+    When the ontology graph is unavailable AND COGNITWIN_ONTOLOGY_REQUIRED
+    is not set, this gate issues a DEGRADED PASS — the word "DEGRADED"
+    is in the evidence string so dashboards and log scrapers can surface it.
+    The old silent "provisional PASS" message is replaced so that operators
+    know the ontology is not backing this check.
+
+    When COGNITWIN_ONTOLOGY_REQUIRED=1 and the graph failed to load,
+    _get_ontology_graph() raises OntologyLoadError, which we catch here
+    and convert to a hard FAIL.
     """
-    if _get_ontology_graph() is None:
-        return True, "Ontology unavailable — provisional PASS."
+    try:
+        graph = _get_ontology_graph()
+    except OntologyLoadError as exc:
+        return False, f"C3 FAIL — ontology required but unavailable: {exc}"
+
+    if graph is None:
+        return True, (
+            "C3 DEGRADED PASS — ontology not loaded. "
+            "Set COGNITWIN_ONTOLOGY_REQUIRED=1 to treat absence as FAIL. "
+            "Check logs for missing .ttl file warnings."
+        )
 
     pairs = _sparql("""
         PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -202,24 +222,59 @@ def evaluate_all_gates(
     agent_role: str,
     redo_log: list[dict],
 ) -> dict:
-    """Execute C1∧C2∧…∧C7 ∧ A1 and return a structured report.
+    """
+    Execute the gate set defined in GATE_POLICY[agent_role] and return a
+    structured report.
+
+    C1 (PII masking) is always run regardless of policy — it is a hard
+    safety invariant applied to every emitted response.
+
+    All other gates are looked up from GATE_POLICY.  Roles not in the
+    policy fall back to DEFAULT_GATE_POLICY.  This replaces the previous
+    hard-coded `if agent_role == "DeveloperAgent": exempt=True` logic —
+    exemptions are now expressed as absent gate IDs in the policy table.
 
     The "A1" key is the REDO-checksum audit gate (formerly mislabeled
     "C8"). Downstream consumers that previously read report["gates"]["C8"]
     must now read report["gates"]["A1"].
     """
-    gates = {
+    role_gates = GATE_POLICY.get(agent_role, DEFAULT_GATE_POLICY)
+    if agent_role not in GATE_POLICY:
+        logger.warning(
+            "evaluate_all_gates: unknown agent_role=%r — using DEFAULT_GATE_POLICY %s",
+            agent_role,
+            DEFAULT_GATE_POLICY,
+        )
+
+    # C1 is always evaluated (hard safety invariant, not role-dependent).
+    gates: dict[str, tuple[bool, str]] = {
         "C1": gate_c1_pii_masking(draft),
-        "C2": gate_c2_memory_grounding(draft, vector_context, is_empty, agent_role),
-        "C3": gate_c3_ontology_compliance(draft),
-        "C4": gate_c4_hallucination(draft),
-        "C5": gate_c5_role_permission(draft, agent_role),
-        "C6": gate_c6_anti_sycophancy(draft),
-        "C7": gate_c7_blindspot(draft, is_empty),
-        "A1": gate_a1_redo_checksum(redo_log),
     }
+
+    # Role-specific gates from policy table.
+    _gate_dispatch: dict[str, tuple[bool, str]] = {}
+
+    if "C2" in role_gates:
+        _gate_dispatch["C2"] = gate_c2_memory_grounding(draft, vector_context, is_empty)
+    if "C3" in role_gates:
+        _gate_dispatch["C3"] = gate_c3_ontology_compliance(draft)
+    if "C4" in role_gates:
+        _gate_dispatch["C4"] = gate_c4_hallucination(draft)
+    if "C5" in role_gates:
+        _gate_dispatch["C5"] = gate_c5_role_permission(draft, agent_role)
+    if "C6" in role_gates:
+        _gate_dispatch["C6"] = gate_c6_anti_sycophancy(draft)
+    if "C7" in role_gates:
+        _gate_dispatch["C7"] = gate_c7_blindspot(draft, is_empty)
+    if "A1" in role_gates:
+        _gate_dispatch["A1"] = gate_a1_redo_checksum(redo_log)
+
+    gates.update(_gate_dispatch)
+
     structured = {k: {"pass": v[0], "evidence": v[1]} for k, v in gates.items()}
     return {
         "conjunction": all(v[0] for v in gates.values()),
         "gates": structured,
+        "role": agent_role,
+        "active_gates": list(gates.keys()),
     }

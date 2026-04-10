@@ -18,10 +18,10 @@ from pathlib import Path
 from ollama import chat
 
 from src.agents.developer_orchestrator import DeveloperOrchestrator
+from src.agents.scrum_master_agent import ScrumMasterAgent
 from src.gates.evaluator import evaluate_all_gates
 from src.pipeline.redo import run_redo_loop
 from src.pipeline.shared import (
-    SCRUM_AGENT,
     VECTOR_MEM,
     VECTOR_TOP_K,
     CHROMA,
@@ -31,6 +31,8 @@ from src.pipeline.shared import (
     _safe_chat,
     _sanitize_output,
 )
+
+_SCRUM_AGENT = ScrumMasterAgent()
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CODEBASE CONTEXT INJECTION
@@ -115,9 +117,9 @@ def _build_sprint_context() -> str:
     practice it always returns at least the default goal and empty task lists).
     """
     try:
-        sprint_goal  = SCRUM_AGENT.get_sprint_goal()
-        assignments  = SCRUM_AGENT.get_current_assignments()
-        blocked      = SCRUM_AGENT.get_blocked_tasks()
+        sprint_goal  = _SCRUM_AGENT.get_sprint_goal()
+        assignments  = _SCRUM_AGENT.get_current_assignments()
+        blocked      = _SCRUM_AGENT.get_blocked_tasks()
     except Exception:
         return ""
 
@@ -283,8 +285,10 @@ def _process_developer_message(
     """
     redo_log: list[dict] = []
 
-    # Stage 1 — Retrieve vector context (used only by gate evaluators)
-    vector_context, is_empty = VECTOR_MEM.retrieve(user_text, k=VECTOR_TOP_K)
+    # Stage 1 — Retrieve vector context (used only by gate evaluators).
+    # namespace="developer" keeps developer codebase snippets out of the
+    # student academic_memory collection.
+    vector_context, is_empty = VECTOR_MEM.retrieve(user_text, k=VECTOR_TOP_K, namespace="developer")
 
     # Stage 2 — DeveloperOrchestrator 8-stage pipeline
     # Inject actual source file snippets so the LLM can answer codebase
@@ -325,9 +329,9 @@ def _process_developer_message(
     # The return value of handle_query is discarded — the developer response is
     # always the primary output.  Wrapped in try/except so a state I/O error
     # never surfaces to the end user.
-    if SCRUM_AGENT._detect_intent(user_text) == "update_task":
+    if _SCRUM_AGENT.detect_intent(user_text) == "update_task":
         try:
-            SCRUM_AGENT.handle_query(user_text)
+            _SCRUM_AGENT.handle_query(user_text)
         except Exception:
             pass
 

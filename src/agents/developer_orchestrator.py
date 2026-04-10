@@ -56,7 +56,10 @@ class DeveloperOrchestrator:
         ontology_path: str | Path | None = None,
         profile_store: DeveloperProfileStore | None = None,
     ) -> None:
-        self.generator = generator or DeveloperAgent()
+        # Pass chat_fn into DeveloperAgent so its process() method can call the
+        # LLM directly.  This makes DeveloperAgent a genuine agent rather than
+        # a pure template renderer.
+        self.generator = generator or DeveloperAgent(chat_fn=chat_fn)
         self.memory_backend = memory_backend
         self.chat_fn = chat_fn
         self.default_model = default_model
