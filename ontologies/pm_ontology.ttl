@@ -1,0 +1,145 @@
+@prefix : <http://cognitwin.org/pm#> .
+@prefix upper: <http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@base <http://cognitwin.org/pm#> .
+
+<http://cognitwin.org/pm> rdf:type owl:Ontology ;
+    owl:imports <http://cognitwin.org/upper> ;
+    rdfs:comment "CogniTwin Project Manager Domain Ontology — proje yöneticisi persona." .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+###  hasMilestone — Proje veya sprint'in bağlı milestone'u
+:hasMilestone rdf:type owl:ObjectProperty ;
+              rdfs:subPropertyOf owl:topObjectProperty ;
+              rdfs:comment "Proje veya sprint'in hedeflediği milestone." .
+
+###  blockedBy — Bir görevin önünü kapatan iş kalemi
+:blockedBy rdf:type owl:ObjectProperty ;
+           rdfs:subPropertyOf owl:topObjectProperty ;
+           rdfs:domain upper:WorkItem ;
+           rdfs:range upper:WorkItem ;
+           rdfs:comment "Bu iş kalemi tamamlanmadan önce çözülmesi gereken bağımlılık." .
+
+###  hasStakeholder — Proje paydaşı
+:hasStakeholder rdf:type owl:ObjectProperty ;
+                rdfs:subPropertyOf owl:topObjectProperty ;
+                rdfs:domain upper:Project ;
+                rdfs:range upper:Person ;
+                rdfs:comment "Projeyle ilgisi olan kişi (sponsor, müşteri, ekip üyesi)." .
+
+###  escalatedTo — Eskalasyon zinciri
+:escalatedTo rdf:type owl:ObjectProperty ;
+             rdfs:subPropertyOf owl:topObjectProperty ;
+             rdfs:domain upper:Risk ;
+             rdfs:range upper:Person ;
+             rdfs:comment "Risk veya sorunun iletildiği üst makam." .
+
+###  mitigates — Risk önleme eylemi
+:mitigates rdf:type owl:ObjectProperty ;
+           rdfs:subPropertyOf owl:topObjectProperty ;
+           rdfs:domain :MitigationAction ;
+           rdfs:range upper:Risk ;
+           rdfs:comment "Bu eylemin azalttığı risk." .
+
+
+#################################################################
+#    Data properties
+#################################################################
+
+###  estimatedDuration — Tahmini süre (gün cinsinden)
+:estimatedDuration rdf:type owl:DatatypeProperty ;
+                   rdfs:subPropertyOf owl:topDataProperty ;
+                   rdfs:range xsd:decimal ;
+                   rdfs:comment "Görev veya sprint için tahmini süre (gün)." .
+
+###  actualDuration — Gerçekleşen süre (gün cinsinden)
+:actualDuration rdf:type owl:DatatypeProperty ;
+                rdfs:subPropertyOf owl:topDataProperty ;
+                rdfs:range xsd:decimal ;
+                rdfs:comment "Görev veya sprint için gerçekleşen süre (gün)." .
+
+###  budget — Proje bütçesi
+:budget rdf:type owl:DatatypeProperty ;
+        rdfs:subPropertyOf owl:topDataProperty ;
+        rdfs:domain upper:Project ;
+        rdfs:range xsd:decimal ;
+        rdfs:comment "Proje bütçesi (para birimi ayrı tutulur)." .
+
+###  probability — Risk gerçekleşme olasılığı (0.0 – 1.0)
+:probability rdf:type owl:DatatypeProperty ;
+             rdfs:subPropertyOf owl:topDataProperty ;
+             rdfs:domain upper:Risk ;
+             rdfs:range xsd:decimal ;
+             rdfs:comment "Risk gerçekleşme olasılığı: 0.0 (imkânsız) – 1.0 (kesin)." .
+
+###  impact — Risk etkisi (1–5 ölçeği)
+:impact rdf:type owl:DatatypeProperty ;
+        rdfs:subPropertyOf owl:topDataProperty ;
+        rdfs:domain upper:Risk ;
+        rdfs:range xsd:integer ;
+        rdfs:comment "Risk etkisi: 1 (çok düşük) – 5 (kritik)." .
+
+
+#################################################################
+#    Classes
+#################################################################
+
+###  ManagedProject — PM tarafından yönetilen proje
+:ManagedProject rdf:type owl:Class ;
+                rdfs:subClassOf upper:Project ;
+                rdfs:comment "Bir proje yöneticisinin sorumluluğundaki proje." .
+
+###  Milestone — Proje dönüm noktası
+:Milestone rdf:type owl:Class ;
+           rdfs:subClassOf upper:Task ;
+           rdfs:comment "Projedeki önemli teslim veya onay noktası." .
+
+###  ProjectPlan — Proje planlama belgesi
+:ProjectPlan rdf:type owl:Class ;
+             rdfs:subClassOf upper:Document ;
+             rdfs:comment "WBS, zaman çizelgesi ve kaynak planını içeren belge." .
+
+###  StatusReport — Durum raporu
+:StatusReport rdf:type owl:Class ;
+              rdfs:subClassOf upper:Document ;
+              rdfs:comment "Proje durumunu özetleyen periyodik rapor." .
+
+###  StakeholderMeeting — Paydaş toplantısı
+:StakeholderMeeting rdf:type owl:Class ;
+                    rdfs:subClassOf upper:Activity ;
+                    rdfs:comment "Proje paydaşlarıyla yapılan resmi toplantı." .
+
+###  RiskRegister — Risk kaydı belgesi
+:RiskRegister rdf:type owl:Class ;
+              rdfs:subClassOf upper:Document ;
+              rdfs:comment "Proje risklerinin listelendiği ve izlendiği kayıt belgesi." .
+
+###  MitigationAction — Risk azaltma eylemi
+:MitigationAction rdf:type owl:Class ;
+                  rdfs:subClassOf upper:Task ;
+                  rdfs:comment "Bir riski azaltmak için planlanan veya alınan eylem." .
+
+###  ChangeRequest — Değişiklik talebi
+:ChangeRequest rdf:type owl:Class ;
+               rdfs:subClassOf upper:WorkItem ;
+               rdfs:comment "Proje kapsamı, zaman veya bütçesinde değişiklik talebi." .
+
+
+#################################################################
+#    General axioms
+#################################################################
+
+[ rdf:type owl:AllDisjointClasses ;
+  owl:members ( :Milestone
+                :MitigationAction
+                :ChangeRequest
+              )
+] .
+
+###  CogniTwin PM Ontology v1.0 (2026-04)

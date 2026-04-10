@@ -11,8 +11,11 @@ Returns None silently when rdflib is unavailable or the .ttl files are missing.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # Module-level cache — loaded once per process, never shared across requests.
 _ONTOLOGY_GRAPH: Optional[object] = None
@@ -35,13 +38,12 @@ def _get_ontology_graph():
             p = onto_dir / fname
             if p.exists():
                 g.parse(str(p), format="turtle")
-                print(f"[ONTOLOGY] Loaded: {fname}")
                 loaded = True
             else:
-                print(f"[ONTOLOGY] Not found: {p}")
+                logger.debug("[ONTOLOGY] Not found: %s", p)
         _ONTOLOGY_GRAPH = g if loaded else None
     except Exception as exc:
-        print(f"[ONTOLOGY] Load failed: {exc}")
+        logger.warning("[ONTOLOGY] Load failed: %s", exc)
         _ONTOLOGY_GRAPH = None
     return _ONTOLOGY_GRAPH
 

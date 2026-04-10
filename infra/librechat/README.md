@@ -13,19 +13,17 @@ Do not commit real `.env` files, logs, uploads, databases, or LibreChat secrets.
 
 ## Team Setup
 
-1. Clone the official LibreChat repository into any local folder.
-2. Copy `infra/librechat/.env.example` to the LibreChat root as `.env`.
-3. Copy `infra/librechat/librechat.yaml` to the LibreChat root.
-4. On Windows, copy `infra/librechat/docker-compose.override.yml.example` to the LibreChat root as `docker-compose.override.yml`.
-5. Start the CogniTwin API locally on port `8000`.
-6. Start LibreChat with `docker compose up -d`.
-7. Open `http://localhost:3900`.
+1. In this folder, copy `.env.example` to `.env`.
+2. (Windows optional) copy `docker-compose.override.yml.example` to `docker-compose.override.yml`.
+3. Start the CogniTwin API locally on port `8011`.
+4. Start LibreChat with `docker compose up -d`.
+5. Open `http://localhost:3900`.
 
 ## CogniTwin API
 
 LibreChat is configured to call:
 
-`http://host.docker.internal:8000/v1/`
+`http://host.docker.internal:8011/v1/`
 
 If the CogniTwin API uses another port, update `baseURL` in `librechat.yaml`.
 

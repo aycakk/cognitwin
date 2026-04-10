@@ -32,4 +32,7 @@ ONTOLOGY_AGENT_ROLES: dict[str, set[str]] = {
     "DeveloperAgent":        {"read_own_courses", "read_exam_dates",
                               "read_assignment_deadlines", "read_all_student_grades",
                               "manage_courses", "manage_department"},
+    "ScrumMasterAgent":      {"manage_sprint", "read_team_progress",
+                              "assign_tasks", "resolve_blockers",
+                              "facilitate_ceremonies"},
 }

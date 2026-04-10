@@ -1,0 +1,53 @@
+{
+  "sprint": {
+    "id": "sprint-1",
+    "goal": "Sprint hedefi henüz tanımlanmamış.",
+    "start": "2026-04-09",
+    "end": "2026-04-23",
+    "velocity": 0
+  },
+  "tasks": [
+    {
+      "id": "T-001",
+      "title": "Scrum Master Agent entegrasyonunu tamamla",
+      "type": "story",
+      "status": "in_progress",
+      "assignee": "developer-default",
+      "priority": "high",
+      "story_points": 5,
+      "blocker": null,
+      "created_at": "2026-04-09T00:00:00",
+      "assigned_at": "2026-04-09T00:00:00"
+    },
+    {
+      "id": "T-002",
+      "title": "agile.ttl ontoloji doğrulaması",
+      "type": "story",
+      "status": "in_progress",
+      "assignee": "developer-default",
+      "priority": "medium",
+      "story_points": 3,
+      "blocker": null,
+      "created_at": "2026-04-09T00:00:00",
+      "assigned_at": "2026-04-09T23:39:39"
+    },
+    {
+      "id": "T-003",
+      "title": "Sprint durum raporlama endpoint'i ekle",
+      "type": "story",
+      "status": "todo",
+      "assignee": null,
+      "priority": "medium",
+      "story_points": 2,
+      "blocker": null,
+      "created_at": "2026-04-09T00:00:00"
+    }
+  ],
+  "team": [
+    {
+      "id": "developer-default",
+      "role": "Developer",
+      "capacity": 8
+    }
+  ]
+}

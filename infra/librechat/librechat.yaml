@@ -4,7 +4,7 @@ endpoints:
   custom:
     - name: "CogniTwin"
       apiKey: "cognitwin"
-      baseURL: "http://host.docker.internal:8000/v1/"
+      baseURL: "http://host.docker.internal:8011/v1/"
       models:
         default:
           - "cognitwin-student-llm"
@@ -13,9 +13,18 @@ endpoints:
 
     - name: "CogniTwin Developer"
       apiKey: "cognitwin"
-      baseURL: "http://host.docker.internal:8000/v1/"
+      baseURL: "http://host.docker.internal:8011/v1/"
       models:
         default:
           - "cognitwin-developer"
         fetch: false
       modelDisplayLabel: "CogniTwin Developer"
+
+    - name: "CogniTwin Scrum"
+      apiKey: "cognitwin"
+      baseURL: "http://host.docker.internal:8011/v1/"
+      models:
+        default:
+          - "cognitwin-scrum"
+        fetch: false
+      modelDisplayLabel: "CogniTwin Scrum Master"

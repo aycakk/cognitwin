@@ -1,8 +1,11 @@
+import logging
 import os
 import json
 import uuid
 import chromadb
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 # Chroma telemetry kapat (Terminal kirliliğini engeller)
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
@@ -34,7 +37,6 @@ class ChromaManager:
         # Kalıcı istemciyi başlat
         self.client = chromadb.PersistentClient(path=self.db_path)
         self.collection = self.client.get_or_create_collection(name="academic_memory")
-        print(f"[CHROMA] DB connected: {self.db_path}")
 
     def add_academic_info(self, text, metadata=None, doc_id=None):
         """Akademik bilgiyi temizleyerek hafızaya kaydeder."""
@@ -54,7 +56,6 @@ class ChromaManager:
             metadatas=[safe_metadata],
             ids=[doc_id]
         )
-        print(f"[CHROMA] Saved: {doc_id}")
 
     def query_memory(self, question, n_results=10):
         """Soruyla ilgili en yakın kayıtları döndürür."""
@@ -65,7 +66,7 @@ class ChromaManager:
             )
             return results.get("documents", [[]])[0] or []
         except Exception as e:
-            print(f"[CHROMA] Query error: {e}")
+            logger.warning("[CHROMA] Query error: %s", e)
             return []
 
     def check_consistency(self, question, n_results=5):

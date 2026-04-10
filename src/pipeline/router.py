@@ -15,10 +15,14 @@ def resolve_mode(model: str) -> tuple[str, str]:
     """
     Map the LibreChat model name to (mode, strategy).
 
-    mode     : 'student' | 'developer'
-    strategy : 'auto' (default for developer) | 'llm' (student always LLM)
+    mode     : 'student' | 'developer' | 'scrum_master'
+    strategy : 'auto' (developer) | 'llm' (student) | 'rule' (scrum_master)
+
+    Routing order matters — check more-specific prefixes first.
     """
     model_lower = (model or "").lower()
     if "developer" in model_lower:
         return "developer", "auto"
+    if "scrum" in model_lower:
+        return "scrum_master", "rule"
     return "student", "llm"

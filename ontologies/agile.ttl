@@ -1,0 +1,393 @@
+@prefix agile: <http://cognitwin.org/agile#> .
+@prefix upper: <http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/> .
+@prefix dev:   <http://cognitwin.org/developer#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@base <http://cognitwin.org/agile#> .
+
+<http://cognitwin.org/agile> rdf:type owl:Ontology ;
+    owl:imports <http://cognitwin.org/upper> ;
+    owl:imports <http://cognitwin.org/developer> ;
+    rdfs:comment "CogniTwin Agile/Scrum Domain Ontology — Scrum Master koordinasyonu ve sprint yönetimi." .
+
+
+#################################################################
+#    Object Properties
+#################################################################
+
+###  assignsTaskTo — ScrumMaster bir WorkItem'ı TeamMember'a atar
+agile:assignsTaskTo rdf:type owl:ObjectProperty ;
+                    rdfs:subPropertyOf owl:topObjectProperty ;
+                    rdfs:domain agile:ScrumMaster ;
+                    rdfs:range agile:TeamMember ;
+                    rdfs:comment "Scrum Master bir iş kalemini takım üyesine atar." .
+
+###  monitorsTask — ScrumMaster bir WorkItem'ın durumunu izler
+agile:monitorsTask rdf:type owl:ObjectProperty ;
+                   rdfs:subPropertyOf owl:topObjectProperty ;
+                   rdfs:domain agile:ScrumMaster ;
+                   rdfs:range upper:WorkItem ;
+                   rdfs:comment "Scrum Master bir görevin durumunu izler." .
+
+###  reportsProgressTo — TeamMember sprint ilerlemesini ScrumMaster'a raporlar
+agile:reportsProgressTo rdf:type owl:ObjectProperty ;
+                        rdfs:subPropertyOf owl:topObjectProperty ;
+                        rdfs:domain agile:TeamMember ;
+                        rdfs:range agile:ScrumMaster ;
+                        rdfs:comment "Takım üyesi sprint ilerlemesini Scrum Master'a raporlar." .
+
+###  coordinatesWith — Roller arası koordinasyon (simetrik)
+agile:coordinatesWith rdf:type owl:ObjectProperty ;
+                      rdf:type owl:SymmetricProperty ;
+                      rdfs:subPropertyOf owl:topObjectProperty ;
+                      rdfs:comment "İki rol arasındaki koordinasyon ilişkisi (simetrik)." .
+
+###  belongsToSprint — BacklogItem bir Sprint'e aittir
+agile:belongsToSprint rdf:type owl:ObjectProperty ;
+                      rdfs:subPropertyOf owl:topObjectProperty ;
+                      rdfs:domain agile:BacklogItem ;
+                      rdfs:range agile:Sprint ;
+                      rdfs:comment "İş kalemi bir sprint'e aittir." .
+
+###  hasPriority — BacklogItem'ın öncelik seviyesi
+agile:hasPriority rdf:type owl:ObjectProperty ;
+                  rdfs:subPropertyOf owl:topObjectProperty ;
+                  rdfs:domain agile:BacklogItem ;
+                  rdfs:range agile:Priority ;
+                  rdfs:comment "İş kaleminin öncelik seviyesi." .
+
+###  hasStatus — BacklogItem veya Assignment'ın mevcut durumu
+agile:hasStatus rdf:type owl:ObjectProperty ;
+                rdfs:subPropertyOf owl:topObjectProperty ;
+                rdfs:domain agile:BacklogItem ;
+                rdfs:range agile:Status ;
+                rdfs:comment "İş kaleminin veya atamanın mevcut durumu." .
+
+###  hasBlocker — BacklogItem bir Blocker tarafından engellendi
+agile:hasBlocker rdf:type owl:ObjectProperty ;
+                 rdfs:subPropertyOf owl:topObjectProperty ;
+                 rdfs:domain agile:BacklogItem ;
+                 rdfs:range agile:Blocker ;
+                 rdfs:comment "İş kaleminin önünü kapatan engel." .
+
+###  resolvesBlockerFor — ScrumMaster bir TeamMember'ın engelini çözer
+agile:resolvesBlockerFor rdf:type owl:ObjectProperty ;
+                         rdfs:subPropertyOf owl:topObjectProperty ;
+                         rdfs:domain agile:ScrumMaster ;
+                         rdfs:range agile:TeamMember ;
+                         rdfs:comment "Scrum Master bir takım üyesinin engelini çözer." .
+
+###  canDelegateTo — ScrumMaster Developer'a iş devredebilir
+agile:canDelegateTo rdf:type owl:ObjectProperty ;
+                    rdfs:subPropertyOf owl:topObjectProperty ;
+                    rdfs:domain agile:ScrumMaster ;
+                    rdfs:range agile:Developer ;
+                    rdfs:comment "Scrum Master bir görevi geliştiriciye devredebilir." .
+
+###  collaboratesWith — TeamMember'lar BacklogItem üzerinde iş birliği yapar (simetrik)
+agile:collaboratesWith rdf:type owl:ObjectProperty ;
+                       rdf:type owl:SymmetricProperty ;
+                       rdfs:subPropertyOf owl:topObjectProperty ;
+                       rdfs:domain agile:TeamMember ;
+                       rdfs:range agile:TeamMember ;
+                       rdfs:comment "İki takım üyesi bir görev üzerinde iş birliği yapar (simetrik)." .
+
+###  usesLocale — Agent bir LocaleContext kullanır
+agile:usesLocale rdf:type owl:ObjectProperty ;
+                 rdfs:subPropertyOf owl:topObjectProperty ;
+                 rdfs:domain upper:Agent ;
+                 rdfs:range agile:LocaleContext ;
+                 rdfs:comment "Ajanın dil ve bölge bağlamı." .
+
+###  ownsBacklogItem — ProductOwner bir BacklogItem'ın sorumlusudur
+agile:ownsBacklogItem rdf:type owl:ObjectProperty ;
+                      rdfs:subPropertyOf owl:topObjectProperty ;
+                      rdfs:domain agile:ProductOwner ;
+                      rdfs:range agile:BacklogItem ;
+                      rdfs:comment "Ürün sahibi backlog kaleminin sorumlusudur." .
+
+###  facilitatesCeremony — ScrumMaster bir Ceremony'yi yönetir
+agile:facilitatesCeremony rdf:type owl:ObjectProperty ;
+                          rdfs:subPropertyOf owl:topObjectProperty ;
+                          rdfs:domain agile:ScrumMaster ;
+                          rdfs:range agile:Ceremony ;
+                          rdfs:comment "Scrum Master bir Scrum seremonisini yönetir." .
+
+###  hasMember — AgileTeam'in üyeleri
+agile:hasMember rdf:type owl:ObjectProperty ;
+                rdfs:subPropertyOf owl:topObjectProperty ;
+                rdfs:domain agile:AgileTeam ;
+                rdfs:range agile:TeamMember ;
+                rdfs:comment "Çevik ekibin üyeleri." .
+
+###  partOfTeam — TeamMember'ın ait olduğu AgileTeam (hasMember'ın tersi)
+agile:partOfTeam rdf:type owl:ObjectProperty ;
+                 owl:inverseOf agile:hasMember ;
+                 rdfs:domain agile:TeamMember ;
+                 rdfs:range agile:AgileTeam ;
+                 rdfs:comment "Takım üyesinin ait olduğu çevik ekip." .
+
+###  assignedTo — BacklogItem'ın atandığı TeamMember
+###  (upper:assignedTo'nun agile uzantısı; domain BacklogItem olarak daraltıldı)
+agile:assignedTo rdf:type owl:ObjectProperty ;
+                 rdfs:subPropertyOf upper:assignedTo ;
+                 rdfs:domain agile:BacklogItem ;
+                 rdfs:range agile:TeamMember ;
+                 rdfs:comment "İş kaleminin atandığı takım üyesi (upper:assignedTo'yu kısıtlar)." .
+
+
+#################################################################
+#    Data Properties
+#################################################################
+
+###  sprintNumber — Sprint'in sıra numarası
+agile:sprintNumber rdf:type owl:DatatypeProperty ;
+                   rdfs:subPropertyOf owl:topDataProperty ;
+                   rdfs:domain agile:Sprint ;
+                   rdfs:range xsd:integer ;
+                   rdfs:comment "Sprint'in sıra numarası." .
+
+###  sprintGoal — Sprint hedefi açıklaması
+agile:sprintGoal rdf:type owl:DatatypeProperty ;
+                 rdfs:subPropertyOf owl:topDataProperty ;
+                 rdfs:domain agile:Sprint ;
+                 rdfs:range xsd:string ;
+                 rdfs:comment "Sprint'in temel hedefini açıklayan metin." .
+
+###  storyPoints — BacklogItem'ın tahmin edilen efor puanı
+agile:storyPoints rdf:type owl:DatatypeProperty ;
+                  rdfs:subPropertyOf owl:topDataProperty ;
+                  rdfs:domain agile:BacklogItem ;
+                  rdfs:range xsd:integer ;
+                  rdfs:comment "Kullanıcı hikayesinin tahmin edilen efor puanı." .
+
+###  priorityLevel — Priority'nin sayısal seviyesi (1=Kritik … 4=Düşük)
+agile:priorityLevel rdf:type owl:DatatypeProperty ;
+                    rdfs:subPropertyOf owl:topDataProperty ;
+                    rdfs:domain agile:Priority ;
+                    rdfs:range xsd:integer ;
+                    rdfs:comment "Öncelik seviyesi: 1=Kritik, 2=Yüksek, 3=Orta, 4=Düşük." .
+
+###  statusLabel — Status'un okunabilir etiketi
+agile:statusLabel rdf:type owl:DatatypeProperty ;
+                  rdfs:subPropertyOf owl:topDataProperty ;
+                  rdfs:domain agile:Status ;
+                  rdfs:range xsd:string ;
+                  rdfs:comment "Durum etiketi: todo | in_progress | blocked | done." .
+
+###  blockerDescription — Engelin kısa açıklaması
+agile:blockerDescription rdf:type owl:DatatypeProperty ;
+                         rdfs:subPropertyOf owl:topDataProperty ;
+                         rdfs:domain agile:Blocker ;
+                         rdfs:range xsd:string ;
+                         rdfs:comment "Engelin kısa açıklaması." .
+
+###  localeCode — BCP-47 dil/bölge kodu
+agile:localeCode rdf:type owl:DatatypeProperty ;
+                 rdfs:subPropertyOf owl:topDataProperty ;
+                 rdfs:domain agile:LocaleContext ;
+                 rdfs:range xsd:string ;
+                 rdfs:comment "BCP-47 dil/bölge kodu (örn. 'tr', 'en')." .
+
+###  teamCapacity — Takım üyesinin sprint kapasitesi (story point)
+agile:teamCapacity rdf:type owl:DatatypeProperty ;
+                   rdfs:subPropertyOf owl:topDataProperty ;
+                   rdfs:domain agile:TeamMember ;
+                   rdfs:range xsd:decimal ;
+                   rdfs:comment "Takım üyesinin mevcut sprint kapasitesi (story point veya saat)." .
+
+###  ceremonyType — Scrum seremonisinin tipi
+agile:ceremonyType rdf:type owl:DatatypeProperty ;
+                   rdfs:subPropertyOf owl:topDataProperty ;
+                   rdfs:domain agile:Ceremony ;
+                   rdfs:range xsd:string ;
+                   rdfs:comment "Seremoninin tipi: standup | planning | review | retrospective." .
+
+
+#################################################################
+#    Classes
+#################################################################
+
+###  AgileTeam — Çevik geliştirme ekibi
+agile:AgileTeam rdf:type owl:Class ;
+                rdfs:comment "Bir veya daha fazla sprint üzerinde birlikte çalışan çevik geliştirme ekibi." .
+
+###  TeamMember — Ekip üyesi (soyut rol sınıfı)
+agile:TeamMember rdf:type owl:Class ;
+                 rdfs:comment "AgileTeam içindeki herhangi bir rol sahibi kişi." .
+
+###  Role — Takım içindeki rol tanımı
+agile:Role rdf:type owl:Class ;
+           rdfs:comment "Çevik ekip içindeki rol (ScrumMaster, Developer, ProductOwner vb.)." .
+
+###  ScrumMaster — Sprint akışını kolaylaştıran Scrum Master rolü
+agile:ScrumMaster rdf:type owl:Class ;
+                  rdfs:subClassOf agile:TeamMember ;
+                  rdfs:comment "Sprint akışını kolaylaştıran, engelleri çözen ve seremonileri yöneten Scrum Master." .
+
+###  Developer — Agile bağlamında geliştirici rolü
+###  (developer_ontology'deki DeveloperAgent/Person kavramıyla koordineli)
+agile:Developer rdf:type owl:Class ;
+                rdfs:subClassOf agile:TeamMember ;
+                rdfs:comment "Yazılım geliştirme görevlerini üstlenen takım üyesi. developer_ontology DeveloperAgent ile koordineli." .
+
+###  ProductOwner — Backlog önceliklerini belirleyen ürün sahibi
+agile:ProductOwner rdf:type owl:Class ;
+                   rdfs:subClassOf agile:TeamMember ;
+                   rdfs:comment "Backlog önceliklerini belirleyen ve sprint hedefini tanımlayan ürün sahibi." .
+
+###  Sprint — Zaman sınırlı iterasyon
+###  upper:Task'ın alt sınıfı; dev:partOfSprint mevcut upper:Sprint ile uyumlu
+agile:Sprint rdf:type owl:Class ;
+             rdfs:subClassOf upper:Task ;
+             rdfs:comment "Belirli bir hedefe yönelik zaman kutulanmış çalışma döngüsü (genellikle 2 hafta)." .
+
+###  BacklogItem — Genel backlog kalemi (soyut üst sınıf)
+agile:BacklogItem rdf:type owl:Class ;
+                  rdfs:subClassOf upper:WorkItem ;
+                  rdfs:comment "Ürün veya sprint backlog'undaki herhangi bir iş kalemi." .
+
+###  UserStory — Kullanıcı perspektifinden iş gereksinimi
+###  dev:UserStory ile eşdeğer (owl:equivalentClass)
+agile:UserStory rdf:type owl:Class ;
+                rdfs:subClassOf agile:BacklogItem ;
+                owl:equivalentClass dev:UserStory ;
+                rdfs:comment "Kullanıcı perspektifinden yazılan işlevsel gereksinim. dev:UserStory ile eşdeğer." .
+
+###  Task — Bir UserStory'yi gerçekleştiren atomik teknik görev
+agile:Task rdf:type owl:Class ;
+           rdfs:subClassOf agile:BacklogItem ;
+           rdfs:comment "Bir kullanıcı hikayesini uygulamak için gereken atomik teknik görev." .
+
+###  Bug — Hata iş kalemi (developer_ontology ile bağlantılı)
+###  dev:Bug ile eşdeğer (owl:equivalentClass)
+agile:Bug rdf:type owl:Class ;
+          rdfs:subClassOf agile:BacklogItem ;
+          owl:equivalentClass dev:Bug ;
+          rdfs:comment "Düzeltilmesi gereken yazılım hatası. dev:Bug ile eşdeğer." .
+
+###  Priority — Öncelik seviyesini temsil eden bireysel sınıfı
+agile:Priority rdf:type owl:Class ;
+               rdfs:comment "Bir BacklogItem'ın öncelik seviyesini temsil eden birey." .
+
+###  Status — İş kalemi durumu
+agile:Status rdf:type owl:Class ;
+             rdfs:comment "İş kaleminin anlık durumu: todo, in_progress, blocked, done." .
+
+###  Blocker — Sprint ilerlemesini engelleyen faktör
+agile:Blocker rdf:type owl:Class ;
+              rdfs:comment "Bir iş kaleminin ilerlemesini durduran engel veya çözülmemiş bağımlılık." .
+
+###  Assignment — Görev atama kaydı
+agile:Assignment rdf:type owl:Class ;
+                 rdfs:comment "Bir iş kaleminin bir takım üyesine atandığını belgeleyen kayıt." .
+
+###  Ceremony — Scrum seramonisi
+agile:Ceremony rdf:type owl:Class ;
+               rdfs:subClassOf upper:Activity ;
+               rdfs:comment "Scrum çerçevesinde tanımlı toplantı türü (standup, planning, review, retro)." .
+
+###  LocaleContext — Dil ve bölge bağlamı
+agile:LocaleContext rdf:type owl:Class ;
+                    rdfs:comment "Bir ajan veya takımın dil ve bölge tercihini modelleyen bağlam." .
+
+
+#################################################################
+#    Individuals — Status değerleri
+#################################################################
+
+agile:StatusTodo rdf:type agile:Status ;
+                 agile:statusLabel "todo" ;
+                 rdfs:comment "Henüz başlanmamış görev." .
+
+agile:StatusInProgress rdf:type agile:Status ;
+                       agile:statusLabel "in_progress" ;
+                       rdfs:comment "Üzerinde aktif olarak çalışılan görev." .
+
+agile:StatusBlocked rdf:type agile:Status ;
+                    agile:statusLabel "blocked" ;
+                    rdfs:comment "Engel nedeniyle ilerleyemeyen görev." .
+
+agile:StatusDone rdf:type agile:Status ;
+                 agile:statusLabel "done" ;
+                 rdfs:comment "Tamamlanmış görev." .
+
+
+#################################################################
+#    Individuals — Priority değerleri
+#################################################################
+
+agile:PriorityCritical rdf:type agile:Priority ;
+                       agile:priorityLevel 1 ;
+                       rdfs:comment "Kritik öncelik — hemen müdahale gerektirir." .
+
+agile:PriorityHigh rdf:type agile:Priority ;
+                   agile:priorityLevel 2 ;
+                   rdfs:comment "Yüksek öncelik — bu sprint içinde tamamlanmalı." .
+
+agile:PriorityMedium rdf:type agile:Priority ;
+                     agile:priorityLevel 3 ;
+                     rdfs:comment "Orta öncelik — kapasite varsa bu sprint içinde." .
+
+agile:PriorityLow rdf:type agile:Priority ;
+                  agile:priorityLevel 4 ;
+                  rdfs:comment "Düşük öncelik — sonraki sprint'e ertelenebilir." .
+
+
+#################################################################
+#    Individuals — Ceremony tipleri
+#################################################################
+
+agile:CeremonyStandup rdf:type agile:Ceremony ;
+                      agile:ceremonyType "standup" ;
+                      rdfs:comment "Günlük ekip senkronizasyon toplantısı (max 15 dk)." .
+
+agile:CeremonyPlanning rdf:type agile:Ceremony ;
+                       agile:ceremonyType "planning" ;
+                       rdfs:comment "Sprint başında yapılan planlama ve görev seçim toplantısı." .
+
+agile:CeremonyReview rdf:type agile:Ceremony ;
+                     agile:ceremonyType "review" ;
+                     rdfs:comment "Sprint sonunda tamamlanan işin paydaşlara gösterildiği toplantı." .
+
+agile:CeremonyRetrospective rdf:type agile:Ceremony ;
+                            agile:ceremonyType "retrospective" ;
+                            rdfs:comment "Sprint sonunda ekibin süreci iyileştirdiği toplantı." .
+
+
+#################################################################
+#    Individuals — LocaleContext
+#################################################################
+
+agile:LocaleTurkish rdf:type agile:LocaleContext ;
+                    agile:localeCode "tr" ;
+                    rdfs:comment "Türkçe dil bağlamı." .
+
+agile:LocaleEnglish rdf:type agile:LocaleContext ;
+                    agile:localeCode "en" ;
+                    rdfs:comment "İngilizce dil bağlamı." .
+
+
+#################################################################
+#    General axioms — disjointness
+#################################################################
+
+###  ScrumMaster, Developer, ProductOwner birbirinden ayrık roller
+[ rdf:type owl:AllDisjointClasses ;
+  owl:members ( agile:ScrumMaster
+                agile:Developer
+                agile:ProductOwner
+              )
+] .
+
+###  UserStory, Task, Bug birbirinden ayrık iş kalemi tipleri
+[ rdf:type owl:AllDisjointClasses ;
+  owl:members ( agile:UserStory
+                agile:Task
+                agile:Bug
+              )
+] .
+
+###  CogniTwin Agile Domain Ontology v1.0 (2026-04)

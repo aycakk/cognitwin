@@ -34,6 +34,7 @@ from src.pipeline.shared import (           # noqa: F401 (several re-exported fo
 )
 from src.pipeline.student_runner import run_pipeline       # noqa: F401 (re-exported for main_cli)
 from src.pipeline.developer_runner import _process_developer_message
+from src.pipeline.scrum_master_runner import run_scrum_master_pipeline
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -97,6 +98,8 @@ def process_user_message(
                 strategy=strategy,
                 messages=messages,
             )
+        elif mode == "scrum_master":
+            answer = run_scrum_master_pipeline(masked)
         else:
             answer = run_pipeline(masked, agent_role=agent_role)
 
