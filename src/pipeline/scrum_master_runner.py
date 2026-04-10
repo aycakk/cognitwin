@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 
-from src.agents.scrum_master_agent import ScrumMasterAgent
+from src.pipeline.shared import SCRUM_AGENT as _agent
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Gate patterns (local copies — no import from shared to keep the runner
@@ -34,12 +34,6 @@ _HALLUCINATION_RE = re.compile(
     r"sanırım|galiba|muhtemelen|tahmin\s+etmek|belki|herhalde",
     re.I,
 )
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  Module-level agent singleton
-# ─────────────────────────────────────────────────────────────────────────────
-
-_agent = ScrumMasterAgent()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ import re
 
 from ollama import chat
 
+from src.agents.scrum_master_agent import ScrumMasterAgent
 from src.database.chroma_manager import db_manager
 from src.ontology.loader import _get_ontology_graph, _sparql
 
@@ -110,6 +111,8 @@ class VectorMemory:
 
 
 VECTOR_MEM = VectorMemory()
+
+SCRUM_AGENT = ScrumMasterAgent()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

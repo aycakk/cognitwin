@@ -21,6 +21,7 @@ from src.agents.developer_orchestrator import DeveloperOrchestrator
 from src.gates.evaluator import evaluate_all_gates
 from src.pipeline.redo import run_redo_loop
 from src.pipeline.shared import (
+    SCRUM_AGENT,
     VECTOR_MEM,
     VECTOR_TOP_K,
     CHROMA,
@@ -99,6 +100,54 @@ def _build_codebase_context(query: str) -> str:
             parts.append("... [truncated]")
     parts.append("\n=== END CODEBASE CONTEXT ===")
     return "\n".join(parts)
+
+
+def _build_sprint_context() -> str:
+    """
+    Build a labeled sprint context block from the shared SCRUM_AGENT singleton.
+
+    Reads sprint goal, active assignments, and blocked tasks from the current
+    sprint_state.json.  Returns a formatted string using the same labeled-block
+    convention as the rest of the codebase (=== VECTOR MEMORY ===, etc.).
+
+    Returns an empty string only when the sprint state is genuinely absent
+    (ScrumMasterAgent._load_state falls back to _DEFAULT_SPRINT_STATE, so in
+    practice it always returns at least the default goal and empty task lists).
+    """
+    try:
+        sprint_goal  = SCRUM_AGENT.get_sprint_goal()
+        assignments  = SCRUM_AGENT.get_current_assignments()
+        blocked      = SCRUM_AGENT.get_blocked_tasks()
+    except Exception:
+        return ""
+
+    lines = ["=== SPRINT CONTEXT ==="]
+    lines.append(f"Sprint Goal: {sprint_goal}")
+
+    lines.append("Active Assignments:")
+    if assignments:
+        for t in assignments:
+            lines.append(
+                f"  [{t.get('id', '?')}] {t.get('title', '-')}"
+                f" \u2192 {t.get('assignee', 'unassigned')}"
+                f" ({t.get('status', '?')})"
+            )
+    else:
+        lines.append("  (none)")
+
+    lines.append("Blocked Tasks:")
+    if blocked:
+        for t in blocked:
+            blocker_note = t.get("blocker") or "no description"
+            lines.append(
+                f"  [{t.get('id', '?')}] {t.get('title', '-')}"
+                f" | Blocker: {blocker_note}"
+            )
+    else:
+        lines.append("  (none)")
+
+    lines.append("=== END SPRINT CONTEXT ===")
+    return "\n".join(lines)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -242,6 +291,17 @@ def _process_developer_message(
     # questions rather than falling back to generic training knowledge.
     codebase_context = _build_codebase_context(user_text)
 
+    # Stage 2a — Sprint context injection (Scrum → Developer read path)
+    # Read the current sprint state through the shared SCRUM_AGENT singleton and
+    # format it as a labeled context block.  Combined with codebase_context so
+    # the orchestrator LLM is aware of active tasks, the sprint goal, and any
+    # blockers when generating its response.
+    # NOTE: codebase_context is kept as a separate variable — Stage 2b below
+    # gates JSON debug validation on it; that gate must not fire for sprint-only
+    # queries where codebase_context is empty.
+    sprint_context = _build_sprint_context()
+    combined_context = "\n\n".join(filter(None, [codebase_context, sprint_context]))
+
     orchestrator = DeveloperOrchestrator(
         memory_backend=CHROMA,
         chat_fn=_safe_chat,
@@ -251,11 +311,25 @@ def _process_developer_message(
         request=user_text,
         developer_id=developer_id,
         strategy=strategy,
-        memory_context=codebase_context,   # non-empty → used directly in generate()
+        memory_context=combined_context,   # non-empty → used directly in generate()
     )
     draft = _sanitize_output(str(result.get("solution", "")))
     if not draft:
         draft = "Bunu hafızamda bulamadım."
+
+    # Developer → Scrum write-back
+    # If the developer's query signals a task status change (update_task intent),
+    # update sprint_state.json as a side effect before continuing.
+    # Only "update_task" triggers a write-back; other intents (sprint_status,
+    # standup, review, …) belong to the Scrum path and must not cause writes here.
+    # The return value of handle_query is discarded — the developer response is
+    # always the primary output.  Wrapped in try/except so a state I/O error
+    # never surfaces to the end user.
+    if SCRUM_AGENT._detect_intent(user_text) == "update_task":
+        try:
+            SCRUM_AGENT.handle_query(user_text)
+        except Exception:
+            pass
 
     # Stage 2b — Structured debug validation
     # If the orchestrator returned a JSON debug object, validate the cited
