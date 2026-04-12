@@ -46,6 +46,14 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"güncelle|update\s+task|durum\s+değiştir|status\s+set|tamamlandı\s+olarak", re.I)),
     ("set_goal",      re.compile(
         r"sprint\s+hedef|hedef\s+belirle|goal\s+set|set\s+goal", re.I)),
+    # Open-ended reasoning questions — must stay LAST so specific patterns win first.
+    ("sprint_analysis", re.compile(
+        r"riskli|risk\s+ne|en\s+büyük|kritik|tehlike|sorun\s+ne"
+        r"|öneri|tavsiye|ne\s+yapmal|hangi\s+görev"
+        r"|odaklan|sağlık\s+dur|analiz|değerlendir"
+        r"|ne\s+düşün|önerir\s+misin|en\s+önemli",
+        re.I,
+    )),
 ]
 
 
@@ -93,9 +101,10 @@ class ScrumMasterAgent:
                 "retrospective": lambda: self._handle_retrospective(state),
                 "review":        lambda: self._handle_review(state),
                 "delegate":      lambda: self._handle_delegate(query, state),
-                "add_task":      lambda: self._handle_add_task(query, state),
-                "update_task":   lambda: self._handle_update_task(query, state),
-                "set_goal":      lambda: self._handle_set_goal(query, state),
+                "add_task":        lambda: self._handle_add_task(query, state),
+                "update_task":     lambda: self._handle_update_task(query, state),
+                "set_goal":        lambda: self._handle_set_goal(query, state),
+                "sprint_analysis": lambda: self._handle_sprint_analysis(query, state),
             }
             result = handlers.get(intent, lambda: self._handle_general(state))()
 
@@ -528,6 +537,165 @@ class ScrumMasterAgent:
             f"  Sprint : {state['sprint']['id']}\n"
             f"  Hedef  : {goal}"
         )
+
+    def _handle_sprint_analysis(self, query: str, state: dict) -> str:
+        """
+        Deterministic sprint risk and health analysis for open-ended questions.
+
+        Derives risk signals from sprint state using Scrum-framework heuristics.
+        No LLM is called.  All output is grounded in sprint_state.json fields.
+
+        Risk signals evaluated (severity 1–3):
+          3 — Blocked task (especially high-priority)
+          3 — High-priority task unassigned and not started
+          2 — High-priority task still in todo (assigned but not started)
+          2 — WIP limit exceeded relative to team size
+          2 — Bus factor: all active tasks on a single developer
+          2 — Delivery pressure: low completion % with open blockers
+          1 — Unassigned tasks remaining
+        """
+        sprint = state.get("sprint", {})
+        tasks  = state.get("tasks", [])
+        team   = state.get("team", [])
+
+        if not tasks:
+            return (
+                f"Sprint '{sprint.get('id', '?')}' henüz görev içermiyor. "
+                "Risk analizi yapılamaz.\n"
+                "Görev eklemek için: 'görev ekle: <başlık>'"
+            )
+
+        risks: list[tuple[int, str]] = []  # (severity, description)
+
+        # ── Signal 1: Blocked tasks ───────────────────────────────────────────
+        blocked = [t for t in tasks if t.get("status") == "blocked"]
+        for t in blocked:
+            priority = t.get("priority", "medium")
+            sev      = 3 if priority == "high" else 2
+            risks.append((sev, (
+                f"[BLOCKER] [{t['id']}] {t.get('title', '-')} "
+                f"— öncelik: {priority}, "
+                f"engel: {t.get('blocker') or 'açıklama girilmemiş'}"
+            )))
+
+        # ── Signal 2: High-priority tasks not yet started ────────────────────
+        for t in tasks:
+            if t.get("priority") == "high" and t.get("status") == "todo":
+                if not t.get("assignee"):
+                    risks.append((3, (
+                        f"[ATANMAMIş + YÜKSEK ÖNCELİK] [{t['id']}] {t.get('title', '-')} "
+                        "— başlamadı ve atanmamış"
+                    )))
+                else:
+                    risks.append((2, (
+                        f"[BAŞLANMADI] [{t['id']}] {t.get('title', '-')} "
+                        "— yüksek öncelikli, henüz todo"
+                    )))
+
+        # ── Signal 3: WIP limit ───────────────────────────────────────────────
+        in_progress = [t for t in tasks if t.get("status") == "in_progress"]
+        team_size   = max(len(team), 1)
+        wip_limit   = team_size * 2
+        if len(in_progress) > wip_limit:
+            risks.append((2, (
+                f"[WIP LIMIT AŞILDI] Devam eden görev: {len(in_progress)} "
+                f"(takım büyüklüğü {team_size} için önerilen üst sınır: {wip_limit})"
+            )))
+
+        # ── Signal 4: Bus factor ──────────────────────────────────────────────
+        active_assignees = {
+            t.get("assignee")
+            for t in tasks
+            if t.get("assignee") and t.get("status") != "done"
+        }
+        if len(team) > 1 and len(active_assignees) <= 1:
+            sole = next(iter(active_assignees), "bilinmiyor")
+            risks.append((2, (
+                f"[BUS FACTOR] Tüm aktif görevler tek geliştiriciye atanmış ({sole})"
+            )))
+
+        # ── Signal 5: Unassigned tasks ────────────────────────────────────────
+        unassigned = [
+            t for t in tasks
+            if not t.get("assignee") and t.get("status") == "todo"
+        ]
+        if unassigned:
+            risks.append((1, (
+                f"[ATANMAMIş] {len(unassigned)} görev sahipsiz: "
+                + ", ".join(t["id"] for t in unassigned)
+            )))
+
+        # ── Signal 6: Delivery pressure ───────────────────────────────────────
+        total_pts = sum(int(t.get("story_points", 0) or 0) for t in tasks)
+        done_pts  = sum(
+            int(t.get("story_points", 0) or 0)
+            for t in tasks if t.get("status") == "done"
+        )
+        completion_pct = (done_pts / total_pts * 100) if total_pts else 0.0
+        if completion_pct < 30 and blocked:
+            risks.append((2, (
+                f"[TESLİMAT BASKISI] %{completion_pct:.0f} tamamlandı "
+                f"ve {len(blocked)} engel açık — sprint hedefi risk altında"
+            )))
+
+        # Sort highest severity first
+        risks.sort(key=lambda r: r[0], reverse=True)
+
+        _SEV_LABEL = {3: "KRİTİK", 2: "ORTA", 1: "DÜŞÜK"}
+
+        lines = [
+            f"Sprint Risk Analizi — {sprint.get('id', '?')}",
+            f"Hedef: {sprint.get('goal', '-')}",
+            "",
+        ]
+
+        if not risks:
+            lines += [
+                "Sprint sağlıklı — tespit edilen kritik risk yok.",
+                "",
+                f"Durum: {len(in_progress)} devam eden | "
+                f"{sum(1 for t in tasks if t.get('status') == 'done')} tamamlanan | "
+                "0 engellenmiş",
+            ]
+            return "\n".join(lines)
+
+        top_sev, top_desc = risks[0]
+        lines += [
+            f"En Riskli Konu [{_SEV_LABEL.get(top_sev, '?')}]:",
+            f"  {top_desc}",
+            "",
+            f"Tüm Risk Sinyalleri ({len(risks)} adet):",
+        ]
+        for sev, desc in risks:
+            lines.append(f"  [{_SEV_LABEL.get(sev, '?')}] {desc}")
+
+        lines += [
+            "",
+            f"Sprint Tamamlanma: %{completion_pct:.0f}  ({done_pts}/{total_pts} story point)",
+            "",
+            "Scrum Master Önerisi:",
+        ]
+
+        if blocked:
+            lines.append(
+                f"  → {len(blocked)} engel var. "
+                "Bugünkü standup'ta öncelikli olarak tartışın."
+            )
+        high_unassigned = [t for t in unassigned if t.get("priority") == "high"]
+        if high_unassigned:
+            lines.append(
+                f"  → {len(high_unassigned)} yüksek öncelikli görev atanmamış. "
+                "Hemen sahiplenin."
+            )
+        if len(in_progress) > wip_limit:
+            lines.append(
+                f"  → Devam eden görev sayısını {wip_limit}'e indirin; "
+                "odak artırır, teslim hızlanır."
+            )
+        if not blocked and not high_unassigned and len(in_progress) <= wip_limit:
+            lines.append("  → Mevcut ritmi koruyun; minor riskleri günlük takipte tutun.")
+
+        return "\n".join(lines)
 
     def _handle_general(self, state: dict) -> str:
         """Fallback: return sprint summary and usage hints."""
