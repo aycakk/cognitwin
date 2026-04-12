@@ -353,7 +353,7 @@ class DeveloperAgent:
                 Siradaki adimlar:
                 {self._render_bullets(role_packet['next_steps'])}
 
-                Dijital ayak izi bellek ozeti:
+                Proje ve sprint baglami:
                 {memory_context}
                 """
             ).strip()
@@ -377,7 +377,7 @@ class DeveloperAgent:
             Next steps:
             {self._render_bullets(role_packet['next_steps'])}
 
-            Footprint memory snapshot:
+            Project and sprint context:
             {memory_context}
             """
         ).strip()

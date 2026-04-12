@@ -2,58 +2,24 @@
 
 This agent does NOT use ChromaDB / vector memory.  It operates on local
 sprint state persisted at data/sprint_state.json using deterministic rule
-logic.  Coordination with the Developer pipeline happens through shared
-sprint state: developer_runner (or any caller) can call
-ScrumMasterAgent.get_current_assignments() to read the active task list.
+logic.  State I/O is delegated to SprintStateStore — the single
+architectural owner of sprint_state.json.
+
+Coordination with the Developer pipeline happens through the shared
+SprintStateStore: developer_runner reads sprint context via
+SprintStateStore.read_context_block().  This agent is the WRITE owner.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import re
-import threading
-import warnings
-from contextlib import contextmanager
 from datetime import date, datetime
-from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
-try:
-    from filelock import FileLock as _FileLock
-    _FILELOCK_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    _FILELOCK_AVAILABLE = False
-    warnings.warn(
-        "filelock is not installed. sprint_state.json writes are NOT safe under "
-        "concurrent access. Install it with: pip install filelock",
-        RuntimeWarning,
-        stacklevel=1,
-    )
+from src.pipeline.scrum_team.sprint_state_store import SprintStateStore
 
 logger = logging.getLogger(__name__)
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  Sprint state location
-# ─────────────────────────────────────────────────────────────────────────────
-
-# scrum_master_agent.py lives at src/agents/ ->parents[2] is the project root
-_PROJECT_ROOT     = Path(__file__).resolve().parents[2]
-_SPRINT_STATE_PATH = _PROJECT_ROOT / "data" / "sprint_state.json"
-
-_DEFAULT_SPRINT_STATE: dict[str, Any] = {
-    "sprint": {
-        "id":       "sprint-1",
-        "goal":     "Sprint hedefi henüz tanımlanmamış.",
-        "start":    str(date.today()),
-        "end":      "",
-        "velocity": 0,
-    },
-    "tasks": [],
-    "team": [
-        {"id": "developer-default", "role": "Developer", "capacity": 8},
-    ],
-}
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Intent detection — Turkish + English keywords
@@ -87,48 +53,20 @@ class ScrumMasterAgent:
     """
     Rule-based Scrum Master coordination agent.
 
-    Reads and writes local sprint state (data/sprint_state.json).
+    Reads and writes local sprint state via SprintStateStore (the single
+    architectural owner of data/sprint_state.json).
     Applies deterministic rules for task assignment, blocker detection,
     sprint health aggregation, ceremony facilitation, and developer delegation.
 
     Developer pipeline integration
     ────────────────────────────────
-    Call get_current_assignments() to inject active sprint tasks into
-    any other pipeline context (e.g. developer_runner's codebase context).
-    Call get_sprint_goal() to surface the current sprint goal string.
+    Both this agent and developer_runner share the same SprintStateStore.
+    developer_runner calls SprintStateStore.read_context_block() (read-only).
+    This agent is the write owner of sprint state.
     """
 
-    def __init__(self) -> None:
-        _SPRINT_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-        # Thread-level reentrant lock — guards same-process concurrent requests.
-        # RLock (not Lock) because _load_state can call _save_state when the file
-        # is missing, and both run under the same acquired context.
-        self._thread_lock: threading.RLock = threading.RLock()
-
-        # Process-level file lock — guards multi-worker deployments (uvicorn --workers N).
-        # Falls back to a no-op context if filelock is not installed.
-        _lock_path = _SPRINT_STATE_PATH.with_suffix(".json.lock")
-        self._file_lock = _FileLock(str(_lock_path)) if _FILELOCK_AVAILABLE else None
-
-    @contextmanager
-    def _state_lock(self) -> Generator[None, None, None]:
-        """
-        Acquire both the thread lock and the file lock before any
-        read-modify-write cycle.  Releases both on exit regardless of exceptions.
-
-        Usage:
-            with self._state_lock():
-                state = self._load_state()
-                ...mutate state...
-                self._save_state(state)
-        """
-        with self._thread_lock:
-            if self._file_lock is not None:
-                with self._file_lock:
-                    yield
-            else:
-                yield
+    def __init__(self, state_store: SprintStateStore | None = None) -> None:
+        self._store = state_store or SprintStateStore()
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Public API (called by scrum_master_runner and external callers)
@@ -139,14 +77,14 @@ class ScrumMasterAgent:
         Route the query to the appropriate rule handler and return a
         structured text response.  No LLM is called here.
 
-        The entire load → modify → save cycle runs under _state_lock so
-        that concurrent requests cannot interleave their read-modify-write
-        operations and silently overwrite each other's changes.
+        The entire load → modify → save cycle runs under the store's
+        state_lock so that concurrent requests cannot interleave their
+        read-modify-write operations.
         """
         intent = self._detect_intent(query)
 
-        with self._state_lock():
-            state = self._load_state()
+        with self._store.state_lock():
+            state = self._store.load()
             handlers = {
                 "assign":        lambda: self._handle_assign(query, state),
                 "blockers":      lambda: self._handle_blockers(state),
@@ -165,51 +103,20 @@ class ScrumMasterAgent:
         return result
 
     def get_current_assignments(self) -> list[dict]:
-        """
-        Return non-done assigned tasks for consumption by other pipeline
-        components (e.g. developer_runner sprint context injection).
-        """
-        with self._state_lock():
-            state = self._load_state()
-        return [
-            t for t in state.get("tasks", [])
-            if t.get("assignee") and t.get("status") != "done"
-        ]
+        """Return non-done assigned tasks."""
+        return self._store.get_assignments()
 
     def get_sprint_goal(self) -> str:
         """Return the current sprint goal string."""
-        with self._state_lock():
-            state = self._load_state()
-        return state.get("sprint", {}).get("goal", "Sprint hedefi tanımlanmamış.")
+        return self._store.get_sprint_goal()
 
     def get_blocked_tasks(self) -> list[dict]:
         """Return all blocked tasks (for external monitoring)."""
-        with self._state_lock():
-            state = self._load_state()
-        return [t for t in state.get("tasks", []) if t.get("status") == "blocked"]
+        return self._store.get_blocked_tasks()
 
     def detect_intent(self, query: str) -> str:
         """Public entry point for intent detection (delegates to _detect_intent)."""
         return self._detect_intent(query)
-
-    # ─────────────────────────────────────────────────────────────────────────
-    #  State I/O
-    # ─────────────────────────────────────────────────────────────────────────
-
-    def _load_state(self) -> dict[str, Any]:
-        if not _SPRINT_STATE_PATH.exists():
-            self._save_state(_DEFAULT_SPRINT_STATE)
-            return dict(_DEFAULT_SPRINT_STATE)
-        try:
-            return json.loads(_SPRINT_STATE_PATH.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return dict(_DEFAULT_SPRINT_STATE)
-
-    def _save_state(self, state: dict[str, Any]) -> None:
-        _SPRINT_STATE_PATH.write_text(
-            json.dumps(state, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Intent detection
@@ -261,7 +168,7 @@ class ScrumMasterAgent:
         task["assigned_at"] = datetime.now().isoformat(timespec="seconds")
         if task.get("status") == "todo":
             task["status"] = "in_progress"
-        self._save_state(state)
+        self._store.save(state)
 
         return (
             f"Görev Atandı\n"
@@ -538,7 +445,7 @@ class ScrumMasterAgent:
         }
         tasks.append(new_task)
         state["tasks"] = tasks
-        self._save_state(state)
+        self._store.save(state)
 
         return (
             f"Yeni görev eklendi\n"
@@ -590,7 +497,7 @@ class ScrumMasterAgent:
             new_status = status_map.get(raw, raw)
             task["status"]     = new_status
             task["updated_at"] = datetime.now().isoformat(timespec="seconds")
-            self._save_state(state)
+            self._store.save(state)
             return (
                 f"Görev {task_id} güncellendi.\n"
                 f"  Başlık : {task.get('title', '-')}\n"
@@ -615,7 +522,7 @@ class ScrumMasterAgent:
             )
         goal = goal_match.group(1).strip()
         state["sprint"]["goal"] = goal
-        self._save_state(state)
+        self._store.save(state)
         return (
             f"Sprint hedefi güncellendi.\n"
             f"  Sprint : {state['sprint']['id']}\n"

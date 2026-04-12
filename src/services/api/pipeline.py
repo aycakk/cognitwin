@@ -102,7 +102,6 @@ def process_user_message(
                 masked_input=masked,
                 metadata={
                     "strategy": strategy,
-                    "developer_id": "developer-default",
                     "messages": messages or [],
                 },
             )

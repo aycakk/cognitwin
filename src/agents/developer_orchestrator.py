@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.agents.developer_agent import DeveloperAgent
-from src.agents.developer_profile_store import DeveloperProfileStore
 
 
 MEMORY_NOT_FOUND_TEXT = "Bunu hafizamda bulamadim."
@@ -29,17 +28,25 @@ _DEBUG_SCHEMA = """\
 
 class DeveloperOrchestrator:
     """
-    Staged orchestrator for developer-role requests.
+    Staged orchestrator for developer-role requests (Scrum team).
 
-    Flow:
+    Flow (role-based — no personal footprint/profile/identity):
     1) Understand request
-    2) Retrieve project context
-    3) Retrieve ontology constraints
-    4) Retrieve developer footprint signals
-    5) Retrieve developer profile
-    6) Generate solution (via DeveloperAgent)
-    7) Validate solution
-    8) Return structured response
+    2) Retrieve project context (task type, language, strategy)
+    3) Retrieve ontology constraints (developer_ontology.ttl)
+    4) Generate solution (via DeveloperAgent + injected team context)
+    5) Validate solution
+    6) Return structured response
+
+    Context sources (role-appropriate):
+      - Codebase context (injected by developer_runner from _DEV_CONTEXT_MAP)
+      - Sprint context   (injected by developer_runner from SprintStateStore)
+      - Ontology constraints (developer_ontology.ttl)
+
+    NOT used (architectural invariant — Scrum team is role-based):
+      - Personal footprint signals
+      - Personal developer profile / DeveloperProfileStore
+      - developer_id as a person identity key
 
     NOTE: chat_fn must be a callable that returns a plain dict
     with {"message": {"content": str}} — use _safe_chat() from pipeline.py
@@ -50,34 +57,29 @@ class DeveloperOrchestrator:
         self,
         *,
         generator: DeveloperAgent | None = None,
-        memory_backend: Any = None,
         chat_fn: Callable[..., dict[str, Any]] | None = None,
         default_model: str = "llama3.2",
         ontology_path: str | Path | None = None,
-        profile_store: DeveloperProfileStore | None = None,
     ) -> None:
         # Pass chat_fn into DeveloperAgent so its process() method can call the
         # LLM directly.  This makes DeveloperAgent a genuine agent rather than
         # a pure template renderer.
         self.generator = generator or DeveloperAgent(chat_fn=chat_fn)
-        self.memory_backend = memory_backend
         self.chat_fn = chat_fn
         self.default_model = default_model
-        self.profile_store = profile_store or DeveloperProfileStore()
 
         if ontology_path is None:
             project_root = Path(__file__).resolve().parents[2]
             ontology_path = project_root / "ontologies" / "developer_ontology.ttl"
         self.ontology_path = Path(ontology_path)
 
-    def run(self, request: str, developer_id: str, **runtime: Any) -> dict[str, Any]:
+    def run(self, request: str, **runtime: Any) -> dict[str, Any]:
         task_understanding = self._understand_request(request=request, **runtime)
 
         context_runtime = dict(runtime)
         context_runtime.pop("task_understanding", None)
         context = self.retrieve_context(
             request=request,
-            developer_id=developer_id,
             task_understanding=task_understanding,
             **context_runtime,
         )
@@ -90,71 +92,30 @@ class DeveloperOrchestrator:
             **ontology_runtime,
         )
 
-        footprint_runtime = dict(runtime)
-        footprint_runtime.pop("context", None)
-        footprint_signals = self.retrieve_footprint(
-            request=request,
-            developer_id=developer_id,
-            context=context,
-            **footprint_runtime,
-        )
-
-        profile_runtime = dict(runtime)
-        profile_runtime.pop("context", None)
-        profile_runtime.pop("footprint_signals", None)
-        profile = self.retrieve_profile(
-            request=request,
-            developer_id=developer_id,
-            context=context,
-            footprint_signals=footprint_signals,
-            **profile_runtime,
-        )
-
         generate_runtime = dict(runtime)
         generate_runtime.pop("context", None)
         generate_runtime.pop("ontology_constraints", None)
-        generate_runtime.pop("footprint_signals", None)
-        generate_runtime.pop("profile", None)
         solution = self.generate(
             request=request,
-            developer_id=developer_id,
             context=context,
             ontology_constraints=ontology_constraints,
-            footprint_signals=footprint_signals,
-            profile=profile,
             **generate_runtime,
         )
 
         validate_runtime = dict(runtime)
         validate_runtime.pop("context", None)
         validate_runtime.pop("ontology_constraints", None)
-        validate_runtime.pop("footprint_signals", None)
-        validate_runtime.pop("profile", None)
         validation_report = self.validate(
             request=request,
             solution=solution,
             context=context,
             ontology_constraints=ontology_constraints,
-            footprint_signals=footprint_signals,
-            profile=profile,
             **validate_runtime,
         )
 
-        profile = self.update_profile(
-            profile=profile,
-            interaction_data={
-                "request": request,
-                "context": context,
-                "footprint_signals": footprint_signals,
-                "solution": solution,
-                "validation_report": validation_report,
-            },
-        )
         return self.build_response(
             task_understanding=task_understanding,
             ontology_constraints=ontology_constraints,
-            footprint_signals=footprint_signals,
-            profile=profile,
             solution=solution,
             validation_report=validation_report,
         )
@@ -162,7 +123,6 @@ class DeveloperOrchestrator:
     def retrieve_context(
         self,
         request: str,
-        developer_id: str = "developer-default",
         task_understanding: str = "",
         **runtime: Any,
     ) -> dict[str, Any]:
@@ -189,7 +149,6 @@ class DeveloperOrchestrator:
             project_context_signals.append("execution phase confirmed")
 
         return {
-            "developer_id": developer_id,
             "task_type": task_type,
             "language": language,
             "strategy": strategy,
@@ -243,123 +202,34 @@ class DeveloperOrchestrator:
 
         return constraints
 
-    def retrieve_footprint(
-        self,
-        request: str,
-        developer_id: str,
-        context: dict[str, Any] | None = None,
-        **runtime: Any,
-    ) -> list[str]:
-        context = context or {}
-        preloaded = list(runtime.get("footprint_signals") or [])
-        selected = self._dedupe_nonempty(preloaded, limit=3)
-        if selected:
-            return selected
-
-        memory_context = str(runtime.get("memory_context") or "").strip()
-        if memory_context and memory_context != MEMORY_NOT_FOUND_TEXT:
-            return self._dedupe_nonempty(memory_context.splitlines(), limit=2)
-
-        if self.memory_backend is not None and hasattr(self.memory_backend, "query_memory"):
-            try:
-                queried = self.memory_backend.query_memory(request, n_results=3)
-                if isinstance(queried, list):
-                    return self._dedupe_nonempty([str(x) for x in queried], limit=3)
-            except Exception:
-                return []
-
-        return []
-
-    def retrieve_profile(
-        self,
-        request: str,
-        developer_id: str,
-        context: dict[str, Any] | None = None,
-        footprint_signals: list[str] | None = None,
-        **_: Any,
-    ) -> dict[str, Any]:
-        context = context or {}
-        footprint_signals = footprint_signals or []
-        profile = {}
-        if self.profile_store is not None:
-            try:
-                profile = self.profile_store.load_profile(developer_id)
-            except Exception:
-                profile = self._default_profile(developer_id)
-        if not profile:
-            profile = self._default_profile(developer_id)
-
-        language = str((profile.get("coding_style") or {}).get("preferred_language") or context.get("language") or "en")
-        task_type = str(context.get("task_type") or "other")
-        request_lower = (request or "").lower()
-
-        planning_style = "mvp-focused"
-        if any(token in request_lower for token in ("tradeoff", "alternatif", "compare", "analyze")):
-            planning_style = "analysis-first"
-
-        confidence_bias = "medium"
-        if footprint_signals:
-            confidence_bias = "medium-high"
-
-        profile["developer_id"] = profile.get("developer_id", developer_id)
-        profile["preferred_language"] = language
-        profile["focus"] = "ontology" if task_type == "ontology" else "implementation"
-        profile["planning_style"] = planning_style
-        profile["confidence_bias"] = confidence_bias
-        return profile
-
-    def update_profile(
-        self,
-        profile: dict[str, Any],
-        interaction_data: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        interaction_data = interaction_data or {}
-        if self.profile_store is None:
-            return profile
-        try:
-            updated_profile = self.profile_store.update_profile(
-                profile=profile,
-                interaction_data=interaction_data,
-            )
-        except Exception:
-            return profile
-
-        for key in ("preferred_language", "focus", "planning_style", "confidence_bias"):
-            if key in profile:
-                updated_profile[key] = profile[key]
-        return updated_profile
-
     def generate(
         self,
         request: str,
-        developer_id: str,
         context: dict[str, Any] | None = None,
         ontology_constraints: list[str] | None = None,
-        footprint_signals: list[str] | None = None,
-        profile: dict[str, Any] | None = None,
         **runtime: Any,
     ) -> str:
-        del developer_id, ontology_constraints
+        del ontology_constraints
         context = context or {}
-        footprint_signals = footprint_signals or []
-        profile = profile or {}
 
-        language = str(context.get("language") or profile.get("preferred_language") or "en")
+        language = str(context.get("language") or "en")
         task_type = str(context.get("task_type") or "ontology")
         strategy = str(context.get("strategy") or "auto")
         is_execution_phase = bool(context.get("is_execution_phase"))
         system_prompt_override = str(runtime.get("system_prompt_override") or "").strip()
+
+        # memory_context here is codebase + sprint context, NOT personal footprint.
+        # It is injected by developer_runner from _build_codebase_context() and
+        # SprintStateStore.read_context_block().
+        memory_context = str(runtime.get("memory_context") or "").strip()
+        if not memory_context:
+            memory_context = MEMORY_NOT_FOUND_TEXT
 
         if is_execution_phase:
             packet = self.generator.build_role_packet(
                 target_role=str(context.get("target_role") or "Developer Agent"),
                 constraints=str(context.get("constraints") or ""),
             )
-            memory_context = str(runtime.get("memory_context") or "").strip()
-            if not memory_context:
-                memory_context = (
-                    "\n".join(footprint_signals) if footprint_signals else MEMORY_NOT_FOUND_TEXT
-                )
             return self.generator.generate_execution_plan(
                 task_type=task_type,
                 role_packet=packet,
@@ -367,10 +237,6 @@ class DeveloperOrchestrator:
                 memory_context=memory_context,
                 language=language,
             )
-
-        memory_context = str(runtime.get("memory_context") or "").strip()
-        if not memory_context:
-            memory_context = "\n".join(footprint_signals) if footprint_signals else MEMORY_NOT_FOUND_TEXT
 
         if strategy == "direct":
             _debug_hints = (
@@ -610,17 +476,13 @@ class DeveloperOrchestrator:
         solution: str,
         context: dict[str, Any] | None = None,
         ontology_constraints: list[str] | None = None,
-        footprint_signals: list[str] | None = None,
-        profile: dict[str, Any] | None = None,
         **_: Any,
     ) -> dict[str, Any]:
         del request
         context = context or {}
         ontology_constraints = ontology_constraints or []
-        footprint_signals = footprint_signals or []
-        profile = profile or {}
 
-        language = str(context.get("language") or profile.get("preferred_language") or "en")
+        language = str(context.get("language") or "en")
         is_execution_phase = bool(context.get("is_execution_phase"))
         strategy = str(context.get("strategy") or "auto").lower()
         missing_files = list(context.get("missing_files") or [])
@@ -638,8 +500,6 @@ class DeveloperOrchestrator:
             "expected_header_present": True if not expected_header else expected_header in (solution or ""),
             "file_gate_passed": len(missing_files) == 0,
             "ontology_constraints_available": len(ontology_constraints) > 0,
-            "footprint_signals_available": len(footprint_signals) > 0,
-            "personalization_available": bool(profile),
         }
 
         issues: list[str] = []
@@ -650,16 +510,15 @@ class DeveloperOrchestrator:
         if not checks["file_gate_passed"]:
             issues.append("File gate is not satisfied (missing required files).")
 
+        # Scoring: role-based quality signals only.
+        # footprint_signals_available and personalization_available
+        # were removed — they rewarded personal-twin behavior.
         score = 0.35
         if checks["non_empty_solution"]:
-            score += 0.20
+            score += 0.25
         if checks["expected_header_present"]:
             score += 0.15
         if checks["ontology_constraints_available"]:
-            score += 0.10
-        if checks["footprint_signals_available"]:
-            score += 0.10
-        if checks["personalization_available"]:
             score += 0.10
         if checks["file_gate_passed"]:
             score += 0.10
@@ -678,23 +537,12 @@ class DeveloperOrchestrator:
         self,
         task_understanding: str,
         ontology_constraints: list[str],
-        footprint_signals: list[str],
-        profile: dict[str, Any],
         solution: str,
         validation_report: dict[str, Any],
     ) -> dict[str, Any]:
-        personalization_applied = [
-            f"developer_id={profile.get('developer_id', 'developer-default')}",
-            f"language={profile.get('preferred_language', 'en')}",
-            f"focus={profile.get('focus', 'implementation')}",
-            f"planning_style={profile.get('planning_style', 'mvp-focused')}",
-        ]
-
         return {
             "task_understanding": task_understanding,
             "ontology_constraints_used": ontology_constraints,
-            "footprint_signals_used": footprint_signals,
-            "personalization_applied": personalization_applied,
             "solution": solution,
             "validation_report": validation_report,
             "confidence": float(validation_report.get("confidence", 0.0)),
@@ -744,12 +592,12 @@ class DeveloperOrchestrator:
     def _build_memory_instruction_block(self, memory_context: str, language: str) -> str:
         if language == "tr":
             return (
-                "Dijital ayak izi bellek baglamini kullan:\n"
+                "Proje ve sprint baglam bilgisini kullan:\n"
                 f"{memory_context}\n"
-                "Uretimde bu bellek baglamiyla celismeyecek sekilde ilerle."
+                "Uretimde bu baglamla celismeyecek sekilde ilerle."
             )
         return (
-            "Use this footprint-memory context as evidence:\n"
+            "Use this project and sprint context as evidence:\n"
             f"{memory_context}\n"
             "Do not contradict this context in your response."
         )
@@ -872,15 +720,3 @@ class DeveloperOrchestrator:
                 break
         return selected
 
-    def _default_profile(self, developer_id: str) -> dict[str, Any]:
-        return {
-            "developer_id": developer_id,
-            "preferred_frameworks": [],
-            "coding_style": {},
-            "architecture_preferences": [],
-            "error_handling_style": {},
-            "documentation_style": {},
-            "decision_history": [],
-            "style_vector": [],
-            "last_updated": "",
-        }

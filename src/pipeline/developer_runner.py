@@ -1,12 +1,17 @@
-"""pipeline/developer_runner.py — developer pipeline path.
+"""pipeline/developer_runner.py — developer pipeline path (Scrum team).
 
-Extracted from src/services/api/pipeline.py (_process_developer_message
-and its private helpers). pipeline.py re-imports _process_developer_message
-for use in process_user_message.
+Part of the Scrum team domain.  The developer role is collaborative
+and role-based — it reads shared sprint/task state from SprintStateStore
+and uses injected codebase context, but does NOT use:
+  - Personal footprint signals
+  - Personal developer profile / DeveloperProfileStore
+  - developer_id as a person identity key
+
+Sprint state writes are the exclusive responsibility of
+ScrumMasterAgent via the scrum_master_runner path.
 
 Path note: this file lives at src/pipeline/, so Path(__file__).resolve()
-.parents[2] resolves to the project root (one fewer hop than pipeline.py
-which was at src/services/api/).
+.parents[2] resolves to the project root.
 """
 
 from __future__ import annotations
@@ -18,22 +23,40 @@ from pathlib import Path
 from ollama import chat
 
 from src.agents.developer_orchestrator import DeveloperOrchestrator
-from src.agents.scrum_master_agent import ScrumMasterAgent
 from src.core.schemas import AgentTask, AgentResponse, AgentRole, TaskStatus
 from src.gates.evaluator import evaluate_all_gates
 from src.pipeline.redo import run_redo_loop
+from src.pipeline.scrum_team.sprint_state_store import SprintStateStore
 from src.pipeline.shared import (
     VECTOR_MEM,
     VECTOR_TOP_K,
-    CHROMA,
-    SYSTEM_PROMPT,
     BLINDSPOT_TRIGGERS,
     build_blindspot_block,
     _safe_chat,
     _sanitize_output,
 )
 
-_SCRUM_AGENT = ScrumMasterAgent()
+# Shared sprint state — read-only from the developer path.
+# ScrumMasterAgent (via scrum_master_runner) is the write owner.
+_SPRINT_STATE = SprintStateStore()
+
+# Developer-specific system prompt — the developer path must NOT use
+# the Student Agent system prompt (SYSTEM_PROMPT in shared.py).
+_DEVELOPER_SYSTEM_PROMPT = """\
+Sen bir Scrum takımında görev yapan CogniTwin Developer Agent'sın.
+Rol tabanlı çalışırsın — kişisel profil veya dijital ayak izi kullanmazsın.
+
+Bağlam kaynakların:
+  • Proje kaynak kodu (CODEBASE CONTEXT)
+  • Sprint durumu (SPRINT CONTEXT)
+  • Ontoloji kısıtları (developer_ontology.ttl)
+
+Kurallar:
+  - Yalnızca sağlanan bağlamdan yanıt ver.
+  - Bağlamda olmayan bilgiyi uydurma.
+  - PII ifşa etme.
+  - Bağlamda bulamadıysan: "Bunu hafızamda bulamadım."
+"""
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CODEBASE CONTEXT INJECTION
@@ -105,52 +128,6 @@ def _build_codebase_context(query: str) -> str:
     return "\n".join(parts)
 
 
-def _build_sprint_context() -> str:
-    """
-    Build a labeled sprint context block from the module-level _SCRUM_AGENT instance.
-
-    Reads sprint goal, active assignments, and blocked tasks from the current
-    sprint_state.json.  Returns a formatted string using the same labeled-block
-    convention as the rest of the codebase (=== VECTOR MEMORY ===, etc.).
-
-    Returns an empty string only when the sprint state is genuinely absent
-    (ScrumMasterAgent._load_state falls back to _DEFAULT_SPRINT_STATE, so in
-    practice it always returns at least the default goal and empty task lists).
-    """
-    try:
-        sprint_goal  = _SCRUM_AGENT.get_sprint_goal()
-        assignments  = _SCRUM_AGENT.get_current_assignments()
-        blocked      = _SCRUM_AGENT.get_blocked_tasks()
-    except Exception:
-        return ""
-
-    lines = ["=== SPRINT CONTEXT ==="]
-    lines.append(f"Sprint Goal: {sprint_goal}")
-
-    lines.append("Active Assignments:")
-    if assignments:
-        for t in assignments:
-            lines.append(
-                f"  [{t.get('id', '?')}] {t.get('title', '-')}"
-                f" \u2192 {t.get('assignee', 'unassigned')}"
-                f" ({t.get('status', '?')})"
-            )
-    else:
-        lines.append("  (none)")
-
-    lines.append("Blocked Tasks:")
-    if blocked:
-        for t in blocked:
-            blocker_note = t.get("blocker") or "no description"
-            lines.append(
-                f"  [{t.get('id', '?')}] {t.get('title', '-')}"
-                f" | Blocker: {blocker_note}"
-            )
-    else:
-        lines.append("  (none)")
-
-    lines.append("=== END SPRINT CONTEXT ===")
-    return "\n".join(lines)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -272,17 +249,20 @@ def _format_debug_result(v: dict) -> str:
 
 def _process_developer_message(task: AgentTask) -> AgentResponse:
     """
-    Developer path: DeveloperOrchestrator (8-stage) → C1-C8 gates → REDO.
+    Developer path (Scrum team): DeveloperOrchestrator → gates → REDO.
 
-    The orchestrator handles context retrieval, ontology constraints, profile
-    personalisation, and generation.  After the orchestrator returns its
-    solution, the same ZT4SWE gate array and REDO loop used by the student
-    path are applied to guarantee output integrity.
+    Role-based pipeline — no personal footprint, profile, or identity.
+    Context sources:
+      - Codebase snippets (keyword-matched from _DEV_CONTEXT_MAP)
+      - Sprint state (read-only from SprintStateStore)
+      - Ontology constraints (developer_ontology.ttl)
+
+    Sprint state writes are the exclusive responsibility of
+    ScrumMasterAgent via scrum_master_runner.  This path is read-only.
     """
-    user_text    = task.masked_input
-    strategy     = task.metadata.get("strategy", "auto")
-    developer_id = task.metadata.get("developer_id", "developer-default")
-    session_id   = task.session_id
+    user_text  = task.masked_input
+    strategy   = task.metadata.get("strategy", "auto")
+    session_id = task.session_id
 
     redo_log: list[dict] = []
 
@@ -291,50 +271,32 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
     # student academic_memory collection.
     vector_context, is_empty = VECTOR_MEM.retrieve(user_text, k=VECTOR_TOP_K, namespace="developer")
 
-    # Stage 2 — DeveloperOrchestrator 8-stage pipeline
+    # Stage 2 — DeveloperOrchestrator pipeline (role-based, no personal data)
     # Inject actual source file snippets so the LLM can answer codebase
     # questions rather than falling back to generic training knowledge.
     codebase_context = _build_codebase_context(user_text)
 
-    # Stage 2a — Sprint context injection (Scrum → Developer read path)
-    # Read the current sprint state through the module-level _SCRUM_AGENT instance and
-    # format it as a labeled context block.  Combined with codebase_context so
-    # the orchestrator LLM is aware of active tasks, the sprint goal, and any
-    # blockers when generating its response.
+    # Stage 2a — Sprint context injection (read-only from SprintStateStore)
+    # Reads sprint goal, active assignments, and blocked tasks from
+    # sprint_state.json via the shared SprintStateStore instance.
     # NOTE: codebase_context is kept as a separate variable — Stage 2b below
     # gates JSON debug validation on it; that gate must not fire for sprint-only
     # queries where codebase_context is empty.
-    sprint_context = _build_sprint_context()
+    sprint_context = _SPRINT_STATE.read_context_block()
     combined_context = "\n\n".join(filter(None, [codebase_context, sprint_context]))
 
     orchestrator = DeveloperOrchestrator(
-        memory_backend=CHROMA,
         chat_fn=_safe_chat,
         default_model="llama3.2",
     )
     result = orchestrator.run(
         request=user_text,
-        developer_id=developer_id,
         strategy=strategy,
-        memory_context=combined_context,   # non-empty → used directly in generate()
+        memory_context=combined_context,   # codebase + sprint context (not personal)
     )
     draft = _sanitize_output(str(result.get("solution", "")))
     if not draft:
         draft = "Bunu hafızamda bulamadım."
-
-    # Developer → Scrum write-back
-    # If the developer's query signals a task status change (update_task intent),
-    # update sprint_state.json as a side effect before continuing.
-    # Only "update_task" triggers a write-back; other intents (sprint_status,
-    # standup, review, …) belong to the Scrum path and must not cause writes here.
-    # The return value of handle_query is discarded — the developer response is
-    # always the primary output.  Wrapped in try/except so a state I/O error
-    # never surfaces to the end user.
-    if _SCRUM_AGENT.detect_intent(user_text) == "update_task":
-        try:
-            _SCRUM_AGENT.handle_query(user_text)
-        except Exception:
-            pass
 
     # Stage 2b — Structured debug validation
     # If the orchestrator returned a JSON debug object, validate the cited
@@ -350,9 +312,10 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
         except (json.JSONDecodeError, ValueError):
             pass  # prose response — skip validation, continue normally
 
-    # Stage 3 — C1-C8 gate array + REDO loop (same as student path)
+    # Stage 3 — Gate array + REDO loop
+    # Uses the developer-specific system prompt (NOT the Student Agent prompt).
     base_messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": _DEVELOPER_SYSTEM_PROMPT},
         {"role": "user",   "content": user_text},
     ]
 

@@ -1,7 +1,8 @@
-"""pipeline/scrum_master_runner.py — Scrum Master pipeline path.
+"""pipeline/scrum_master_runner.py — Scrum Master pipeline path (Scrum team).
 
 Rule-based pipeline.  Does NOT use ChromaDB or vector memory.
-Grounds responses in local sprint state (data/sprint_state.json).
+Grounds responses in local sprint state (data/sprint_state.json)
+via SprintStateStore — the single architectural owner of that file.
 
 Gate coverage (different from student/developer paths):
   C1  — PII leak detection (same as all paths)
@@ -11,6 +12,7 @@ Gate coverage (different from student/developer paths):
 
 The ScrumMasterAgent produces a fully deterministic response from
 local sprint state before any gate check is applied.
+ScrumMasterAgent is the WRITE owner of sprint state.
 """
 
 from __future__ import annotations
@@ -19,8 +21,11 @@ import re
 
 from src.agents.scrum_master_agent import ScrumMasterAgent
 from src.core.schemas import AgentTask, AgentResponse, AgentRole, TaskStatus
+from src.pipeline.scrum_team.sprint_state_store import SprintStateStore
 
-_agent = ScrumMasterAgent()
+# Shared sprint state — Scrum Master is the write owner.
+_SPRINT_STATE = SprintStateStore()
+_agent = ScrumMasterAgent(state_store=_SPRINT_STATE)
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Gate patterns (local copies — no import from shared to keep the runner
