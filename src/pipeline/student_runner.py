@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from ollama import chat
 
+from src.core.schemas import AgentTask, AgentResponse, AgentRole, TaskStatus
 from src.gates.evaluator import evaluate_all_gates
 from src.pipeline.redo import run_redo_loop
 from src.pipeline.shared import (
@@ -20,7 +21,7 @@ from src.pipeline.shared import (
 )
 
 
-def run_pipeline(query: str, agent_role: str = "StudentAgent") -> str:
+def run_pipeline(task: AgentTask) -> AgentResponse:
     """
     Execute the 4-stage ZT4SWE verification pipeline.
 
@@ -31,6 +32,10 @@ def run_pipeline(query: str, agent_role: str = "StudentAgent") -> str:
 
     redo_log is per-request (thread-safe — no shared mutable state).
     """
+    query      = task.masked_input
+    agent_role = task.role.value
+    session_id = task.session_id
+
     redo_log: list[dict] = []
 
     # ── Stage 1 — Retrieval & Grounding ──────────────────────────────────────
@@ -39,9 +44,15 @@ def run_pipeline(query: str, agent_role: str = "StudentAgent") -> str:
     ontology_context         = build_ontology_context()
 
     if is_empty:
-        return (
+        draft = (
             build_blindspot_block(query, "VEKTÖR HAFIZA BOŞ")
             + "Bunu hafızamda bulamadım."
+        )
+        return AgentResponse(
+            task_id=task.task_id,
+            agent_role=task.role,
+            draft=draft,
+            status=TaskStatus.COMPLETED,
         )
 
     # ── Stage 2 — Draft Synthesis ─────────────────────────────────────────────
@@ -84,9 +95,16 @@ def run_pipeline(query: str, agent_role: str = "StudentAgent") -> str:
         gate_fn=evaluate_all_gates,
         chat_fn=chat,
         blindspot_fn=build_blindspot_block,
+        session_id=session_id,
     )
     if limit_hit:
-        return draft
+        return AgentResponse(
+            task_id=task.task_id,
+            agent_role=task.role,
+            draft=draft,
+            status=TaskStatus.FAILED,
+            redo_log=redo_log,
+        )
 
     # ── Stage 4 — Emission ────────────────────────────────────────────────────
     # Only prepend a blindspot block when retrieval was genuinely empty.
@@ -94,5 +112,12 @@ def run_pipeline(query: str, agent_role: str = "StudentAgent") -> str:
     # bulamadım" for a sub-topic it couldn't resolve even though memory docs
     # *were* retrieved, which should not produce the blindspot wrapper.
     if is_empty and BLINDSPOT_TRIGGERS.search(draft):
-        return build_blindspot_block(query) + draft
-    return draft
+        draft = build_blindspot_block(query) + draft
+
+    return AgentResponse(
+        task_id=task.task_id,
+        agent_role=task.role,
+        draft=draft,
+        status=TaskStatus.COMPLETED,
+        redo_log=redo_log,
+    )

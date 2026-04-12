@@ -19,6 +19,7 @@ from ollama import chat
 
 from src.agents.developer_orchestrator import DeveloperOrchestrator
 from src.agents.scrum_master_agent import ScrumMasterAgent
+from src.core.schemas import AgentTask, AgentResponse, AgentRole, TaskStatus
 from src.gates.evaluator import evaluate_all_gates
 from src.pipeline.redo import run_redo_loop
 from src.pipeline.shared import (
@@ -106,7 +107,7 @@ def _build_codebase_context(query: str) -> str:
 
 def _build_sprint_context() -> str:
     """
-    Build a labeled sprint context block from the shared SCRUM_AGENT singleton.
+    Build a labeled sprint context block from the module-level _SCRUM_AGENT instance.
 
     Reads sprint goal, active assignments, and blocked tasks from the current
     sprint_state.json.  Returns a formatted string using the same labeled-block
@@ -269,12 +270,7 @@ def _format_debug_result(v: dict) -> str:
 #  DEVELOPER PIPELINE RUNNER
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _process_developer_message(
-    user_text: str,
-    strategy: str = "auto",
-    messages: list | None = None,
-    developer_id: str = "developer-default",
-) -> str:
+def _process_developer_message(task: AgentTask) -> AgentResponse:
     """
     Developer path: DeveloperOrchestrator (8-stage) → C1-C8 gates → REDO.
 
@@ -283,6 +279,11 @@ def _process_developer_message(
     solution, the same ZT4SWE gate array and REDO loop used by the student
     path are applied to guarantee output integrity.
     """
+    user_text    = task.masked_input
+    strategy     = task.metadata.get("strategy", "auto")
+    developer_id = task.metadata.get("developer_id", "developer-default")
+    session_id   = task.session_id
+
     redo_log: list[dict] = []
 
     # Stage 1 — Retrieve vector context (used only by gate evaluators).
@@ -296,7 +297,7 @@ def _process_developer_message(
     codebase_context = _build_codebase_context(user_text)
 
     # Stage 2a — Sprint context injection (Scrum → Developer read path)
-    # Read the current sprint state through the shared SCRUM_AGENT singleton and
+    # Read the current sprint state through the module-level _SCRUM_AGENT instance and
     # format it as a labeled context block.  Combined with codebase_context so
     # the orchestrator LLM is aware of active tasks, the sprint goal, and any
     # blockers when generating its response.
@@ -372,11 +373,25 @@ def _process_developer_message(
         gate_fn=evaluate_all_gates,
         chat_fn=chat,
         blindspot_fn=build_blindspot_block,
+        session_id=session_id,
     )
     if limit_hit:
-        return draft
+        return AgentResponse(
+            task_id=task.task_id,
+            agent_role=AgentRole.DEVELOPER,
+            draft=draft,
+            status=TaskStatus.FAILED,
+            redo_log=redo_log,
+        )
 
     # Stage 4 — Emission
     if BLINDSPOT_TRIGGERS.search(draft):
-        return build_blindspot_block(user_text) + draft
-    return draft
+        draft = build_blindspot_block(user_text) + draft
+
+    return AgentResponse(
+        task_id=task.task_id,
+        agent_role=AgentRole.DEVELOPER,
+        draft=draft,
+        status=TaskStatus.COMPLETED,
+        redo_log=redo_log,
+    )

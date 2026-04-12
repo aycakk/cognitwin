@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 
 from src.agents.scrum_master_agent import ScrumMasterAgent
+from src.core.schemas import AgentTask, AgentResponse, AgentRole, TaskStatus
 
 _agent = ScrumMasterAgent()
 
@@ -42,7 +43,7 @@ _HALLUCINATION_RE = re.compile(
 #  Public entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_scrum_master_pipeline(query: str) -> str:
+def run_scrum_master_pipeline(task: AgentTask) -> AgentResponse:
     """
     Execute the Scrum Master rule pipeline.
 
@@ -58,14 +59,21 @@ def run_scrum_master_pipeline(query: str) -> str:
     Stage 4 — Emission
               Returns the verified response.
     """
+    query = task.masked_input
+
     # ── Stage 1 — Rule engine ─────────────────────────────────────────────
     response = _agent.handle_query(query)
 
     # ── Stage 2 — C1: PII leak ────────────────────────────────────────────
     if _PII_RE.search(response):
-        return (
-            "⚠ Scrum Master çıktısında kişisel veri tespit edildi. "
-            "Bu bilgi paylaşılamaz."
+        return AgentResponse(
+            task_id=task.task_id,
+            agent_role=AgentRole.SCRUM_MASTER,
+            draft=(
+                "⚠ Scrum Master çıktısında kişisel veri tespit edildi. "
+                "Bu bilgi paylaşılamaz."
+            ),
+            status=TaskStatus.FAILED,
         )
 
     # ── Stage 3 — C4: Hallucination markers ──────────────────────────────
@@ -73,4 +81,9 @@ def run_scrum_master_pipeline(query: str) -> str:
         response = _HALLUCINATION_RE.sub("[doğrulanmamış]", response)
 
     # ── Stage 4 — Emission ────────────────────────────────────────────────
-    return response
+    return AgentResponse(
+        task_id=task.task_id,
+        agent_role=AgentRole.SCRUM_MASTER,
+        draft=response,
+        status=TaskStatus.COMPLETED,
+    )

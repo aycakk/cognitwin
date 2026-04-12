@@ -14,6 +14,7 @@ Entry points (called by routes.py and openai_routes.py):
 
 from __future__ import annotations
 
+from src.core.schemas import AgentTask, AgentRole
 from src.utils.masker import PIIMasker
 from src.shared.permissions import ONTOLOGY_AGENT_ROLES
 from src.gates.evaluator import evaluate_all_gates  # noqa: F401 (re-exported for main_cli)
@@ -76,12 +77,14 @@ def process_user_message(
     agent_role: str = "StudentAgent",
     model: str = "llama3.2",
     messages: list | None = None,
+    session_id: str = "",
 ) -> dict:
     """
     Mask PII, resolve routing mode, execute the appropriate pipeline.
 
     Routing:
       model contains 'developer'  →  DeveloperOrchestrator + C1-C8 + REDO
+      model contains 'scrum'      →  ScrumMaster rule pipeline
       all other models             →  Student ZT4SWE pipeline (C1-C8 + REDO)
 
     Returns {"answer": str} for the FastAPI layer.
@@ -93,17 +96,37 @@ def process_user_message(
         mode, strategy = resolve_mode(model)
 
         if mode == "developer":
-            answer = _process_developer_message(
-                user_text=masked,
-                strategy=strategy,
-                messages=messages,
+            task = AgentTask(
+                session_id=session_id,
+                role=AgentRole.DEVELOPER,
+                masked_input=masked,
+                metadata={
+                    "strategy": strategy,
+                    "developer_id": "developer-default",
+                    "messages": messages or [],
+                },
             )
+            response = _process_developer_message(task)
         elif mode == "scrum_master":
-            answer = run_scrum_master_pipeline(masked)
+            task = AgentTask(
+                session_id=session_id,
+                role=AgentRole.SCRUM_MASTER,
+                masked_input=masked,
+            )
+            response = run_scrum_master_pipeline(task)
         else:
-            answer = run_pipeline(masked, agent_role=agent_role)
+            try:
+                role = AgentRole(agent_role)
+            except ValueError:
+                role = AgentRole.STUDENT
+            task = AgentTask(
+                session_id=session_id,
+                role=role,
+                masked_input=masked,
+            )
+            response = run_pipeline(task)
 
-        return {"answer": answer}
+        return {"answer": response.draft}
     except UnknownModelError as exc:
         # Do NOT swallow this — it means LibreChat sent a model name we have
         # never seen.  Return a clear message so the user (and logs) know.
