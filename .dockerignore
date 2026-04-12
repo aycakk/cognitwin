@@ -1,0 +1,17 @@
+__pycache__
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.git
+.gitignore
+*.md
+tests/
+archive/
+docs/
+infra/
+scripts/
+static/chromadb/
+logs/
+data/sprint_state.json.lock
+.env
+*.env

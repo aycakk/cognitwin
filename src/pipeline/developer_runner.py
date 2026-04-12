@@ -358,7 +358,7 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
 
     draft, limit_hit = run_redo_loop(
         draft, base_messages, vector_context, is_empty, redo_log,
-        agent_role="DeveloperAgent",
+        agent_role=AgentRole.DEVELOPER,
         query=user_text,
         redo_rules=(
             "Answer ONLY from verified developer context. "

@@ -373,12 +373,19 @@ class DeveloperOrchestrator:
             memory_context = "\n".join(footprint_signals) if footprint_signals else MEMORY_NOT_FOUND_TEXT
 
         if strategy == "direct":
+            _debug_hints = (
+                "debug", "bug", "fix", "hata", "error", "exception",
+                "traceback", "stack trace", "neden çalışmıyor", "neden calısmiyor",
+                "why is it failing", "why does it fail",
+            )
+            is_debug = any(h in request.lower() for h in _debug_hints)
             return self._generate_direct_solution(
                 request=request,
                 language=language,
                 memory_context=memory_context,
                 model=str(runtime.get("model") or self.default_model),
                 system_prompt_override=system_prompt_override,
+                is_debug=is_debug,
             )
 
         # Strategy = rules path (deterministic)
@@ -491,6 +498,7 @@ class DeveloperOrchestrator:
         memory_context: str,
         model: str,
         system_prompt_override: str = "",
+        is_debug: bool = False,
     ) -> str:
         """
         Generate a direct technical answer for the given request.
@@ -520,7 +528,7 @@ class DeveloperOrchestrator:
             and "CODEBASE CONTEXT" in memory_context
         )
 
-        if has_codebase and not system_prompt_override:
+        if has_codebase and is_debug and not system_prompt_override:
             system_prompt = (
                 "You are the CogniTwin Developer Agent performing a structured code analysis.\n"
                 "You will be given source code from the actual repository.\n"
@@ -583,7 +591,7 @@ class DeveloperOrchestrator:
 
             # When structured output was requested, try to extract the JSON block.
             # If extraction fails, fall back to raw prose — never drop the answer.
-            if has_codebase and not system_prompt_override:
+            if has_codebase and is_debug and not system_prompt_override:
                 json_str = self._extract_json_block(raw)
                 if json_str:
                     return json_str

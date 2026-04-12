@@ -1,0 +1,30 @@
+# docker-compose.override.yml — development-only overrides.
+#
+# Docker Compose merges this file automatically on top of docker-compose.yml
+# whenever you run:
+#
+#   docker compose up          ← development (uses both files)
+#
+# For production (image-only, no bind mount, no reload):
+#
+#   docker compose -f docker-compose.yml up -d
+#
+# Nothing in this file should ever reach production.
+
+services:
+  cognitwin-api:
+    # Override the production CMD to add --reload.
+    # Uvicorn watches /app/src for file changes and restarts the worker
+    # automatically — no container restart needed after VS Code edits.
+    command:
+      - python
+      - -m
+      - uvicorn
+      - src.services.api.app:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8011"
+      - --reload
+      - --reload-dir
+      - /app/src

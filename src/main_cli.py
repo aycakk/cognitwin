@@ -21,7 +21,6 @@ _project_root = os.path.dirname(_src_dir)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from src.core.schemas import AgentTask, AgentRole
 from src.services.api.pipeline import (
     CHROMA,
     VECTOR_MEM,
@@ -31,11 +30,18 @@ from src.services.api.pipeline import (
     _get_ontology_graph,
     build_ontology_context,
     evaluate_all_gates,
-    run_pipeline,
+    process_user_message,
     build_blindspot_block,
 )
 
 VALID_ROLES = list(ONTOLOGY_AGENT_ROLES.keys())
+
+# Maps CLI role names to model strings that the router recognises.
+_ROLE_TO_MODEL: dict[str, str] = {
+    "DeveloperAgent":   "cognitwin-developer",
+    "ScrumMasterAgent": "cognitwin-scrum",
+    "StudentAgent":     "llama3.2",
+}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -125,12 +131,9 @@ def ask() -> None:
             continue
 
         # ── Main pipeline ─────────────────────────────────────────────────────
-        try:
-            role = AgentRole(current_role)
-        except ValueError:
-            role = AgentRole.STUDENT
-        agent_resp = run_pipeline(AgentTask(role=role, masked_input=q))
-        response   = agent_resp.draft
+        model    = _ROLE_TO_MODEL.get(current_role, "llama3.2")
+        result   = process_user_message(user_text=q, agent_role=current_role, model=model)
+        response = result["answer"]
 
         # Gate report for /gates display (re-retrieves context for evaluation)
         vec_ctx, vec_empty = VECTOR_MEM.retrieve(q, k=VECTOR_TOP_K)

@@ -1,0 +1,44 @@
+services:
+
+  # ── CogniTwin FastAPI Backend ──────────────────────────────────────────────
+  cognitwin-api:
+    build: .
+    container_name: cognitwin-api
+    restart: unless-stopped
+    ports:
+      - "8011:8011"
+    environment:
+      # Ollama client reads this to locate the inference server
+      OLLAMA_HOST: "http://ollama:11434"
+    volumes:
+      # Source code — bind-mounted so VS Code edits are reflected immediately.
+      # In production, remove this line and rely on the baked image instead.
+      - ./src:/app/src
+      # Persist runtime state that must survive container restarts
+      - ./static/chromadb:/app/static/chromadb
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./ontologies:/app/ontologies
+    depends_on:
+      - ollama
+    networks:
+      - cognitwin-net
+
+  # ── Ollama (local LLM runtime) ─────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: cognitwin-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - cognitwin-net
+
+networks:
+  cognitwin-net:
+    driver: bridge
+
+volumes:
+  ollama_data:
