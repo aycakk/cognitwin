@@ -75,6 +75,7 @@ def run_redo_loop(
     chat_fn: Callable,
     blindspot_fn: Callable,
     session_id: Optional[str] = None,
+    gate_kwargs: dict | None = None,
 ) -> tuple[str, bool]:
     """Run the gate-verification + REDO loop shared by both pipeline paths.
 
@@ -118,7 +119,7 @@ def run_redo_loop(
     active_redo_id: Optional[str] = None
 
     for attempt in range(MAX_REDO + 1):
-        gate_report = gate_fn(draft, vector_context, is_empty, agent_role, redo_log)
+        gate_report = gate_fn(draft, vector_context, is_empty, agent_role, redo_log, **(gate_kwargs or {}))
 
         if gate_report["conjunction"]:
             if active_redo_id:

@@ -476,7 +476,7 @@ class DeveloperOrchestrator:
         solution: str,
         context: dict[str, Any] | None = None,
         ontology_constraints: list[str] | None = None,
-        **_: Any,
+        **runtime: Any,
     ) -> dict[str, Any]:
         del request
         context = context or {}
@@ -487,6 +487,9 @@ class DeveloperOrchestrator:
         strategy = str(context.get("strategy") or "auto").lower()
         missing_files = list(context.get("missing_files") or [])
 
+        # memory_context carries the injected codebase + sprint text
+        memory_context = str(runtime.get("memory_context") or "").strip()
+
         expected_header = ""
         if strategy != "direct":
             expected_header = "Yurutme Plani v1" if language == "tr" and is_execution_phase else (
@@ -495,11 +498,55 @@ class DeveloperOrchestrator:
                 )
             )
 
+        # ── Content grounding checks ──
+        # Measure how much of the solution is grounded in injected context.
+        has_codebase_context = bool(
+            memory_context
+            and memory_context != MEMORY_NOT_FOUND_TEXT
+            and "CODEBASE CONTEXT" in memory_context
+        )
+        has_sprint_context = "SPRINT CONTEXT" in memory_context if memory_context else False
+
+        # Word overlap: count meaningful terms shared between solution and context
+        # Uses regex to extract word tokens (handles punctuation correctly)
+        import re as _re
+        _stop = {"the", "a", "an", "is", "are", "was", "were", "in", "on", "at",
+                 "to", "for", "of", "and", "or", "but", "not", "with", "this",
+                 "that", "it", "be", "as", "by", "from", "has", "have", "had",
+                 "will", "would", "could", "should", "can", "may", "must",
+                 "been", "being", "about", "into", "over", "than", "then",
+                 "when", "where", "which", "while", "return", "self", "none",
+                 "true", "false", "import", "class", "print",
+                 "ve", "bir", "bu", "da", "de", "ile", "için", "olan", "var",
+                 "yok", "ise"}
+        solution_words = {
+            w.lower() for w in _re.findall(r"\b\w+\b", solution or "")
+            if len(w) >= 4 and w.lower() not in _stop
+        }
+        context_words = {
+            w.lower() for w in _re.findall(r"\b\w+\b", memory_context)
+            if len(w) >= 4 and w.lower() not in _stop
+        } if memory_context else set()
+        overlap = solution_words & context_words
+        grounding_overlap = len(overlap) >= 5
+
+        # Check for file path patterns in solution vs. context
+        _file_pat = _re.compile(
+            r'(?:src|tests|scripts|ontologies|data|infra)/[\w/]+\.(?:py|ttl|json|yaml|yml)'
+        )
+        cited_in_solution = set(_file_pat.findall(solution or ""))
+        cited_in_context = set(_file_pat.findall(memory_context)) if memory_context else set()
+        files_grounded = cited_in_solution.issubset(cited_in_context) if cited_in_solution else True
+
         checks = {
             "non_empty_solution": bool(solution and solution.strip()),
             "expected_header_present": True if not expected_header else expected_header in (solution or ""),
             "file_gate_passed": len(missing_files) == 0,
             "ontology_constraints_available": len(ontology_constraints) > 0,
+            "codebase_context_available": has_codebase_context,
+            "sprint_context_available": has_sprint_context,
+            "grounding_overlap": grounding_overlap,
+            "files_grounded": files_grounded,
         }
 
         issues: list[str] = []
@@ -509,21 +556,49 @@ class DeveloperOrchestrator:
             issues.append(f"Expected section header missing: {expected_header}")
         if not checks["file_gate_passed"]:
             issues.append("File gate is not satisfied (missing required files).")
+        if not checks["codebase_context_available"] and not checks["sprint_context_available"]:
+            issues.append("No codebase or sprint context was available — response may be ungrounded.")
+        if not checks["files_grounded"]:
+            invented = cited_in_solution - cited_in_context
+            issues.append(f"File paths cited but not in context: {', '.join(invented)}")
+        if not checks["grounding_overlap"] and checks["non_empty_solution"]:
+            issues.append("Low word overlap between solution and context — weak grounding.")
 
-        # Scoring: role-based quality signals only.
-        # footprint_signals_available and personalization_available
-        # were removed — they rewarded personal-twin behavior.
-        score = 0.35
-        if checks["non_empty_solution"]:
-            score += 0.25
-        if checks["expected_header_present"]:
-            score += 0.15
+        # ── Grounding-based confidence scoring ──
+        # Baseline is 0.0. Confidence must be EARNED through verifiable grounding.
+        score = 0.0
+
+        # Tier 1: Context availability (max 0.35)
+        if has_codebase_context:
+            score += 0.20
+        if has_sprint_context:
+            score += 0.10
         if checks["ontology_constraints_available"]:
-            score += 0.10
-        if checks["file_gate_passed"]:
-            score += 0.10
+            score += 0.05
+
+        # Tier 2: Content grounding (max 0.40)
+        if checks["files_grounded"] and cited_in_solution:
+            score += 0.20
+        if grounding_overlap:
+            score += 0.20
+
+        # Tier 3: Structural quality (max 0.15)
+        if checks["non_empty_solution"]:
+            score += 0.05
+        if checks["expected_header_present"]:
+            score += 0.05
         if not issues:
             score += 0.05
+
+        # Tier 4: Penalties
+        if not has_codebase_context and not has_sprint_context and checks["non_empty_solution"]:
+            # Non-empty response with no context = likely hallucination
+            score -= 0.30
+        if not checks["files_grounded"]:
+            score -= 0.20
+        solution_len = len((solution or "").split())
+        if solution_len > 200 and not has_codebase_context:
+            score -= 0.15
 
         confidence = max(0.0, min(0.99, round(score, 2)))
 

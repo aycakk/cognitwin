@@ -51,11 +51,21 @@ Bağlam kaynakların:
   • Sprint durumu (SPRINT CONTEXT)
   • Ontoloji kısıtları (developer_ontology.ttl)
 
-Kurallar:
-  - Yalnızca sağlanan bağlamdan yanıt ver.
-  - Bağlamda olmayan bilgiyi uydurma.
-  - PII ifşa etme.
-  - Bağlamda bulamadıysan: "Bunu hafızamda bulamadım."
+TEMEL KURALLAR (İhlal Edilemez):
+  1. Yalnızca CODEBASE CONTEXT ve SPRINT CONTEXT içinde sağlanan bilgiden yanıt ver.
+  2. Bir dosya yolundan (path) bahsediyorsan, o dosya MUTLAKA CODEBASE CONTEXT içinde olmalı.
+  3. Bir fonksiyon veya sınıf adından bahsediyorsan, o isim MUTLAKA CODEBASE CONTEXT içinde olmalı.
+  4. CODEBASE CONTEXT boşsa veya yoksa, YALNIZCA şu yanıtı ver: "Bunu hafızamda bulamadım."
+  5. Dosya yolu, sınıf adı, fonksiyon adı veya framework TAHMİN ETME — sadece bağlamda gördüklerini kullan.
+  6. Bağlamda olmayan bilgiyi UYDURMA — halüsinasyon BLOKLANDI.
+  7. PII ifşa etme.
+  8. JavaScript, React, Node.js gibi projede OLMAYAN teknolojilere referans verme.
+     Bu proje Python 3.11 + FastAPI + Ollama + ChromaDB + rdflib kullanır.
+
+Yanıt verirken:
+  - Bahsettiğin her dosya yolunu CODEBASE CONTEXT'ten doğrula.
+  - Bahsettiğin her fonksiyonu CODEBASE CONTEXT'ten doğrula.
+  - Emin olmadığın bilgiyi "tahmin" olarak işaretle veya yanıt verme.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -186,6 +196,86 @@ def _validate_debug_result(parsed: dict, project_root: Path) -> dict:
     return result
 
 
+def _validate_prose_result(draft: str, project_root: Path) -> str:
+    """
+    Validate file paths and function names mentioned in prose responses.
+
+    Extracts file-path-like patterns and backtick-fenced identifiers from
+    the LLM draft, checks them against the actual repository, and appends
+    [NOT FOUND IN REPO] tags to any invented references.
+
+    Returns the draft with validation tags injected.
+    """
+    # Extract file paths that look like project-relative paths
+    file_pattern = re.compile(
+        r'(?:src|tests|scripts|ontologies|data|infra)/[\w/]+\.(?:py|ttl|json|yaml|yml|toml|md)'
+    )
+    cited_files = file_pattern.findall(draft)
+
+    # Extract function/class names from backtick-fenced code or def/class keywords
+    ident_pattern = re.compile(
+        r'(?:`(\w{3,})`)'                       # backtick-fenced identifiers
+        r'|(?:(?:def|class)\s+(\w{3,}))'         # def/class declarations
+    )
+    cited_idents = [
+        m.group(1) or m.group(2)
+        for m in ident_pattern.finditer(draft)
+        if m.group(1) or m.group(2)
+    ]
+
+    invalid_files: list[str] = []
+    for rel_path in set(cited_files):
+        if not (project_root / rel_path).exists():
+            invalid_files.append(rel_path)
+
+    # Check identifiers against valid cited files
+    valid_files = [f for f in set(cited_files) if (project_root / f).exists()]
+    unverified_idents: list[str] = []
+    for ident in set(cited_idents):
+        # Skip common Python builtins / keywords
+        if ident in {"self", "None", "True", "False", "str", "int", "dict", "list",
+                      "set", "tuple", "bool", "float", "print", "return", "import",
+                      "from", "class", "def", "async", "await", "for", "while", "if"}:
+            continue
+        found = False
+        for rel_path in valid_files:
+            try:
+                content = (project_root / rel_path).read_text(
+                    encoding="utf-8", errors="replace"
+                )
+                if re.search(rf"\b{re.escape(ident)}\b", content):
+                    found = True
+                    break
+            except Exception:
+                pass
+        if not found and valid_files:
+            # Only flag if we have files to check against
+            unverified_idents.append(ident)
+
+    # Tag invalid file paths in the draft
+    result = draft
+    for inv_file in invalid_files:
+        result = result.replace(inv_file, f"{inv_file} [NOT FOUND IN REPO]")
+
+    # Append summary if issues found
+    if invalid_files or unverified_idents:
+        warnings = []
+        if invalid_files:
+            warnings.append(
+                f"Doğrulanamayan dosya yolları: {', '.join(invalid_files)}"
+            )
+        if unverified_idents:
+            warnings.append(
+                f"Doğrulanamayan tanımlayıcılar: {', '.join(unverified_idents)}"
+            )
+        result += (
+            "\n\n⚠ [Doğrulama Notu] Bazı referanslar repoda doğrulanamadı:\n  - "
+            + "\n  - ".join(warnings)
+        )
+
+    return result
+
+
 def _format_debug_result(v: dict) -> str:
     """
     Render a validated structured debug dict as clean, readable text.
@@ -298,19 +388,26 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
     if not draft:
         draft = "Bunu hafızamda bulamadım."
 
-    # Stage 2b — Structured debug validation
-    # If the orchestrator returned a JSON debug object, validate the cited
-    # files and functions against the actual repository before emitting.
+    # Stage 2b — Structured debug validation + prose grounding check
+    # Validates cited files/functions against the actual repository.
+    # Runs for ALL responses (not just when codebase_context is present)
+    # to catch hallucinated paths from parametric memory.
+    project_root = Path(__file__).resolve().parents[2]
     if codebase_context:
         try:
             parsed = json.loads(draft)
             if isinstance(parsed, dict) and "files_used" in parsed:
-                # developer_runner.py lives at src/pipeline/ → parents[2] is project root
-                project_root = Path(__file__).resolve().parents[2]
-                validated    = _validate_debug_result(parsed, project_root)
-                draft        = _format_debug_result(validated)
+                validated = _validate_debug_result(parsed, project_root)
+                draft     = _format_debug_result(validated)
+            else:
+                draft = _validate_prose_result(draft, project_root)
         except (json.JSONDecodeError, ValueError):
-            pass  # prose response — skip validation, continue normally
+            # Prose response — validate cited file paths and identifiers
+            draft = _validate_prose_result(draft, project_root)
+    else:
+        # No codebase context was injected — still validate any file
+        # paths the LLM may have hallucinated from parametric memory.
+        draft = _validate_prose_result(draft, project_root)
 
     # Stage 3 — Gate array + REDO loop
     # Uses the developer-specific system prompt (NOT the Student Agent prompt).
@@ -337,6 +434,7 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
         chat_fn=chat,
         blindspot_fn=build_blindspot_block,
         session_id=session_id,
+        gate_kwargs={"codebase_context": combined_context},
     )
     if limit_hit:
         return AgentResponse(

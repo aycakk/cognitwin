@@ -59,13 +59,14 @@ GATE_POLICY: dict[str, list[str]] = {
         "A1",
     ],
     "DeveloperAgent": [
-        # C2 intentionally omitted — developer context is self-contained
-        # (codebase snippets, sprint state).  Grounding against academic
-        # memory is not meaningful for this role.
-        "C3",   # ontology compliance still applies
-        "C4",   # hallucination markers
-        "C5",   # role-permission boundary
-        "A1",   # REDO cycle audit
+        # C2 (academic memory grounding) intentionally omitted.
+        # C2_DEV is the developer-specific variant: checks grounding
+        # against injected codebase + sprint context instead.
+        "C2_DEV",  # developer codebase/sprint grounding
+        "C3",      # ontology compliance still applies
+        "C4",      # hallucination markers
+        "C5",      # role-permission boundary
+        "A1",      # REDO cycle audit
     ],
     "ScrumMasterAgent": [
         # Rule-based deterministic agent — only hallucination guard needed.

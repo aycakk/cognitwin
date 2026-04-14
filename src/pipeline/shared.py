@@ -148,7 +148,11 @@ def _safe_chat(model: str, messages: list) -> dict:
     Ollama returns a ChatResponse object; orchestrator expects
     {"message": {"content": str}}.  This wrapper normalises both shapes.
     """
-    resp = chat(model=model, messages=messages)
+    resp = chat(
+        model=model,
+        messages=messages,
+        options={"temperature": 0.15, "top_p": 0.9},
+    )
     if hasattr(resp, "message"):
         return {"message": {"content": resp.message.content}}
     if isinstance(resp, dict):

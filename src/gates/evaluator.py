@@ -21,6 +21,7 @@ import re
 from src.governance.policy import GATE_POLICY, DEFAULT_GATE_POLICY
 from src.shared.patterns import PII_PATTERNS
 from src.gates.c2_grounding import check_grounding as _check_c2
+from src.gates.c2_dev_grounding import check_dev_grounding as _check_c2_dev
 from src.gates.c3_ontology_compliance import check_ontology_compliance as _check_c3
 from src.gates.c4_hallucination import check_hallucination as _check_c4
 from src.gates.c5_role_permission import check_role_permission as _check_c5
@@ -85,6 +86,40 @@ def gate_c2_memory_grounding(
         return True, f"Grounding verified ({overlap_count} shared content terms)."
     # reason == "overlap_fail"
     return False, "Draft not grounded in vector context (overlap < 2 terms). Possible hallucination."
+
+
+def gate_c2_dev_grounding(
+    draft: str,
+    codebase_context: str,
+    context_empty: bool,
+) -> tuple[bool, str]:
+    """C2_DEV — Draft must be grounded in injected codebase/sprint context.
+
+    Developer-specific variant of C2. Instead of checking against
+    ChromaDB vector memory (academic namespace), checks against the
+    injected codebase + sprint context that the developer pipeline
+    assembles from _build_codebase_context() + SprintStateStore.
+
+    Decision logic lives in src.gates.c2_dev_grounding.
+    """
+    passed, reason, overlap_count = _check_c2_dev(
+        draft,
+        codebase_context,
+        context_empty=context_empty,
+    )
+    if reason == "no_context_pass":
+        return True, "No codebase context available; BlindSpot disclosure present."
+    if reason == "no_context_fail":
+        return False, "No codebase context available but no BlindSpot disclosure — possible hallucination."
+    if reason == "blindspot":
+        return True, "Draft issued BlindSpot — acceptable when context insufficient."
+    if reason == "overlap_pass":
+        return True, f"Developer grounding verified ({overlap_count} shared content terms with codebase context)."
+    # reason == "overlap_fail"
+    return False, (
+        f"Draft not grounded in codebase context (overlap={overlap_count}, min=3). "
+        "Possible hallucination from parametric memory."
+    )
 
 
 def gate_c3_ontology_compliance(draft: str) -> tuple[bool, str]:
@@ -221,6 +256,8 @@ def evaluate_all_gates(
     is_empty: bool,
     agent_role: str,
     redo_log: list[dict],
+    *,
+    codebase_context: str = "",
 ) -> dict:
     """
     Execute the gate set defined in GATE_POLICY[agent_role] and return a
@@ -256,6 +293,9 @@ def evaluate_all_gates(
 
     if "C2" in role_gates:
         _gate_dispatch["C2"] = gate_c2_memory_grounding(draft, vector_context, is_empty)
+    if "C2_DEV" in role_gates:
+        ctx_empty = not codebase_context or not codebase_context.strip()
+        _gate_dispatch["C2_DEV"] = gate_c2_dev_grounding(draft, codebase_context, ctx_empty)
     if "C3" in role_gates:
         _gate_dispatch["C3"] = gate_c3_ontology_compliance(draft)
     if "C4" in role_gates:
