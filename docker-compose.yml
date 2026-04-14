@@ -1,6 +1,14 @@
+# ============================================================================
+# CogniTwin — Unified Docker Compose Stack
+# ============================================================================
+#
+# Default (portable):  docker compose up -d --build
+# Development:         docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+
 services:
 
-  # ── CogniTwin FastAPI Backend ──────────────────────────────────────────────
+  # ── CogniTwin FastAPI Backend ─────────────────────────────────────────────
   cognitwin-api:
     build: .
     container_name: cognitwin-api
@@ -8,23 +16,24 @@ services:
     ports:
       - "8011:8011"
     environment:
-      # Ollama client reads this to locate the inference server
       OLLAMA_HOST: "http://ollama:11434"
     volumes:
-      # Source code — bind-mounted so VS Code edits are reflected immediately.
-      # In production, remove this line and rely on the baked image instead.
-      - ./src:/app/src
-      # Persist runtime state that must survive container restarts
-      - ./static/chromadb:/app/static/chromadb
-      - ./logs:/app/logs
-      - ./data:/app/data
-      - ./ontologies:/app/ontologies
+      - cognitwin_chromadb:/app/static/chromadb
+      - cognitwin_logs:/app/logs
+      - cognitwin_data:/app/data
     depends_on:
-      - ollama
+      ollama-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8011/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     networks:
       - cognitwin-net
 
-  # ── Ollama (local LLM runtime) ─────────────────────────────────────────────
+  # ── Ollama (local LLM runtime) ───────────────────────────────────────────
   ollama:
     image: ollama/ollama:latest
     container_name: cognitwin-ollama
@@ -33,6 +42,103 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - cognitwin-net
+
+  # ── Ollama Bootstrap (one-shot model pull) ───────────────────────────────
+  ollama-bootstrap:
+    image: ollama/ollama:latest
+    container_name: cognitwin-ollama-bootstrap
+    restart: "no"
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+    entrypoint: ["sh", "-c", "ollama pull ${OLLAMA_MODEL:-llama3.2}"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - cognitwin-net
+
+  # ── LibreChat (UI) ───────────────────────────────────────────────────────
+  librechat:
+    image: ghcr.io/danny-avila/librechat:latest
+    container_name: librechat-api
+    restart: unless-stopped
+    ports:
+      - "${LIBRECHAT_PORT:-3900}:${LIBRECHAT_PORT:-3900}"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "${LIBRECHAT_PORT:-3900}"
+      DOMAIN_CLIENT: "${DOMAIN_CLIENT:-http://localhost:3900}"
+      DOMAIN_SERVER: "${DOMAIN_SERVER:-http://localhost:3900}"
+      MONGO_URI: "${MONGO_URI:-mongodb://mongodb:27017/LibreChat}"
+      MEILI_HOST: "http://meilisearch:7700"
+      MEILI_MASTER_KEY: "${MEILI_MASTER_KEY:-change-me}"
+      DEBUG_LOGGING: "${DEBUG_LOGGING:-true}"
+      DEBUG_CONSOLE: "${DEBUG_CONSOLE:-false}"
+      ALLOW_REGISTRATION: "${ALLOW_REGISTRATION:-true}"
+      NO_INDEX: "${NO_INDEX:-true}"
+      TRUST_PROXY: "${TRUST_PROXY:-1}"
+      JWT_SECRET: "${JWT_SECRET:-change-this-jwt-secret}"
+      JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:-change-this-jwt-refresh-secret}"
+    volumes:
+      - ./infra/librechat/librechat.yaml:/app/librechat.yaml:ro
+      - librechat_images:/app/client/public/images
+      - librechat_logs:/app/api/logs
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      cognitwin-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:${LIBRECHAT_PORT:-3900}/api/health').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - cognitwin-net
+
+  # ── MongoDB ──────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: librechat-mongodb
+    restart: unless-stopped
+    volumes:
+      - librechat_mongodb:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - cognitwin-net
+
+  # ── Meilisearch ──────────────────────────────────────────────────────────
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    container_name: librechat-meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: "${MEILI_MASTER_KEY:-change-me}"
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - librechat_meilisearch:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - cognitwin-net
 
@@ -42,3 +148,10 @@ networks:
 
 volumes:
   ollama_data:
+  cognitwin_chromadb:
+  cognitwin_logs:
+  cognitwin_data:
+  librechat_mongodb:
+  librechat_meilisearch:
+  librechat_images:
+  librechat_logs:

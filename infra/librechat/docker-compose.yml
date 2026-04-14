@@ -1,3 +1,6 @@
+# ⚠️  SUPERSEDED — LibreChat services are now managed by the root docker-compose.yml.
+# This file is kept for reference only. Do not use it directly.
+
 services:
   api:
     image: ghcr.io/danny-avila/librechat:latest
