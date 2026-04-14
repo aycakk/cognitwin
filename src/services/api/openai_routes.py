@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from fastapi.responses import Response, StreamingResponse
+import asyncio
 import json
 import time
 
@@ -72,10 +73,12 @@ async def chat_completions(req: ChatCompletionRequest):
     model = req.model or "llama3.2"
     chat_id = f"chatcmpl-{now}"
 
-    # 3) Stream varsa SSE formatında dön (LibreChat role parsing hatasını engeller)
+    # 3) Stream varsa SSE formatında dön
+    #    OpenAI uyumlu: role chunk → içerik chunk'ları → stop chunk → [DONE]
     if req.stream:
-        def gen():
-            first = {
+        async def gen():
+            # Chunk 1: role only (no content)
+            role_chunk = {
                 "id": chat_id,
                 "object": "chat.completion.chunk",
                 "created": now,
@@ -83,14 +86,36 @@ async def chat_completions(req: ChatCompletionRequest):
                 "choices": [
                     {
                         "index": 0,
-                        "delta": {"role": "assistant", "content": final_answer},
+                        "delta": {"role": "assistant"},
                         "finish_reason": None,
                     }
                 ],
             }
-            yield f"data: {json.dumps(first, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps(role_chunk, ensure_ascii=False)}\n\n"
+            await asyncio.sleep(0.01)
 
-            last = {
+            # Content chunks: split by words to simulate incremental streaming
+            words = final_answer.split(" ")
+            for i, word in enumerate(words):
+                token = word if i == 0 else " " + word
+                content_chunk = {
+                    "id": chat_id,
+                    "object": "chat.completion.chunk",
+                    "created": now,
+                    "model": model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"content": token},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+                yield f"data: {json.dumps(content_chunk, ensure_ascii=False)}\n\n"
+                await asyncio.sleep(0.01)
+
+            # Stop chunk
+            stop_chunk = {
                 "id": chat_id,
                 "object": "chat.completion.chunk",
                 "created": now,
@@ -99,10 +124,19 @@ async def chat_completions(req: ChatCompletionRequest):
                     {"index": 0, "delta": {}, "finish_reason": "stop"}
                 ],
             }
-            yield f"data: {json.dumps(last, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps(stop_chunk, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
 
-        return StreamingResponse(gen(), media_type="text/event-stream")
+        headers = {
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+        return StreamingResponse(
+            gen(),
+            media_type="text/event-stream",
+            headers=headers,
+        )
 
     # 4) Stream yoksa normal OpenAI chat.completion dön
     response_payload = {
