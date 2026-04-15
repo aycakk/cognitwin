@@ -25,9 +25,10 @@ from typing import Any, Optional
 
 
 class AgentRole(str, Enum):
-    STUDENT      = "StudentAgent"
-    DEVELOPER    = "DeveloperAgent"
-    SCRUM_MASTER = "ScrumMasterAgent"
+    STUDENT       = "StudentAgent"
+    DEVELOPER     = "DeveloperAgent"
+    SCRUM_MASTER  = "ScrumMasterAgent"
+    PRODUCT_OWNER = "ProductOwnerAgent"
 
     # Allow comparison with legacy plain-string role identifiers
     # e.g.  AgentRole.STUDENT == "StudentAgent"  → True

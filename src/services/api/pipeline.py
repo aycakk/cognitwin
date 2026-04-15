@@ -36,6 +36,7 @@ from src.pipeline.shared import (           # noqa: F401 (several re-exported fo
 from src.pipeline.student_runner import run_pipeline       # noqa: F401 (re-exported for main_cli)
 from src.pipeline.developer_runner import _process_developer_message
 from src.pipeline.scrum_master_runner import run_scrum_master_pipeline
+from src.pipeline.product_owner_runner import run_product_owner_pipeline
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -83,9 +84,10 @@ def process_user_message(
     Mask PII, resolve routing mode, execute the appropriate pipeline.
 
     Routing:
-      model contains 'developer'  →  DeveloperOrchestrator + C1-C8 + REDO
-      model contains 'scrum'      →  ScrumMaster rule pipeline
-      all other models             →  Student ZT4SWE pipeline (C1-C8 + REDO)
+      model contains 'product_owner' →  ProductOwner rule pipeline (backlog)
+      model contains 'developer'     →  DeveloperOrchestrator + C1-C8 + REDO
+      model contains 'scrum'         →  ScrumMaster rule pipeline
+      all other models               →  Student ZT4SWE pipeline (C1-C8 + REDO)
 
     Returns {"answer": str} for the FastAPI layer.
     """
@@ -106,6 +108,13 @@ def process_user_message(
                 },
             )
             response = _process_developer_message(task)
+        elif mode == "product_owner":
+            task = AgentTask(
+                session_id=session_id,
+                role=AgentRole.PRODUCT_OWNER,
+                masked_input=masked,
+            )
+            response = run_product_owner_pipeline(task)
         elif mode == "scrum_master":
             task = AgentTask(
                 session_id=session_id,

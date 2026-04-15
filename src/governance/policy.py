@@ -72,6 +72,10 @@ GATE_POLICY: dict[str, list[str]] = {
         # Rule-based deterministic agent — only hallucination guard needed.
         "C4",
     ],
+    "ProductOwnerAgent": [
+        # Rule-based deterministic agent — same gate profile as ScrumMaster.
+        "C4",
+    ],
 }
 
 # Default gate list for any role not explicitly listed above.

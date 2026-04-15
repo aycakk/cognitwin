@@ -198,24 +198,16 @@ from src.gates.c2_grounding import check_grounding
 
 
 class TestC2Grounding:
-    def test_exempt_always_passes(self):
-        passed, reason, count = check_grounding(
-            "anything", "ctx", vector_empty=False, exempt=True
-        )
-        assert passed is True
-        assert reason == "exempt"
-        assert count == 0
-
-    def test_exempt_overrides_empty_vector(self):
-        passed, reason, _ = check_grounding(
-            "no blindspot", "ctx", vector_empty=True, exempt=True
-        )
-        assert passed is True
-        assert reason == "exempt"
+    def test_developer_exempt_via_policy(self):
+        """Exemption is now handled by GATE_POLICY — DeveloperAgent has no C2."""
+        from src.governance.policy import GATE_POLICY
+        assert "C2" not in GATE_POLICY["DeveloperAgent"]
+        # C2_DEV is the developer-specific grounding gate
+        assert "C2_DEV" in GATE_POLICY["DeveloperAgent"]
 
     def test_empty_vector_with_blindspot_phrase_passes(self):
         passed, reason, count = check_grounding(
-            "Bunu hafızamda bulamadım.", "", vector_empty=True, exempt=False
+            "Bunu hafızamda bulamadım.", "", vector_empty=True
         )
         assert passed is True
         assert reason == "empty_pass"
@@ -223,16 +215,14 @@ class TestC2Grounding:
 
     def test_empty_vector_without_blindspot_phrase_fails(self):
         passed, reason, count = check_grounding(
-            "CS101 sınavı Ocak'ta.", "", vector_empty=True, exempt=False
-        )
+            "CS101 sınavı Ocak'ta.", "", vector_empty=True        )
         assert passed is False
         assert reason == "empty_fail"
         assert count == 0
 
     def test_non_empty_vector_blindspot_phrase_passes(self):
         passed, reason, count = check_grounding(
-            "Bunu hafızamda bulamadım.", "some context", vector_empty=False, exempt=False
-        )
+            "Bunu hafızamda bulamadım.", "some context", vector_empty=False        )
         assert passed is True
         assert reason == "blindspot"
         assert count == 0
@@ -241,8 +231,7 @@ class TestC2Grounding:
         context = "student midterm examination schedule posted"
         draft   = "midterm examination is on Monday"
         passed, reason, count = check_grounding(
-            draft, context, vector_empty=False, exempt=False
-        )
+            draft, context, vector_empty=False        )
         assert passed is True
         assert reason == "overlap_pass"
         assert count >= 2
@@ -252,8 +241,7 @@ class TestC2Grounding:
         draft   = "midterm is on Monday"
         # Only "midterm" (7 chars) is shared; "schedule"/"posted" not in draft
         passed, reason, count = check_grounding(
-            draft, context, vector_empty=False, exempt=False
-        )
+            draft, context, vector_empty=False        )
         assert passed is False
         assert reason == "overlap_fail"
         assert count == 0
@@ -263,8 +251,7 @@ class TestC2Grounding:
         context = "cat dog run fly"
         draft   = "cat dog run fly"
         passed, reason, _ = check_grounding(
-            draft, context, vector_empty=False, exempt=False
-        )
+            draft, context, vector_empty=False        )
         assert passed is False
         assert reason == "overlap_fail"
 
@@ -273,11 +260,80 @@ class TestC2Grounding:
         context = "[STUDENT_ID_MASKED] enrolled in midterm examination schedule"
         draft   = "STUDENT_ID_MASKED midterm examination schedule reviewed"
         passed, reason, count = check_grounding(
-            draft, context, vector_empty=False, exempt=False
-        )
+            draft, context, vector_empty=False        )
         # "midterm", "examination", "schedule" are shared (≥3) → overlap_pass
         assert passed is True
         assert reason == "overlap_pass"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  C2_DEV — check_dev_grounding (developer codebase context)
+# ─────────────────────────────────────────────────────────────────────────────
+
+from src.gates.c2_dev_grounding import check_dev_grounding
+
+
+class TestC2DevGrounding:
+    _CONTEXT = (
+        "=== CODEBASE CONTEXT ===\n"
+        "def run_pipeline(query, model, messages):\n"
+        "    vector_context = VECTOR_MEM.retrieve(query)\n"
+        "    draft = generate_response(query, vector_context)\n"
+        "    return evaluate_gates(draft)\n"
+        "=== END CODEBASE CONTEXT ==="
+    )
+
+    def test_no_context_with_blindspot_passes(self):
+        passed, reason, count = check_dev_grounding(
+            "Bunu hafızamda bulamadım.", "", context_empty=True
+        )
+        assert passed is True
+        assert reason == "no_context_pass"
+        assert count == 0
+
+    def test_no_context_without_blindspot_fails(self):
+        passed, reason, count = check_dev_grounding(
+            "The pipeline uses a 3-stage architecture.", "", context_empty=True
+        )
+        assert passed is False
+        assert reason == "no_context_fail"
+
+    def test_blindspot_in_non_empty_context_passes(self):
+        passed, reason, count = check_dev_grounding(
+            "Bunu hafızamda bulamadım.", self._CONTEXT, context_empty=False
+        )
+        assert passed is True
+        assert reason == "blindspot"
+
+    def test_overlap_pass_with_grounded_content(self):
+        draft = (
+            "The run_pipeline function retrieves vector_context using VECTOR_MEM, "
+            "then calls generate_response with the query and evaluates gates on the draft."
+        )
+        passed, reason, count = check_dev_grounding(
+            draft, self._CONTEXT, context_empty=False
+        )
+        assert passed is True
+        assert reason == "overlap_pass"
+        assert count >= 3
+
+    def test_overlap_fail_with_ungrounded_content(self):
+        draft = "React components should use useState hooks for state management."
+        passed, reason, count = check_dev_grounding(
+            draft, self._CONTEXT, context_empty=False
+        )
+        assert passed is False
+        assert reason == "overlap_fail"
+
+    def test_policy_assigns_c2_dev_to_developer(self):
+        from src.governance.policy import GATE_POLICY
+        assert "C2_DEV" in GATE_POLICY["DeveloperAgent"]
+        assert "C2" not in GATE_POLICY["DeveloperAgent"]
+
+    def test_policy_does_not_assign_c2_dev_to_student(self):
+        from src.governance.policy import GATE_POLICY
+        assert "C2_DEV" not in GATE_POLICY["StudentAgent"]
+        assert "C2" in GATE_POLICY["StudentAgent"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -342,3 +398,35 @@ class TestC3OntologyCompliance:
         )
         assert passed is True
         assert reason == "pass"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  C4 — English hallucination markers (KNOWN GAP)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestC4EnglishHallucinationGap:
+    """Documents the known gap: C4 only detects Turkish hedging phrases.
+
+    All tests below assert that C4 PASSES on English hallucination markers.
+    This is the INCORRECT behavior — these phrases SHOULD be caught.
+    These tests exist as regression anchors: when the P0 fix adds English
+    markers, these assertions should be flipped to ``passed is False``.
+    """
+
+    @pytest.mark.parametrize("phrase", [
+        "I think the answer is 42.",
+        "It probably happened last week.",
+        "Maybe the deadline was extended.",
+        "I believe this course is mandatory.",
+        "Perhaps we should check again.",
+        "It seems like the server is down.",
+        "As far as I know, this is correct.",
+    ])
+    def test_english_hedging_not_caught(self, phrase):
+        passed, label, matched = check_hallucination(phrase)
+        assert passed is True, (
+            f"KNOWN GAP: English phrase '{phrase}' is not caught by C4. "
+            "Flip this assertion when English markers are added."
+        )
+        assert label is None

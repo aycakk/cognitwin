@@ -13,12 +13,14 @@ data/sprint_state.json.  All consumers go through this interface.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
+import re
 import threading
 import warnings
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Generator
 
@@ -53,6 +55,7 @@ DEFAULT_SPRINT_STATE: dict[str, Any] = {
         "velocity": 0,
     },
     "tasks": [],
+    "backlog": [],
     "team": [
         {"id": "developer-default", "role": "Developer", "capacity": 8},
     ],
@@ -92,12 +95,12 @@ class SprintStateStore:
     def load(self) -> dict[str, Any]:
         """Load sprint state from disk. Creates default if missing."""
         if not self._path.exists():
-            self.save(DEFAULT_SPRINT_STATE)
-            return dict(DEFAULT_SPRINT_STATE)
+            self.save(copy.deepcopy(DEFAULT_SPRINT_STATE))
+            return copy.deepcopy(DEFAULT_SPRINT_STATE)
         try:
             return json.loads(self._path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            return dict(DEFAULT_SPRINT_STATE)
+            return copy.deepcopy(DEFAULT_SPRINT_STATE)
 
     def save(self, state: dict[str, Any]) -> None:
         """Write sprint state to disk."""
@@ -170,4 +173,178 @@ class SprintStateStore:
             lines.append("  (none)")
 
         lines.append("=== END SPRINT CONTEXT ===")
+        return "\n".join(lines)
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Backlog management (used by ProductOwnerAgent)
+    # ─────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _next_story_id(state: dict[str, Any]) -> str:
+        """Generate next S-NNN story ID from existing backlog items."""
+        backlog = state.get("backlog", [])
+        nums = [
+            int(s["story_id"].split("-")[1])
+            for s in backlog
+            if re.match(r"S-\d+", s.get("story_id", ""))
+        ] or [0]
+        return f"S-{(max(nums) + 1):03d}"
+
+    def add_story(
+        self,
+        title: str,
+        description: str = "",
+        priority: str = "medium",
+        acceptance_criteria: list[str] | None = None,
+        source_request: str = "",
+    ) -> str:
+        """Append a new story to the backlog. Returns the story_id."""
+        with self.state_lock():
+            state = self.load()
+            story_id = self._next_story_id(state)
+            story: dict[str, Any] = {
+                "story_id":            story_id,
+                "title":               title[:120],
+                "description":         description[:500],
+                "priority":            priority if priority in ("high", "medium", "low") else "medium",
+                "acceptance_criteria": acceptance_criteria or [],
+                "source_request":      source_request[:200],
+                "status":              "draft",
+                "created_at":          datetime.now().isoformat(timespec="seconds"),
+                "updated_at":          None,
+            }
+            backlog = state.get("backlog", [])
+            backlog.append(story)
+            state["backlog"] = backlog
+            self.save(state)
+        return story_id
+
+    def get_story(self, story_id: str) -> dict | None:
+        """Return a single backlog story by ID, or None."""
+        with self.state_lock():
+            state = self.load()
+        for s in state.get("backlog", []):
+            if s.get("story_id") == story_id:
+                return s
+        return None
+
+    def get_backlog(self) -> list[dict]:
+        """Return all backlog items."""
+        with self.state_lock():
+            state = self.load()
+        return state.get("backlog", [])
+
+    def update_story(self, sid: str, **fields: Any) -> bool:
+        """Update mutable fields on a backlog story. Returns True if found.
+
+        Parameters
+        ----------
+        sid : str
+            The story ID to update (e.g. "S-001").
+        **fields
+            Allowed keys: title, description, priority, acceptance_criteria, status.
+            Other keys are silently ignored.
+        """
+        allowed = {"title", "description", "priority", "acceptance_criteria", "status"}
+        with self.state_lock():
+            state = self.load()
+            for s in state.get("backlog", []):
+                if s.get("story_id") == sid:
+                    for k, v in fields.items():
+                        if k in allowed:
+                            s[k] = v
+                    s["updated_at"] = datetime.now().isoformat(timespec="seconds")
+                    self.save(state)
+                    return True
+        return False
+
+    def accept_story(self, sid: str) -> bool:
+        """Mark a story as accepted by the Product Owner."""
+        return self.update_story(sid, status="accepted")
+
+    def reject_story(self, sid: str, reason: str = "") -> bool:
+        """Mark a story as rejected by the Product Owner."""
+        with self.state_lock():
+            state = self.load()
+            for s in state.get("backlog", []):
+                if s.get("story_id") == sid:
+                    s["status"] = "rejected"
+                    s["rejection_reason"] = reason[:200]
+                    s["updated_at"] = datetime.now().isoformat(timespec="seconds")
+                    self.save(state)
+                    return True
+        return False
+
+    def promote_to_sprint(self, story_id: str) -> str | None:
+        """Move a backlog story into the sprint tasks array.
+
+        Sets story status to 'in_sprint' and creates a corresponding task.
+        Returns the new task ID, or None if the story was not found.
+        Only ScrumMasterAgent should call this method.
+        """
+        with self.state_lock():
+            state = self.load()
+            story = None
+            for s in state.get("backlog", []):
+                if s.get("story_id") == story_id:
+                    story = s
+                    break
+            if story is None:
+                return None
+
+            story["status"] = "in_sprint"
+            story["updated_at"] = datetime.now().isoformat(timespec="seconds")
+
+            # Generate next T-NNN task ID
+            tasks = state.get("tasks", [])
+            nums = [
+                int(t["id"].split("-")[1])
+                for t in tasks
+                if re.match(r"T-\d+", t.get("id", ""))
+            ] or [0]
+            new_task_id = f"T-{(max(nums) + 1):03d}"
+
+            new_task: dict[str, Any] = {
+                "id":                  new_task_id,
+                "title":               story.get("title", ""),
+                "description":         story.get("description", ""),
+                "type":                "story",
+                "status":              "todo",
+                "assignee":            None,
+                "priority":            story.get("priority", "medium"),
+                "story_points":        0,
+                "blocker":             None,
+                "acceptance_criteria": story.get("acceptance_criteria", []),
+                "source_story_id":     story_id,
+                "po_status":           "pending_review",
+                "created_at":          datetime.now().isoformat(timespec="seconds"),
+            }
+            tasks.append(new_task)
+            state["tasks"] = tasks
+            self.save(state)
+        return new_task_id
+
+    def read_backlog_context_block(self) -> str:
+        """Build a formatted backlog context block for LLM injection."""
+        with self.state_lock():
+            state = self.load()
+        backlog = state.get("backlog", [])
+
+        lines = ["=== BACKLOG CONTEXT ==="]
+
+        active = [s for s in backlog if s.get("status") not in ("accepted", "rejected")]
+        lines.append("Active Stories:")
+        if active:
+            for s in active:
+                criteria_count = len(s.get("acceptance_criteria", []))
+                lines.append(
+                    f"  [{s.get('story_id', '?')}] {s.get('title', '-')}"
+                    f" | priority={s.get('priority', '?')}"
+                    f" | status={s.get('status', '?')}"
+                    f" | criteria={criteria_count}"
+                )
+        else:
+            lines.append("  (none)")
+
+        lines.append("=== END BACKLOG CONTEXT ===")
         return "\n".join(lines)

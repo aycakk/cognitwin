@@ -40,6 +40,11 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"\breview\b|sprint\s+inceleme|demo\b|göster|teslim\s+et", re.I)),
     ("delegate",      re.compile(
         r"delegasyon|deleg[ae]|kim\s+yap|kime\s+ver|kim\s+üstlen|distribute|dağıt", re.I)),
+    # promote_story must precede add_task — both match "sprint'e ekle" but
+    # promote_story requires an S-NNN story ID prefix.
+    ("promote_story", re.compile(
+        r"S-\d+.*(?:sprint'?e|sprinte|sprint\s+ekle|promote|terfi|sprint'?e\s+al)",
+        re.I)),
     ("add_task",      re.compile(
         r"görev\s+ekle|yeni\s+görev|backlog.?a\s+ekle|sprint.?e\s+ekle|add\s+task", re.I)),
     ("update_task",   re.compile(
@@ -104,6 +109,7 @@ class ScrumMasterAgent:
                 "add_task":        lambda: self._handle_add_task(query, state),
                 "update_task":     lambda: self._handle_update_task(query, state),
                 "set_goal":        lambda: self._handle_set_goal(query, state),
+                "promote_story":   lambda: self._handle_promote_story(query, state),
                 "sprint_analysis": lambda: self._handle_sprint_analysis(query, state),
             }
             result = handlers.get(intent, lambda: self._handle_general(state))()
@@ -697,6 +703,33 @@ class ScrumMasterAgent:
 
         return "\n".join(lines)
 
+    def _handle_promote_story(self, query: str, state: dict) -> str:
+        """Promote a backlog story into the sprint as a task.
+
+        Looks for an S-NNN story ID in the query, then delegates to
+        SprintStateStore.promote_to_sprint() which moves the story into
+        the tasks array.  SM is the sprint write owner — only SM promotes.
+        """
+        story_match = re.search(r"\b(S-\d+)\b", query, re.I)
+        if not story_match:
+            return (
+                "Hikaye terfi ettirmek için hikaye ID'si gerekli (örn. S-001).\n"
+                "Kullanım: S-001 sprint'e ekle"
+            )
+        story_id = story_match.group(1).upper()
+
+        task_id = self._store.promote_to_sprint(story_id)
+        if task_id is None:
+            return f"Hikaye bulunamadı: {story_id}"
+
+        return (
+            f"Hikaye sprint'e eklendi\n"
+            f"  Hikaye : {story_id}\n"
+            f"  Görev  : {task_id}\n"
+            f"  Durum  : todo\n"
+            f"  Not: Atamak için -> '{task_id} developer-default üzerine ata'"
+        )
+
     def _handle_general(self, state: dict) -> str:
         """Fallback: return sprint summary and usage hints."""
         sprint  = state.get("sprint", {})
@@ -720,6 +753,7 @@ class ScrumMasterAgent:
             "  • Görev ekle: <başlık>",
             "  • T-001 durumunu done olarak güncelle",
             "  • Sprint hedefi: <hedef metni>",
+            "  • S-001 sprint'e ekle",
             "  • Görevi kime delegasyonu yapmalıyım?",
         ])
 

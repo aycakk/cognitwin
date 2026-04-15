@@ -27,9 +27,11 @@ UnknownModelError = UnknownRoleError
 # ---------------------------------------------------------------------------
 _ROUTING_TABLE: list[tuple[str, str, str]] = [
     # (substring_to_match, mode, strategy)
-    ("developer",   "developer",   "auto"),
-    ("scrum",       "scrum_master", "rule"),
-    ("student",     "student",     "llm"),
+    # "product_owner" must precede "scrum" to prevent false substring matches.
+    ("product_owner", "product_owner", "rule"),
+    ("developer",     "developer",     "auto"),
+    ("scrum",         "scrum_master",  "rule"),
+    ("student",       "student",       "llm"),
 ]
 
 # Models that are explicitly recognised as valid student-path models
@@ -52,8 +54,8 @@ def resolve_mode(model: str) -> tuple[str, str]:
     """
     Map the LibreChat model name to (mode, strategy).
 
-    mode     : 'student' | 'developer' | 'scrum_master'
-    strategy : 'auto' (developer) | 'llm' (student) | 'rule' (scrum_master)
+    mode     : 'student' | 'developer' | 'scrum_master' | 'product_owner'
+    strategy : 'auto' (developer) | 'llm' (student) | 'rule' (scrum_master, product_owner)
 
     Raises UnknownModelError if the name matches nothing in the routing
     table AND is not a known base model.  The caller decides how to surface
@@ -64,8 +66,11 @@ def resolve_mode(model: str) -> tuple[str, str]:
     model_lower = (model or "").strip().lower()
 
     # 1. Check explicit routing tokens
+    #    Normalise hyphens to underscores so that both
+    #    "cognitwin-product-owner" and "product_owner" match the same entry.
+    model_normalised = model_lower.replace("-", "_")
     for token, mode, strategy in _ROUTING_TABLE:
-        if token in model_lower:
+        if token in model_normalised:
             logger.info("router: model=%r → mode=%s strategy=%s", model, mode, strategy)
             return mode, strategy
 
@@ -88,6 +93,6 @@ def resolve_mode(model: str) -> tuple[str, str]:
     logger.error("router: unrecognised model=%r — no route found", model)
     raise UnknownModelError(
         f"Model {model!r} does not match any known agent. "
-        "Use a model name containing 'developer', 'scrum', or 'student', "
+        "Use a model name containing 'product_owner', 'developer', 'scrum', or 'student', "
         "or a recognised base model (llama3.2, mistral, …)."
     )

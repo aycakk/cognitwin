@@ -35,4 +35,8 @@ ONTOLOGY_AGENT_ROLES: dict[str, set[str]] = {
     "ScrumMasterAgent":      {"manage_sprint", "read_team_progress",
                               "assign_tasks", "resolve_blockers",
                               "facilitate_ceremonies"},
+    "ProductOwnerAgent":     {"manage_backlog", "create_stories",
+                              "define_acceptance_criteria",
+                              "prioritize_backlog", "accept_reject_stories",
+                              "read_sprint_status"},
 }
