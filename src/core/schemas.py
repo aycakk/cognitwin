@@ -29,6 +29,7 @@ class AgentRole(str, Enum):
     DEVELOPER     = "DeveloperAgent"
     SCRUM_MASTER  = "ScrumMasterAgent"
     PRODUCT_OWNER = "ProductOwnerAgent"
+    COMPOSER      = "ComposerAgent"
 
     # Allow comparison with legacy plain-string role identifiers
     # e.g.  AgentRole.STUDENT == "StudentAgent"  → True
