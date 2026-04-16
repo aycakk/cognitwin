@@ -99,7 +99,7 @@ services:
       cognitwin-api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:${LIBRECHAT_PORT:-3900}/api/health').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3900/health"]
       interval: 15s
       timeout: 5s
       retries: 5

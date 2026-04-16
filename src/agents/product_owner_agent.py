@@ -51,6 +51,13 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("reject_story", re.compile(
         r"reddet|reject\b|geri\s+çevir",
         re.I)),
+    # review_completed: PO wants to see tasks the Developer finished
+    ("review_completed", re.compile(
+        r"tamamlanan.*incele|incele.*tamamlanan|inceleme\s+bekleyen"
+        r"|ready.{0,10}review|review.{0,10}complet"
+        r"|geliştirici.*bitirdi|developer.*(?:tamamladı|bitti|done)"
+        r"|kabul\s+bekleyen\s+görev|hangi\s+görev.*tamamlandı",
+        re.I)),
     # backlog_status stays last — open-ended reasoning fallthrough
     ("backlog_status", re.compile(
         r"backlog\s+durum|backlog\s+status|hikaye\s+durum|backlog\s+özet"
@@ -90,13 +97,14 @@ class ProductOwnerAgent:
         with self._store.state_lock():
             state = self._store.load()
             handlers: dict[str, Any] = {
-                "create_story":   lambda: self._handle_create_story(query, state),
-                "list_backlog":   lambda: self._handle_list_backlog(state),
-                "prioritize":     lambda: self._handle_prioritize(query, state),
+                "create_story":    lambda: self._handle_create_story(query, state),
+                "list_backlog":    lambda: self._handle_list_backlog(state),
+                "prioritize":      lambda: self._handle_prioritize(query, state),
                 "define_criteria": lambda: self._handle_define_criteria(query, state),
-                "accept_story":   lambda: self._handle_accept(query, state),
-                "reject_story":   lambda: self._handle_reject(query, state),
-                "backlog_status": lambda: self._handle_backlog_status(state),
+                "accept_story":    lambda: self._handle_accept(query, state),
+                "reject_story":    lambda: self._handle_reject(query, state),
+                "backlog_status":  lambda: self._handle_backlog_status(state),
+                "review_completed": lambda: self._handle_review_completed(state),
             }
             result = handlers.get(intent, lambda: self._handle_unknown(state))()
 
@@ -295,6 +303,44 @@ class ProductOwnerAgent:
 
         return "\n".join(lines)
 
+    def _handle_review_completed(self, state: dict) -> str:
+        """Show sprint tasks that the Developer completed and are awaiting PO review.
+
+        Filters tasks[] for po_status == 'ready_for_review'.  These are tasks
+        that originated from a backlog story (have source_story_id) and were
+        marked done by the Developer via complete_task().
+        """
+        tasks = [
+            t for t in state.get("tasks", [])
+            if t.get("po_status") == "ready_for_review"
+        ]
+        if not tasks:
+            return (
+                "İnceleme bekleyen tamamlanmış görev yok.\n"
+                "Geliştirici henüz hikayeye bağlı bir görevi tamamlamadı."
+            )
+        lines = [f"İnceleme Bekleyen Görevler ({len(tasks)}):"]
+        for t in tasks:
+            lines.append(
+                f"\n  [{t['id']}] {t.get('title', '-')}"
+                f"  | hikaye: {t.get('source_story_id', '-')}"
+                f"  | öncelik: {t.get('priority', '?')}"
+            )
+            if t.get("result_summary"):
+                lines.append(f"    Geliştirici özeti : {t['result_summary'][:120]}")
+            if t.get("acceptance_criteria"):
+                lines.append(
+                    f"    Kabul kriterleri  : "
+                    + " | ".join(t["acceptance_criteria"][:3])
+                )
+            story_id = t.get("source_story_id", "")
+            if story_id:
+                lines.append(
+                    f"    Kabul için        : '{story_id} kabul et'\n"
+                    f"    Red için          : '{story_id} reddet [sebep]'"
+                )
+        return "\n".join(lines)
+
     def _handle_unknown(self, state: dict) -> str:
         """Fallback for unrecognized queries — show usage help."""
         return (
@@ -305,5 +351,6 @@ class ProductOwnerAgent:
             "  • S-001 kabul kriterleri: k1, k2    — Kabul kriterleri tanımla\n"
             "  • S-001 kabul et                    — Hikayeyi kabul et\n"
             "  • S-001 reddet [sebep]              — Hikayeyi reddet\n"
-            "  • backlog durumu                    — Backlog özeti"
+            "  • backlog durumu                    — Backlog özeti\n"
+            "  • tamamlanan görevleri incele       — Geliştirici bitirdi, kabul bekliyor"
         )

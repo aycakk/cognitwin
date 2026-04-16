@@ -718,7 +718,7 @@ class ScrumMasterAgent:
             )
         story_id = story_match.group(1).upper()
 
-        task_id = self._store.promote_to_sprint(story_id)
+        task_id = self._store.promote_story_to_sprint_task(story_id)
         if task_id is None:
             return f"Hikaye bulunamadı: {story_id}"
 
