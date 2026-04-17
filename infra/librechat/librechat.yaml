@@ -28,3 +28,12 @@ endpoints:
           - "cognitwin-scrum"
         fetch: false
       modelDisplayLabel: "CogniTwin Scrum Master"
+
+    - name: "CogniTwin Composer"
+      apiKey: "cognitwin"
+      baseURL: "http://cognitwin-api:8011/v1/"
+      models:
+        default:
+          - "cognitwin-composer"
+        fetch: false
+      modelDisplayLabel: "CogniTwin Composer"
