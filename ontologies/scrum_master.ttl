@@ -1,0 +1,321 @@
+@prefix sm:    <http://cognitwin.org/scrum_master#> .
+@prefix agile: <http://cognitwin.org/agile#> .
+@prefix upper: <http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@base <http://cognitwin.org/scrum_master#> .
+
+<http://cognitwin.org/scrum_master> rdf:type owl:Ontology ;
+    owl:imports <http://cognitwin.org/agile> ;
+    rdfs:comment "CogniTwin Scrum Master Ontology v1.0 — Scrum Master rolüne özgü sorumluluklar, sprint sağlığı sinyalleri, risk tipleri ve süreç iyileştirme aksiyonları. agile.ttl üzerine inşa edilmiştir." .
+
+
+#################################################################
+#    Object Properties
+#################################################################
+
+###  sm:hasSprintHealth — Sprint'in Scrum Master değerlendirmesine göre sağlık durumu
+sm:hasSprintHealth rdf:type owl:ObjectProperty ;
+                   rdfs:subPropertyOf owl:topObjectProperty ;
+                   rdfs:domain agile:Sprint ;
+                   rdfs:range sm:SprintHealthStatus ;
+                   rdfs:comment "Scrum Master tarafından belirlenen sprint sağlık durumu." .
+
+###  sm:impedimentBelongsTo — Bir engelin sınıflandırıldığı kategori
+sm:impedimentBelongsTo rdf:type owl:ObjectProperty ;
+                       rdfs:subPropertyOf owl:topObjectProperty ;
+                       rdfs:domain agile:Blocker ;
+                       rdfs:range sm:ImpedimentCategory ;
+                       rdfs:comment "Engeli Scrum Master'ın sınıflandırdığı ImpedimentCategory." .
+
+###  sm:signalsTrigger — Risk sinyalinin önerdiği SM aksiyonu
+sm:signalsTrigger rdf:type owl:ObjectProperty ;
+                  rdfs:subPropertyOf owl:topObjectProperty ;
+                  rdfs:domain sm:RiskSignal ;
+                  rdfs:range sm:RemediationAction ;
+                  rdfs:comment "Risk sinyalinin tetiklediği Scrum Master remediasyon aksiyonu." .
+
+###  sm:requiresAttentionFrom — Risk sinyalinin ilgilenilmesi gereken rol
+sm:requiresAttentionFrom rdf:type owl:ObjectProperty ;
+                         rdfs:subPropertyOf owl:topObjectProperty ;
+                         rdfs:domain sm:RiskSignal ;
+                         rdfs:range agile:TeamMember ;
+                         rdfs:comment "Risk sinyalini çözmekten sorumlu takım üyesi rolü." .
+
+
+#################################################################
+#    Data Properties
+#################################################################
+
+###  Sprint health durumu özellikleri
+sm:healthLabel rdf:type owl:DatatypeProperty ;
+               rdfs:subPropertyOf owl:topDataProperty ;
+               rdfs:domain sm:SprintHealthStatus ;
+               rdfs:range xsd:string ;
+               rdfs:comment "Sprint sağlık durumunun makine-okunabilir etiketi: healthy | at_risk | critical." .
+
+sm:healthDescription rdf:type owl:DatatypeProperty ;
+                     rdfs:subPropertyOf owl:topDataProperty ;
+                     rdfs:domain sm:SprintHealthStatus ;
+                     rdfs:range xsd:string ;
+                     rdfs:comment "Sprint sağlık durumunun insan-okunabilir açıklaması." .
+
+sm:healthThreshold rdf:type owl:DatatypeProperty ;
+                   rdfs:subPropertyOf owl:topDataProperty ;
+                   rdfs:domain sm:SprintHealthStatus ;
+                   rdfs:range xsd:string ;
+                   rdfs:comment "Bu sağlık durumunu tetikleyen nicel koşullar." .
+
+###  Risk signal özellikleri
+sm:riskLabel rdf:type owl:DatatypeProperty ;
+             rdfs:subPropertyOf owl:topDataProperty ;
+             rdfs:domain sm:RiskSignal ;
+             rdfs:range xsd:string ;
+             rdfs:comment "Risk sinyalinin kısa makine-okunabilir etiketi." .
+
+sm:severityLevel rdf:type owl:DatatypeProperty ;
+                 rdfs:subPropertyOf owl:topDataProperty ;
+                 rdfs:domain sm:RiskSignal ;
+                 rdfs:range xsd:integer ;
+                 rdfs:comment "Risk şiddeti: 3=Kritik, 2=Orta, 1=Düşük." .
+
+sm:riskDescription rdf:type owl:DatatypeProperty ;
+                   rdfs:subPropertyOf owl:topDataProperty ;
+                   rdfs:domain sm:RiskSignal ;
+                   rdfs:range xsd:string ;
+                   rdfs:comment "Risk sinyalinin Scrum çerçevesindeki tam açıklaması ve sprint üzerindeki etkisi." .
+
+sm:remediationHint rdf:type owl:DatatypeProperty ;
+                   rdfs:subPropertyOf owl:topDataProperty ;
+                   rdfs:domain sm:RiskSignal ;
+                   rdfs:range xsd:string ;
+                   rdfs:comment "Scrum Master'ın bu riski azaltmak için uygulayabileceği somut aksiyon ipucu." .
+
+###  Remediation action özellikleri
+sm:actionLabel rdf:type owl:DatatypeProperty ;
+               rdfs:subPropertyOf owl:topDataProperty ;
+               rdfs:domain sm:RemediationAction ;
+               rdfs:range xsd:string ;
+               rdfs:comment "Aksiyonun kısa etiketi." .
+
+sm:actionDescription rdf:type owl:DatatypeProperty ;
+                     rdfs:subPropertyOf owl:topDataProperty ;
+                     rdfs:domain sm:RemediationAction ;
+                     rdfs:range xsd:string ;
+                     rdfs:comment "Aksiyonun nasıl uygulanacağını açıklayan rehber metin." .
+
+
+#################################################################
+#    Classes
+#################################################################
+
+###  sm:SprintHealthStatus — Scrum Master'ın sprint için belirlediği sağlık durumu
+sm:SprintHealthStatus rdf:type owl:Class ;
+                      rdfs:comment "Scrum Master perspektifinden sprint'in genel sağlık durumunu modelleyen sınıf. Üç bireysel değer: Healthy, AtRisk, Critical." .
+
+###  sm:ImpedimentCategory — Engellerin sınıflandırıldığı kategoriler
+sm:ImpedimentCategory rdf:type owl:Class ;
+                      rdfs:comment "Sprint engellerini nedensel kaynağına göre sınıflandıran kategori. Doğru kategori, doğru çözüm yolunu belirler." .
+
+###  sm:RiskSignal — Sprint içinde izlenmesi gereken risk sinyali
+sm:RiskSignal rdf:type owl:Class ;
+              rdfs:comment "Scrum Master'ın izlemesi ve müdahale etmesi gereken sprint risk deseni. severityLevel ile önceliklendirilir (3=Kritik, 2=Orta, 1=Düşük)." .
+
+###  sm:WorkloadRisk — İş yükü ve kapasite kaynaklı risk (RiskSignal alt sınıfı)
+sm:WorkloadRisk rdf:type owl:Class ;
+                rdfs:subClassOf sm:RiskSignal ;
+                rdfs:comment "Takım kapasitesi dengesizliği veya iş yükü yığılmasından kaynaklanan risk sinyali tipi." .
+
+###  sm:DeliveryRisk — Sprint teslim hedefini tehdit eden risk (RiskSignal alt sınıfı)
+sm:DeliveryRisk rdf:type owl:Class ;
+                rdfs:subClassOf sm:RiskSignal ;
+                rdfs:comment "Sprint sonunda hedeflenen teslimi tehdit eden risk sinyali tipi." .
+
+###  sm:ProcessIssue — Scrum sürecindeki antipattern (RiskSignal alt sınıfı)
+sm:ProcessIssue rdf:type owl:Class ;
+                rdfs:subClassOf sm:RiskSignal ;
+                rdfs:comment "WIP limit aşımı, atanmamış görevler gibi Scrum çerçevesi ihlallerini modelleyen risk tipi." .
+
+###  sm:RemediationAction — Scrum Master'ın risk sinyaline karşı uygulayabileceği aksiyon
+sm:RemediationAction rdf:type owl:Class ;
+                     rdfs:comment "Bir risk sinyaline karşı Scrum Master tarafından uygulanabilecek aksiyon tipi. signalsTrigger property'si ile risk sinyallerine bağlıdır." .
+
+
+#################################################################
+#    Individuals — SprintHealthStatus
+#################################################################
+
+sm:HealthStatusHealthy rdf:type sm:SprintHealthStatus ;
+    sm:healthLabel "healthy" ;
+    sm:healthDescription "Sprint sağlıklı seyrediyor. Engellenmiş görev yok, WIP limiti aşılmamış, yüksek öncelikli görevler atanmış ve ilerleme tatmin edici." ;
+    sm:healthThreshold "blocked=0 AND wip_ratio<=1.0 AND unassigned_high_priority=0 AND completion_pct>=30" ;
+    rdfs:comment "Scrum Master rutin günlük takip yapabilir; acil müdahale gerektirmiyor." .
+
+sm:HealthStatusAtRisk rdf:type sm:SprintHealthStatus ;
+    sm:healthLabel "at_risk" ;
+    sm:healthDescription "Sprint risk altında. 1 engellenmiş görev, WIP limit aşımı veya yüksek öncelikli atanmamış görev var. Günlük yakın takip gerekiyor." ;
+    sm:healthThreshold "blocked=1 OR wip_exceeded=true OR high_priority_unassigned>0" ;
+    rdfs:comment "Scrum Master proaktif müdahale etmeli, engeli standup gündeminin başına almalı." .
+
+sm:HealthStatusCritical rdf:type sm:SprintHealthStatus ;
+    sm:healthLabel "critical" ;
+    sm:healthDescription "Sprint kritik durumda. 2 veya daha fazla engellenmiş görev ya da teslim baskısı yüksek (<%30 tamamlanmış ve engel mevcut). Acil müdahale gerekli." ;
+    sm:healthThreshold "blocked>=2 OR (completion_pct<30 AND blocked>=1)" ;
+    rdfs:comment "Scrum Master acil eskalasyon yapmalı; gerekirse PO ile sprint kapsamını daraltmayı görüşmeli." .
+
+
+#################################################################
+#    Individuals — ImpedimentCategory
+#################################################################
+
+sm:ImpedimentTechnical rdf:type sm:ImpedimentCategory ;
+    rdfs:label "Teknik Engel" ;
+    rdfs:comment "Kod kalitesi sorunu, bağımlılık çatışması, altyapı arızası, test ortamı hatası gibi teknik nedenli engeller. Çözüm: Pair programming, teknik borç sprint'i, altyapı düzeltmesi." .
+
+sm:ImpedimentOrganizational rdf:type sm:ImpedimentCategory ;
+    rdfs:label "Organizasyonel Engel" ;
+    rdfs:comment "Onay bekleme, bilgi eksikliği, takım içi iletişim boşluğu veya bağımlı takım gecikmesi gibi insan/süreç kaynaklı engeller. Çözüm: Karar sahibiyle eskalasyon, retrospektif aksiyon maddesi." .
+
+sm:ImpedimentExternal rdf:type sm:ImpedimentCategory ;
+    rdfs:label "Dış Bağımlılık Engeli" ;
+    rdfs:comment "3. taraf API gecikmesi, harici servis kesintisi veya müşteri/paydaş geri bildirimi bekleme gibi dış kaynaklı engeller. Çözüm: Bağımlılığı izole et, alternatif görev başlat." .
+
+sm:ImpedimentProcess rdf:type sm:ImpedimentCategory ;
+    rdfs:label "Süreç Engeli" ;
+    rdfs:comment "Belirsiz kabul kriterleri, eksik Definition of Done, yetersiz sprint planlaması veya gereksinimlerin net olmaması kaynaklı engeller. Çözüm: PO ile netleştirme toplantısı, retrospektif gündem maddesi." .
+
+
+#################################################################
+#    Individuals — RiskSignal
+#    (çift typing: hem RiskSignal hem alt sınıf — SPARQL ile sorgulanabilir)
+#################################################################
+
+sm:RiskSignalBlocker rdf:type sm:RiskSignal ;
+                     rdf:type sm:DeliveryRisk ;
+    sm:riskLabel "BLOCKER" ;
+    sm:severityLevel 3 ;
+    sm:riskDescription "Sprint'te engellenmiş görev mevcut. Yüksek öncelikli engel doğrudan sprint hedefini tehdit eder ve teslimat gecikmesine yol açar." ;
+    sm:remediationHint "Bugünkü standup'ta engellenmiş görevi öncelikli gündem yapın. ImpedimentCategory'ye göre sınıflandırın ve çözüm için doğru kişiyi atayın. Blocker bir gün içinde çözülmezse eskalasyon yapın." ;
+    sm:signalsTrigger sm:RemediationEscalate ;
+    rdfs:comment "Scrum Master için birincil öncelik. Engel ortadan kalkana kadar günlük takip zorunludur." .
+
+sm:RiskSignalHighPriorityUnstarted rdf:type sm:RiskSignal ;
+                                   rdf:type sm:DeliveryRisk ;
+    sm:riskLabel "YÜKSEK_ÖNCELIK_BAŞLANMADI" ;
+    sm:severityLevel 3 ;
+    sm:riskDescription "Yüksek öncelikli görev atanmamış ve/veya başlanmamış. Sprint sonunda tamamlanmaması ihtimali yüksek; hedef risk altında." ;
+    sm:remediationHint "Bu görevi en kısa sürede en uygun geliştiriciye atayın. Atama için delegate komutunu kullanın. Sprint orta noktasını geçmişse PO ile kapsam müzakeresi yapın." ;
+    sm:signalsTrigger sm:RemediationReassign ;
+    rdfs:comment "Yüksek öncelikli görevler sprint başında atanmış ve in_progress durumda olmalıdır." .
+
+sm:RiskSignalWipExceeded rdf:type sm:RiskSignal ;
+                         rdf:type sm:ProcessIssue ;
+    sm:riskLabel "WIP_LIMIT_AŞILDI" ;
+    sm:severityLevel 2 ;
+    sm:riskDescription "Devam eden (in_progress) görev sayısı takım büyüklüğünün 2 katını aşıyor. Bağlam değiştirme maliyeti artar, teslim yavaşlar, kalite düşer." ;
+    sm:remediationHint "Yeni görev başlatmayı durdurun. Devam eden görevlerden birini tamamlamadan yenisine geçmeyin. WIP hedefi: takım_büyüklüğü × 2." ;
+    sm:signalsTrigger sm:RemediationReduceWip ;
+    rdfs:comment "WIP limiti Scrum akış optimizasyonunun temelidir. Aşıldığında teslimat hızı paradoks olarak düşer." .
+
+sm:RiskSignalBusFactor rdf:type sm:RiskSignal ;
+                       rdf:type sm:WorkloadRisk ;
+    sm:riskLabel "BUS_FACTOR" ;
+    sm:severityLevel 2 ;
+    sm:riskDescription "Tüm aktif görevler tek bir geliştiriciye yığılmış. Bu kişi engellenir veya müsait olmazsa tüm sprint tehlikeye girer." ;
+    sm:remediationHint "Görevleri takım üyeleri arasında dengeli dağıtın. Delegate komutunu kullanarak yük dengesini kontrol edin. Kritik bilgiyi ikinci bir kişiyle paylaşın." ;
+    sm:signalsTrigger sm:RemediationReassign ;
+    rdfs:comment "Bus factor riski takım esnekliğini ve sprint teslimini doğrudan etkiler." .
+
+sm:RiskSignalDeliveryPressure rdf:type sm:RiskSignal ;
+                              rdf:type sm:DeliveryRisk ;
+    sm:riskLabel "TESLİMAT_BASKISI" ;
+    sm:severityLevel 2 ;
+    sm:riskDescription "Sprint tamamlanma yüzdesi yüzde otuzun altında ve açık engel mevcut. Sprint hedefine ulaşmak giderek zorlaşıyor." ;
+    sm:remediationHint "Sprint hedefi kapsamını PO ile yeniden müzakere edin. Kritik olmayan görevleri bir sonraki sprint backlog'una taşıyın. Kalan süre ve blocker sayısını günlük takip edin." ;
+    sm:signalsTrigger sm:RemediationEscalate ;
+    rdfs:comment "Teslim baskısı şeffaf PO iletişimi ve kapsam yönetimi gerektirir." .
+
+sm:RiskSignalUnassigned rdf:type sm:RiskSignal ;
+                        rdf:type sm:ProcessIssue ;
+    sm:riskLabel "ATANMAMIş_GÖREV" ;
+    sm:severityLevel 1 ;
+    sm:riskDescription "Sprint backlog'unda sahipsiz todo görevler mevcut. Atanmamış görevler görünmez kalır ve sprint sonunda tamamlanmadan kapanır." ;
+    sm:remediationHint "Sprint başında tüm görevleri sahiplerine atayın. Delegate komutunu kullanarak yük dengesine göre otomatik öneri alın." ;
+    sm:signalsTrigger sm:RemediationReassign ;
+    rdfs:comment "Sprint planlaması sırasında tüm görevler açık sahiplere atanmış olmalıdır." .
+
+sm:RiskSignalCapacityImbalance rdf:type sm:RiskSignal ;
+                               rdf:type sm:WorkloadRisk ;
+    sm:riskLabel "KAPASİTE_DENGESİZLİĞİ" ;
+    sm:severityLevel 2 ;
+    sm:riskDescription "Takım üyelerinin görev yükü dengesiz dağılmış. Yüksek yüklü geliştirici kalite sorunu veya tükenmişlik riski taşıyor." ;
+    sm:remediationHint "Görev dağılımını dengeleyin: en az aktif görevi olan geliştiriciye önce atayın. Sprint ortasında yeniden dengeleme yapabilirsiniz." ;
+    sm:signalsTrigger sm:RemediationReassign ;
+    rdfs:comment "Kapasite dengesi hem kaliteyi hem takım moralini etkiler." .
+
+
+#################################################################
+#    Individuals — RemediationAction
+#################################################################
+
+sm:RemediationEscalate rdf:type sm:RemediationAction ;
+    sm:actionLabel "ESKALASYON" ;
+    sm:actionDescription "Engeli ya da riski üst yönetim, PO veya harici paydaşa iletin. Standup'ta açıkça gündem yapın. ImpedimentCategory'ye göre doğru kişiye yönlendirin. Çözüm süresi 24 saati aşarsa yazılı eskalasyon yapın." ;
+    rdfs:comment "Kritik, organizasyonel ve teslim baskısı riskleri için birincil aksiyon." .
+
+sm:RemediationReassign rdf:type sm:RemediationAction ;
+    sm:actionLabel "YENİDEN_ATAMA" ;
+    sm:actionDescription "Görevi kapasitesi uygun başka bir geliştiriciye devredin. Bus factor, kapasite dengesizliği ve atanmamış görev durumlarında uygulayın. Delegate komutunu kullanın." ;
+    rdfs:comment "Atama ve yük dengesi müdahaleleri için standart aksiyon." .
+
+sm:RemediationReduceWip rdf:type sm:RemediationAction ;
+    sm:actionLabel "WIP_AZALT" ;
+    sm:actionDescription "Yeni görev başlatmayı durdurun. Devam eden görevleri önce tamamlayın. WIP hedefi: takım_büyüklüğü × 2. Bu sınırı standup gündeminde görünür tutun." ;
+    rdfs:comment "WIP limit aşımı ve akış optimizasyonu için standart Scrum aksiyonu." .
+
+sm:RemediationFacilitateStandup rdf:type sm:RemediationAction ;
+    sm:actionLabel "STANDUP_FAKİLİTASYONU" ;
+    sm:actionDescription "Standupı odaklı yönetin (max 15 dk): dün-bugün-engel formatı. Engel tartışmasını standup sonrasına alın, Scrum Master koordinasyonunda çözün. Standup bir problem çözme değil senkronizasyon toplantısıdır." ;
+    rdfs:comment "Günlük standup fasilitas̈yonu için SM rehber aksiyonu." .
+
+sm:RemediationRetrospective rdf:type sm:RemediationAction ;
+    sm:actionLabel "RETROSPEKTİF_AKSİYONU" ;
+    sm:actionDescription "Tekrar eden sorunu retrospektif gündemine alın. Keep-Improve-Action formatında yapılandırın. Aksiyon maddelerini sonraki sprint başında takip edin." ;
+    rdfs:comment "Sistemik süreç sorunları için kalıcı iyileştirme aksiyonu." .
+
+
+#################################################################
+#    General axioms
+#################################################################
+
+###  SprintHealthStatus bireyleri birbirinden ayrık
+[ rdf:type owl:AllDifferent ;
+  owl:distinctMembers ( sm:HealthStatusHealthy
+                        sm:HealthStatusAtRisk
+                        sm:HealthStatusCritical
+                      )
+] .
+
+###  ImpedimentCategory bireyleri birbirinden ayrık
+[ rdf:type owl:AllDifferent ;
+  owl:distinctMembers ( sm:ImpedimentTechnical
+                        sm:ImpedimentOrganizational
+                        sm:ImpedimentExternal
+                        sm:ImpedimentProcess
+                      )
+] .
+
+###  RemediationAction bireyleri birbirinden ayrık
+[ rdf:type owl:AllDifferent ;
+  owl:distinctMembers ( sm:RemediationEscalate
+                        sm:RemediationReassign
+                        sm:RemediationReduceWip
+                        sm:RemediationFacilitateStandup
+                        sm:RemediationRetrospective
+                      )
+] .
+
+###  CogniTwin Scrum Master Ontology v1.0 (2026-04)
+###  Extends: agile.ttl — CogniTwin Agile/Scrum Domain Ontology
