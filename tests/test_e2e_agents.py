@@ -138,7 +138,13 @@ def test_models_endpoint() -> bool:
         with urllib.request.urlopen(req, timeout=10) as r:
             body = json.loads(r.read().decode())
         ids = [m["id"] for m in body.get("data", [])]
-        expected = {"cognitwin-student-llm", "cognitwin-developer", "cognitwin-scrum"}
+        expected = {
+            "cognitwin-student-llm",
+            "cognitwin-developer",
+            "cognitwin-scrum",
+            "cognitwin-product-owner",
+            "cognitwin-composer",
+        }
         missing = expected - set(ids)
         if missing:
             fail(f"Eksik modeller: {missing}")

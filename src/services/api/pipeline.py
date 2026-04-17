@@ -85,7 +85,7 @@ def process_user_message(
     Mask PII, resolve routing mode, execute the appropriate pipeline.
 
     Routing:
-      model contains 'composer'      →  Composer deterministic merge pipeline
+      model contains 'composer'      →  Composer deterministic orchestration pipeline
       model contains 'product_owner' →  ProductOwner rule pipeline (backlog)
       model contains 'developer'     →  DeveloperOrchestrator + C1-C8 + REDO
       model contains 'scrum'         →  ScrumMaster rule pipeline
@@ -115,10 +115,6 @@ def process_user_message(
                 session_id=session_id,
                 role=AgentRole.COMPOSER,
                 masked_input=masked,
-                metadata={
-                    # Keep raw messages for fallback extraction in runner.
-                    "messages": messages or [],
-                },
             )
             response = run_composer_pipeline(task)
         elif mode == "product_owner":

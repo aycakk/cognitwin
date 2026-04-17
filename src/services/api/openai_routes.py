@@ -26,6 +26,7 @@ async def list_models():
         "cognitwin-student-llm",
         "cognitwin-developer",
         "cognitwin-scrum",
+        "cognitwin-product-owner",
         "cognitwin-composer",
     ]
     payload = {

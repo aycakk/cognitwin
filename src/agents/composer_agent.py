@@ -203,6 +203,19 @@ class ComposerAgent:
             final_answer = "No meaningful agent output was provided."
             summary = "0 useful outputs were available; nothing could be merged."
             key_points: list[str] = []
+        elif warnings:
+            summary = (
+                f"Collected {len(merged)} useful outputs, but detected "
+                f"{len(warnings)} contradiction(s)."
+            )
+            key_points = [self._first_sentence(entry.text) for entry in merged]
+            evidence_lines = [f"- [{entry.agent}] {entry.text}" for entry in merged]
+            final_answer = (
+                "Conflicting claims were detected across agent outputs. "
+                "A single definitive answer cannot be produced safely.\n"
+                "Evidence:\n"
+                + "\n".join(evidence_lines)
+            )
         else:
             lines = [f"[{entry.agent}] {entry.text}" for entry in merged]
             final_answer = "\n".join(lines)
