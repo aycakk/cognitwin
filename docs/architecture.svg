@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 900" width="1120" height="900"
+     font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif">
+
+  <!-- ═══ ARROW MARKERS ═══ -->
+  <defs>
+    <marker id="a-blue"   markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#2471A3"/></marker>
+    <marker id="a-green"  markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#1E8449"/></marker>
+    <marker id="a-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#7D3C98"/></marker>
+    <marker id="a-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#CA6F1E"/></marker>
+  </defs>
+
+  <!-- ═══ PAGE BACKGROUND ═══ -->
+  <rect width="1120" height="900" fill="#F4F6F9"/>
+
+  <!-- ═══════════════════════════════════════════════════════
+       TITLE
+  ═══════════════════════════════════════════════════════ -->
+  <text x="560" y="36" text-anchor="middle" font-size="23" font-weight="700"
+        fill="#1A2332" letter-spacing="0.3">CogniTwin — System Architecture</text>
+  <line x1="160" y1="46" x2="960" y2="46" stroke="#CDD1D8" stroke-width="1.2"/>
+
+  <!-- ═══════════════════════════════════════════════════════
+       LAYER 1 — UI
+  ═══════════════════════════════════════════════════════ -->
+  <rect x="40" y="56" width="1040" height="82" rx="7" fill="#D6EAF8" stroke="#2471A3" stroke-width="1.6"/>
+  <text x="60" y="74" font-size="8.5" font-weight="700" fill="#1A5276" letter-spacing="2.5">UI  LAYER</text>
+
+  <!-- LibreChat box -->
+  <rect x="310" y="65" width="500" height="62" rx="5" fill="white" stroke="#2471A3" stroke-width="1.5"/>
+  <text x="560" y="89" text-anchor="middle" font-size="14" font-weight="700" fill="#1A2332">LibreChat UI</text>
+  <text x="560" y="109" text-anchor="middle" font-size="10.5" fill="#5D6D7E">
+    OpenAI-compatible client  ·  model selector  ·  streaming chat
+  </text>
+
+  <!-- Arrow UI → API -->
+  <line x1="560" y1="138" x2="560" y2="157" stroke="#2471A3" stroke-width="2" marker-end="url(#a-blue)"/>
+  <rect x="348" y="139" width="424" height="15" rx="3" fill="#F4F6F9"/>
+  <text x="560" y="151" text-anchor="middle" font-size="9.5" fill="#2471A3">
+    GET /v1/models   ·   POST /v1/chat/completions
+  </text>
+
+  <!-- ═══════════════════════════════════════════════════════
+       LAYER 2 — API
+  ═══════════════════════════════════════════════════════ -->
+  <rect x="40" y="161" width="1040" height="82" rx="7" fill="#D5F5E3" stroke="#1E8449" stroke-width="1.6"/>
+  <text x="60" y="179" font-size="8.5" font-weight="700" fill="#145A32" letter-spacing="2.5">API  LAYER</text>
+
+  <!-- FastAPI box -->
+  <rect x="220" y="170" width="680" height="62" rx="5" fill="white" stroke="#1E8449" stroke-width="1.5"/>
+  <text x="560" y="194" text-anchor="middle" font-size="14" font-weight="700" fill="#1A2332">FastAPI  ·  openai_routes.py</text>
+  <text x="560" y="213" text-anchor="middle" font-size="10.5" fill="#5D6D7E">
+    GET /v1/models  ·  POST /v1/chat/completions  ·  POST /chat
+  </text>
+
+  <!-- Arrow API → Routing -->
+  <line x1="560" y1="243" x2="560" y2="262" stroke="#7D3C98" stroke-width="2" marker-end="url(#a-purple)"/>
+  <rect x="325" y="244" width="470" height="15" rx="3" fill="#F4F6F9"/>
+  <text x="560" y="256" text-anchor="middle" font-size="9.5" fill="#7D3C98">
+    pipeline.process_user_message(user_text, model, messages)
+  </text>
+
+  <!-- ═══════════════════════════════════════════════════════
+       LAYER 3 — ROUTING
+  ═══════════════════════════════════════════════════════ -->
+  <rect x="40" y="266" width="1040" height="82" rx="7" fill="#E8DAEF" stroke="#7D3C98" stroke-width="1.6"/>
+  <text x="60" y="284" font-size="8.5" font-weight="700" fill="#4A235A" letter-spacing="2.5">ROUTING  LAYER</text>
+
+  <!-- router.py box -->
+  <rect x="270" y="275" width="580" height="62" rx="5" fill="white" stroke="#7D3C98" stroke-width="1.5"/>
+  <text x="560" y="299" text-anchor="middle" font-size="14" font-weight="700" fill="#1A2332">router.py  ·  resolve_mode(model_name)</text>
+  <text x="560" y="318" text-anchor="middle" font-size="10.5" fill="#5D6D7E">
+    student  ·  developer  ·  scrum_master  ·  product_owner
+  </text>
+
+  <!-- ═══ FAN-OUT ARROWS ═══ -->
+  <!-- student -->
+  <path d="M 440 348 C 440 380 270 380 270 400" stroke="#2471A3" stroke-width="1.6" fill="none"
+        marker-end="url(#a-blue)" stroke-dasharray="5,3"/>
+  <rect x="295" y="361" width="65" height="14" rx="3" fill="#F4F6F9"/>
+  <text x="328" y="372" text-anchor="middle" font-size="9" fill="#2471A3">student</text>
+
+  <!-- developer -->
+  <path d="M 530 348 C 530 380 638 380 638 400" stroke="#1E8449" stroke-width="1.6" fill="none"
+        marker-end="url(#a-green)" stroke-dasharray="5,3"/>
+  <rect x="541" y="358" width="74" height="14" rx="3" fill="#F4F6F9"/>
+  <text x="578" y="369" text-anchor="middle" font-size="9" fill="#1E8449">developer</text>
+
+  <!-- scrum_master -->
+  <path d="M 580 348 C 580 390 805 390 805 400" stroke="#1E8449" stroke-width="1.6" fill="none"
+        marker-end="url(#a-green)" stroke-dasharray="5,3"/>
+  <rect x="672" y="366" width="90" height="14" rx="3" fill="#F4F6F9"/>
+  <text x="717" y="377" text-anchor="middle" font-size="9" fill="#1E8449">scrum_master</text>
+
+  <!-- product_owner -->
+  <path d="M 630 348 C 630 395 970 395 970 400" stroke="#1E8449" stroke-width="1.6" fill="none"
+        marker-end="url(#a-green)" stroke-dasharray="5,3"/>
+  <rect x="834" y="370" width="100" height="14" rx="3" fill="#F4F6F9"/>
+  <text x="884" y="381" text-anchor="middle" font-size="9" fill="#1E8449">product_owner</text>
+
+  <!-- ═══════════════════════════════════════════════════════
+       DOMAIN SEPARATOR
+  ═══════════════════════════════════════════════════════ -->
+  <line x1="528" y1="400" x2="528" y2="826" stroke="#AAB7B8" stroke-width="1.5" stroke-dasharray="7,4"/>
+  <!-- "ISOLATED" badge -->
+  <rect x="511" y="593" width="35" height="74" rx="4" fill="#F4F6F9" stroke="#AAB7B8" stroke-width="1"/>
+  <text font-size="8.5" font-weight="700" fill="#7F8C8D" letter-spacing="2"
+        transform="translate(528,636) rotate(-90)">ISOLATED</text>
+
+  <!-- ═══════════════════════════════════════════════════════
+       STUDENT DOMAIN  (left)
+  ═══════════════════════════════════════════════════════ -->
+  <rect x="40" y="400" width="480" height="426" rx="8"
+        fill="#EBF5FB" stroke="#2471A3" stroke-width="2" stroke-dasharray="9,5"/>
+
+  <!-- Domain label -->
+  <text x="280" y="424" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2471A3">
+    STUDENT DOMAIN
+  </text>
+  <text x="280" y="442" text-anchor="middle" font-size="10" fill="#2471A3">(LLM-based reasoning)</text>
+
+  <!-- Student Agent box -->
+  <rect x="80" y="453" width="360" height="100" rx="6" fill="white" stroke="#2471A3" stroke-width="1.5"/>
+  <text x="260" y="477" text-anchor="middle" font-size="13" font-weight="700" fill="#1A2332">Student Agent</text>
+  <text x="260" y="496" text-anchor="middle" font-size="10.5" fill="#5D6D7E">ZT4SWE pipeline  ·  C1–C8 gate array</text>
+  <text x="260" y="513" text-anchor="middle" font-size="10.5" fill="#5D6D7E">retrieval → synthesis → verification → emission</text>
+  <text x="260" y="531" text-anchor="middle" font-size="9.5" fill="#2471A3" font-style="italic">student_runner.py</text>
+
+  <!-- Arrow Student → Ollama -->
+  <line x1="260" y1="553" x2="260" y2="600" stroke="#CA6F1E" stroke-width="2" marker-end="url(#a-orange)"/>
+  <rect x="193" y="567" width="134" height="14" rx="3" fill="#EBF5FB"/>
+  <text x="260" y="578" text-anchor="middle" font-size="9.5" fill="#CA6F1E">LLM inference call</text>
+
+  <!-- Ollama box -->
+  <rect x="80" y="604" width="360" height="82" rx="6" fill="#FEF9F0" stroke="#CA6F1E" stroke-width="1.5"/>
+  <!-- Icon circle -->
+  <circle cx="126" cy="645" r="22" fill="white" stroke="#CA6F1E" stroke-width="1.5"/>
+  <text x="126" y="649" text-anchor="middle" font-size="12" font-weight="700" fill="#CA6F1E">AI</text>
+  <!-- Text -->
+  <text x="272" y="628" text-anchor="middle" font-size="13" font-weight="700" fill="#1A2332">Ollama  (llama3.2)</text>
+  <text x="272" y="647" text-anchor="middle" font-size="10.5" fill="#5D6D7E">Local LLM runtime</text>
+  <text x="272" y="667" text-anchor="middle" font-size="10" font-weight="600" fill="#CA6F1E">⚠  Used ONLY by Student Agent</text>
+
+  <!-- Isolation notice -->
+  <rect x="68" y="703" width="444" height="34" rx="5" fill="#D6EAF8" stroke="#2471A3" stroke-width="1"/>
+  <text x="290" y="718" text-anchor="middle" font-size="10" fill="#1A5276">✖  No access to sprint_state.json</text>
+  <text x="290" y="732" text-anchor="middle" font-size="10" fill="#1A5276">✖  No Scrum agent interaction</text>
+
+  <!-- ═══════════════════════════════════════════════════════
+       SCRUM TEAM DOMAIN  (right)
+  ═══════════════════════════════════════════════════════ -->
+  <rect x="538" y="400" width="542" height="426" rx="8"
+        fill="#E9F7EF" stroke="#1E8449" stroke-width="2" stroke-dasharray="9,5"/>
+
+  <!-- Domain label -->
+  <text x="809" y="424" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1E8449">
+    SCRUM TEAM DOMAIN
+  </text>
+  <text x="809" y="442" text-anchor="middle" font-size="10" fill="#1E8449">(Rule-based workflow  ·  No LLM)</text>
+
+  <!-- ── Developer Agent ── -->
+  <rect x="553" y="453" width="155" height="100" rx="6" fill="white" stroke="#1E8449" stroke-width="1.5"/>
+  <text x="630" y="476" text-anchor="middle" font-size="12" font-weight="700" fill="#1A2332">Developer</text>
+  <text x="630" y="492" text-anchor="middle" font-size="9.5" font-weight="600" fill="#1E8449">Agent</text>
+  <text x="630" y="509" text-anchor="middle" font-size="9.5" fill="#5D6D7E">task execution</text>
+  <text x="630" y="525" text-anchor="middle" font-size="9" fill="#5D6D7E">start · complete · block</text>
+  <text x="630" y="542" text-anchor="middle" font-size="8.5" fill="#7F8C8D" font-style="italic">developer_runner.py</text>
+
+  <!-- ── Scrum Master Agent ── -->
+  <rect x="726" y="453" width="155" height="100" rx="6" fill="white" stroke="#1E8449" stroke-width="1.5"/>
+  <text x="803" y="476" text-anchor="middle" font-size="12" font-weight="700" fill="#1A2332">Scrum Master</text>
+  <text x="803" y="492" text-anchor="middle" font-size="9.5" font-weight="600" fill="#1E8449">Agent</text>
+  <text x="803" y="509" text-anchor="middle" font-size="9.5" fill="#5D6D7E">sprint management</text>
+  <text x="803" y="525" text-anchor="middle" font-size="9" fill="#5D6D7E">promote · assign · track</text>
+  <text x="803" y="542" text-anchor="middle" font-size="8.5" fill="#7F8C8D" font-style="italic">scrum_master_agent.py</text>
+
+  <!-- ── Product Owner Agent ── -->
+  <rect x="899" y="453" width="155" height="100" rx="6" fill="white" stroke="#1E8449" stroke-width="1.5"/>
+  <text x="976" y="476" text-anchor="middle" font-size="12" font-weight="700" fill="#1A2332">Product Owner</text>
+  <text x="976" y="492" text-anchor="middle" font-size="9.5" font-weight="600" fill="#1E8449">Agent</text>
+  <text x="976" y="509" text-anchor="middle" font-size="9.5" fill="#5D6D7E">backlog management</text>
+  <text x="976" y="525" text-anchor="middle" font-size="9" fill="#5D6D7E">accept · reject · review</text>
+  <text x="976" y="542" text-anchor="middle" font-size="8.5" fill="#7F8C8D" font-style="italic">product_owner_agent.py</text>
+
+  <!-- Arrows agents → state store -->
+  <line x1="630" y1="553" x2="630" y2="604" stroke="#1E8449" stroke-width="1.5" marker-end="url(#a-green)"/>
+  <line x1="803" y1="553" x2="803" y2="604" stroke="#1E8449" stroke-width="1.5" marker-end="url(#a-green)"/>
+  <line x1="976" y1="553" x2="976" y2="604" stroke="#1E8449" stroke-width="1.5" marker-end="url(#a-green)"/>
+
+  <!-- ── Sprint State Store ── -->
+  <rect x="553" y="608" width="508" height="118" rx="6" fill="white" stroke="#1E8449" stroke-width="1.5"/>
+  <!-- Header stripe -->
+  <rect x="553" y="608" width="508" height="28" rx="6" fill="#D5F5E3"/>
+  <rect x="553" y="626" width="508" height="10" fill="#D5F5E3"/>
+  <text x="807" y="628" text-anchor="middle" font-size="11.5" font-weight="700" fill="#145A32">
+    sprint_state_store.py  ·  sprint_state.json
+  </text>
+
+  <!-- State content lines -->
+  <line x1="553" y1="647" x2="1061" y2="647" stroke="#D5F5E3" stroke-width="1"/>
+  <text x="807" y="663" text-anchor="middle" font-size="10" fill="#2C3E50">
+    <tspan font-weight="600">stories</tspan>   S-XXX  |  status: draft → in_sprint → accepted / rejected
+  </text>
+  <text x="807" y="681" text-anchor="middle" font-size="10" fill="#2C3E50">
+    <tspan font-weight="600">tasks</tspan>     T-XXX  |  assignee  ·  source_story_id  ·  result_summary
+  </text>
+  <text x="807" y="699" text-anchor="middle" font-size="10" fill="#2C3E50">
+    <tspan font-weight="600">status</tspan>    todo → in_progress → done  |  <tspan font-weight="600">po_status:</tspan>  pending → ready_for_review → accepted
+  </text>
+  <text x="807" y="717" text-anchor="middle" font-size="9.5" fill="#1E8449" font-style="italic">
+    single write owner  ·  thread-safe  ·  file-locked
+  </text>
+
+  <!-- ── Sprint Workflow Cycle bar ── -->
+  <rect x="553" y="738" width="508" height="66" rx="6" fill="#145A32"/>
+  <text x="807" y="758" text-anchor="middle" font-size="11" font-weight="700" fill="white">Sprint Workflow Cycle</text>
+  <text x="807" y="777" text-anchor="middle" font-size="10" fill="#A9DFBF">
+    ① PO: create story  →  ② SM: promote + assign  →  ③ Dev: start / complete  →  ④ PO: accept / reject
+  </text>
+  <text x="807" y="795" text-anchor="middle" font-size="9" fill="#7DCEA0">
+    po_status:  pending_review  →  ready_for_review  →  accepted / rejected
+  </text>
+
+  <!-- ═══════════════════════════════════════════════════════
+       FOOTER LEGEND
+  ═══════════════════════════════════════════════════════ -->
+  <line x1="40" y1="842" x2="1080" y2="842" stroke="#CDD1D8" stroke-width="1"/>
+  <rect x="42" y="851" width="13" height="13" rx="2" fill="#D6EAF8" stroke="#2471A3" stroke-width="1"/>
+  <text x="62" y="862" font-size="9.5" fill="#5D6D7E">Student Domain  (LLM / Ollama)</text>
+  <rect x="252" y="851" width="13" height="13" rx="2" fill="#D5F5E3" stroke="#1E8449" stroke-width="1"/>
+  <text x="272" y="862" font-size="9.5" fill="#5D6D7E">Scrum Domain  (rule-based, no LLM)</text>
+  <rect x="520" y="851" width="13" height="13" rx="2" fill="#E8DAEF" stroke="#7D3C98" stroke-width="1"/>
+  <text x="540" y="862" font-size="9.5" fill="#5D6D7E">Routing  (model name → agent)</text>
+  <text x="760" y="862" font-size="9.5" fill="#AAB7B8">- - -  domain isolation boundary</text>
+  <text x="960" y="862" font-size="9" fill="#BDC3C7">CogniTwin</text>
+
+</svg>

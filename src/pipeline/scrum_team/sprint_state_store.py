@@ -259,25 +259,56 @@ class SprintStateStore:
         return False
 
     def accept_story(self, sid: str) -> bool:
-        """Mark a story as accepted by the Product Owner."""
-        return self.update_story(sid, status="accepted")
+        """Mark a story as accepted by the Product Owner.
 
-    def reject_story(self, sid: str, reason: str = "") -> bool:
-        """Mark a story as rejected by the Product Owner."""
+        Also updates po_status on any linked sprint tasks from
+        'ready_for_review' → 'accepted', closing the review loop.
+        """
         with self.state_lock():
             state = self.load()
+            found = False
+            for s in state.get("backlog", []):
+                if s.get("story_id") == sid:
+                    s["status"] = "accepted"
+                    s["updated_at"] = datetime.now().isoformat(timespec="seconds")
+                    found = True
+                    break
+            if not found:
+                return False
+            for t in state.get("tasks", []):
+                if t.get("source_story_id") == sid and t.get("po_status") == "ready_for_review":
+                    t["po_status"] = "accepted"
+            self.save(state)
+        return True
+
+    def reject_story(self, sid: str, reason: str = "") -> bool:
+        """Mark a story as rejected by the Product Owner.
+
+        Also updates po_status on any linked sprint tasks from
+        'ready_for_review' → 'rejected', closing the review loop.
+        """
+        with self.state_lock():
+            state = self.load()
+            found = False
             for s in state.get("backlog", []):
                 if s.get("story_id") == sid:
                     s["status"] = "rejected"
                     s["rejection_reason"] = reason[:200]
                     s["updated_at"] = datetime.now().isoformat(timespec="seconds")
-                    self.save(state)
-                    return True
-        return False
+                    found = True
+                    break
+            if not found:
+                return False
+            for t in state.get("tasks", []):
+                if t.get("source_story_id") == sid and t.get("po_status") == "ready_for_review":
+                    t["po_status"] = "rejected"
+            self.save(state)
+        return True
 
-    def promote_to_sprint(self, story_id: str) -> str | None:
+    def promote_story_to_sprint_task(self, story_id: str) -> str | None:
         """Move a backlog story into the sprint tasks array.
 
+        This is the explicit PO → SM handoff point.
         Sets story status to 'in_sprint' and creates a corresponding task.
         Returns the new task ID, or None if the story was not found.
         Only ScrumMasterAgent should call this method.
@@ -348,3 +379,98 @@ class SprintStateStore:
 
         lines.append("=== END BACKLOG CONTEXT ===")
         return "\n".join(lines)
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Backward-compat alias
+    # ─────────────────────────────────────────────────────────────────────
+
+    #: Deprecated name kept so existing callers and tests do not break.
+    #: Prefer promote_story_to_sprint_task for new code.
+    promote_to_sprint = promote_story_to_sprint_task
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Developer task lifecycle  (used by developer_runner)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def get_tasks_for_assignee(self, assignee_id: str) -> list[dict]:
+        """Return all non-done tasks assigned to *assignee_id*.
+
+        Used by the Developer to show its own active work queue.
+        """
+        with self.state_lock():
+            state = self.load()
+        return [
+            t for t in state.get("tasks", [])
+            if t.get("assignee") == assignee_id and t.get("status") != "done"
+        ]
+
+    def start_task(self, task_id: str) -> bool:
+        """Transition a task to 'in_progress' and record started_at.
+
+        The SM may have already flipped status to in_progress during assignment,
+        but started_at is only set when the Developer explicitly starts work.
+        Always writes started_at so the Developer's command is recorded even
+        when the status was already in_progress.
+        Returns False when the task_id is not found.
+        """
+        with self.state_lock():
+            state = self.load()
+            for t in state.get("tasks", []):
+                if t["id"] == task_id:
+                    t["status"] = "in_progress"
+                    t["started_at"] = datetime.now().isoformat(timespec="seconds")
+                    self.save(state)
+                    return True
+        return False
+
+    def complete_task(self, task_id: str, result_summary: str = "") -> bool:
+        """Mark a task as done and record the developer's result summary.
+
+        When the task carries a source_story_id (i.e. it was promoted from
+        the PO backlog), the po_status field is set to 'ready_for_review'
+        so the PO can inspect and accept or reject the linked story.
+
+        Returns False when the task_id is not found.
+        """
+        with self.state_lock():
+            state = self.load()
+            for t in state.get("tasks", []):
+                if t["id"] == task_id:
+                    t["status"] = "done"
+                    t["result_summary"] = result_summary[:500]
+                    t["completed_at"] = datetime.now().isoformat(timespec="seconds")
+                    if t.get("source_story_id"):
+                        t["po_status"] = "ready_for_review"
+                    self.save(state)
+                    return True
+        return False
+
+    def block_task(self, task_id: str, reason: str) -> bool:
+        """Mark a task as blocked and record the reason.
+
+        Returns False when the task_id is not found.
+        """
+        with self.state_lock():
+            state = self.load()
+            for t in state.get("tasks", []):
+                if t["id"] == task_id:
+                    t["status"] = "blocked"
+                    t["blocker"] = reason[:200]
+                    t["updated_at"] = datetime.now().isoformat(timespec="seconds")
+                    self.save(state)
+                    return True
+        return False
+
+    def get_tasks_ready_for_review(self) -> list[dict]:
+        """Return tasks the Developer completed that are awaiting PO acceptance.
+
+        These are tasks with po_status == 'ready_for_review', meaning the
+        Developer called complete_task() and the story originated in the
+        PO backlog (has a source_story_id).
+        """
+        with self.state_lock():
+            state = self.load()
+        return [
+            t for t in state.get("tasks", [])
+            if t.get("po_status") == "ready_for_review"
+        ]

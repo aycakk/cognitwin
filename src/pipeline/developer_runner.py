@@ -36,9 +36,139 @@ from src.pipeline.shared import (
     _sanitize_output,
 )
 
-# Shared sprint state — read-only from the developer path.
-# ScrumMasterAgent (via scrum_master_runner) is the write owner.
+# Shared sprint state.
+# Task lifecycle writes (start / complete / block) originate here.
+# All other sprint state writes (add task, assign, update status) remain the
+# exclusive responsibility of ScrumMasterAgent via scrum_master_runner.
 _SPRINT_STATE = SprintStateStore()
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  TASK LIFECYCLE — intent detection + rule-based handlers
+#  These are resolved before the DeveloperOrchestrator so that task
+#  management commands return deterministic responses without an LLM round-trip.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_TASK_ID_RE = re.compile(r"\b(T-\d+)\b", re.I)
+
+_TASK_LIFECYCLE_INTENTS: list[tuple[str, re.Pattern]] = [
+    ("show_tasks", re.compile(
+        r"görevlerim|görev(?:leri?)?\s*(?:listele|göster|neler)"
+        r"|my\s*tasks?|show\s+(?:my\s+)?tasks?|list\s+(?:my\s+)?tasks?"
+        r"|assigned\s+tasks?|atanan\s+görev",
+        re.I,
+    )),
+    # "T-001 başlat" / "start T-001"
+    ("start_task", re.compile(
+        r"(?:\bT-\d+\b.*\b(?:başlat|start)\b|\b(?:başlat|start)\b.*\bT-\d+\b)",
+        re.I,
+    )),
+    # "T-001 tamamlandı: özet" / "complete T-001: summary"
+    ("complete_task", re.compile(
+        r"(?:\bT-\d+\b.*\b(?:tamamla(?:ndı)?|complet(?:e|ed)?|bitti?|done)\b"
+        r"|\b(?:tamamla(?:ndı)?|complet(?:e|ed)?)\b.*\bT-\d+\b)",
+        re.I,
+    )),
+    # "T-001 engellendi: sebep" / "block T-001: reason"
+    ("block_task", re.compile(
+        r"(?:\bT-\d+\b.*\b(?:engelle?(?:ndi)?|block(?:ed)?|tıkandı)\b"
+        r"|\b(?:engelle?|block)\b.*\bT-\d+\b)",
+        re.I,
+    )),
+]
+
+
+def _detect_task_lifecycle_intent(query: str) -> str | None:
+    """Return the first matching task-lifecycle intent, or None."""
+    for intent_name, pattern in _TASK_LIFECYCLE_INTENTS:
+        if pattern.search(query):
+            return intent_name
+    return None
+
+
+def _handle_task_lifecycle(intent: str, query: str) -> str:
+    """
+    Execute a task lifecycle command and return a plain-text response.
+
+    Mirrors the rule-based pattern used by ScrumMasterAgent and
+    ProductOwnerAgent — deterministic, no LLM, no REDO loop.
+    Assignee is always 'developer-default' because the developer path
+    is role-based (no personal identity key).
+    """
+    if intent == "show_tasks":
+        tasks = _SPRINT_STATE.get_tasks_for_assignee("developer-default")
+        if not tasks:
+            return (
+                "Şu an atanmış aktif göreviniz yok.\n"
+                "Scrum Master'dan görev atanmasını isteyin."
+            )
+        lines = [f"Atanmış Görevler ({len(tasks)}):"]
+        for t in tasks:
+            lines.append(
+                f"  [{t['id']}] {t.get('title', '-')}"
+                f"  | durum: {t.get('status', '?')}"
+                f"  | öncelik: {t.get('priority', '?')}"
+            )
+            if t.get("blocker"):
+                lines.append(f"    ⚠ Engel: {t['blocker']}")
+        lines.append(
+            "\nKomutlar:\n"
+            "  T-NNN başlat                    — görevi başlat\n"
+            "  T-NNN tamamlandı: <özet>        — görevi tamamla\n"
+            "  T-NNN engellendi: <sebep>       — engeli kaydet"
+        )
+        return "\n".join(lines)
+
+    task_match = _TASK_ID_RE.search(query)
+    if not task_match:
+        return "Görev ID'si gerekli (örn. T-001)."
+    task_id = task_match.group(1).upper()
+
+    if intent == "start_task":
+        if _SPRINT_STATE.start_task(task_id):
+            return (
+                f"Görev başlatıldı\n"
+                f"  ID    : {task_id}\n"
+                f"  Durum : in_progress\n"
+                f"  Not   : Tamamlandığında -> '{task_id} tamamlandı: <özet>'"
+            )
+        return f"Görev bulunamadı: {task_id}"
+
+    if intent == "complete_task":
+        summary_match = re.search(
+            r"(?:tamamla(?:ndı)?|complet(?:e|ed)?|bitti?|done)[:\s]+(.+)",
+            query, re.I | re.DOTALL,
+        )
+        summary = summary_match.group(1).strip() if summary_match else ""
+        if _SPRINT_STATE.complete_task(task_id, result_summary=summary):
+            msg = (
+                f"Görev tamamlandı\n"
+                f"  ID    : {task_id}\n"
+                f"  Durum : done\n"
+            )
+            if summary:
+                msg += f"  Özet  : {summary[:120]}\n"
+            msg += "  Not   : PO inceleme için bilgilendirildi (ready_for_review)."
+            return msg
+        return f"Görev bulunamadı: {task_id}"
+
+    if intent == "block_task":
+        reason_match = re.search(
+            r"(?:engelle?(?:ndi)?|block(?:ed)?|tıkandı)[:\s]+(.+)",
+            query, re.I | re.DOTALL,
+        )
+        reason = reason_match.group(1).strip() if reason_match else "sebep belirtilmedi"
+        if _SPRINT_STATE.block_task(task_id, reason=reason):
+            return (
+                f"Görev engellendi\n"
+                f"  ID    : {task_id}\n"
+                f"  Durum : blocked\n"
+                f"  Sebep : {reason[:120]}\n"
+                "  Not   : Scrum Master engeli çözmeli."
+            )
+        return f"Görev bulunamadı: {task_id}"
+
+    return "Bilinmeyen komut."
+
 
 # Developer-specific system prompt — the developer path must NOT use
 # the Student Agent system prompt (SYSTEM_PROMPT in shared.py).
@@ -353,6 +483,20 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
     user_text  = task.masked_input
     strategy   = task.metadata.get("strategy", "auto")
     session_id = task.session_id
+
+    # ── Pre-dispatch: task lifecycle commands ─────────────────────────────────
+    # show_tasks / start_task / complete_task / block_task are resolved here
+    # with deterministic rule logic — no LLM, no REDO loop.
+    # This mirrors the pattern used by scrum_master_runner and
+    # product_owner_runner for their rule-based commands.
+    lifecycle_intent = _detect_task_lifecycle_intent(user_text)
+    if lifecycle_intent:
+        return AgentResponse(
+            task_id=task.task_id,
+            agent_role=AgentRole.DEVELOPER,
+            draft=_handle_task_lifecycle(lifecycle_intent, user_text),
+            status=TaskStatus.COMPLETED,
+        )
 
     redo_log: list[dict] = []
 
