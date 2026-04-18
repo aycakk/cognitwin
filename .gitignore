@@ -23,11 +23,27 @@ lib/
 __pycache__/
 *.pyc
 .pytest_cache/
+.venv/
+venv/
+
+# Environment secrets (never commit — use .env.example as template)
+.env
 
 # Veritabani dosyalari
 *.db
 *.sqlite3
 
-# Isletim sistemi dosyalari
+# ChromaDB
+static/chromadb/
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# Locally trained model weights (large binary files — never commit)
+# Each developer places their own copy in models/scrum_model/
+models/scrum_model/*
+!models/scrum_model/.gitkeep
+*.safetensors
+*.bin
+training_args.bin
