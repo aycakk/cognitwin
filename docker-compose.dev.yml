@@ -11,12 +11,15 @@
 services:
 
   cognitwin-api:
+    environment:
+      SCRUM_MODEL_PATH: "/app/models/scrum_model"
     volumes:
       - ./src:/app/src
       - ./static/chromadb:/app/static/chromadb
       - ./logs:/app/logs
       - ./data:/app/data
       - ./ontologies:/app/ontologies
+      - ./models/scrum_model:/app/models/scrum_model
     command:
       - python
       - -m
