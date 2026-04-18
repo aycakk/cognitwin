@@ -65,6 +65,7 @@ import re
 
 from src.agents.composer_agent import ComposerAgent
 from src.core.schemas import AgentTask, AgentResponse, AgentRole, TaskStatus
+from src.core.session_store import SESSION_STORE
 from src.pipeline.developer_runner import _process_developer_message
 from src.pipeline.product_owner_runner import run_product_owner_pipeline
 from src.pipeline.scrum_master_runner import run_scrum_master_pipeline
@@ -109,23 +110,43 @@ def is_workflow_request(query: str) -> bool:
 #  Internal helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _effective_session_id(task: AgentTask) -> str:
+    """Return a non-empty session ID for a task.
+
+    Falls back to task_id when session_id is blank so every workflow run
+    always has a stable, unique identifier even if the HTTP layer didn't
+    supply one.
+    """
+    return task.session_id or task.task_id
+
+
+def _agent_session_id(parent_session: str, role_slug: str) -> str:
+    """Build the agent-scoped child session ID.
+
+    Convention:  <parent_session>/<role_slug>
+    Examples:    conv-abc-123/po   conv-abc-123/sm   conv-abc-123/dev
+    """
+    return f"{parent_session}/{role_slug}"
+
+
 def _make_child_task(
     parent: AgentTask,
     role: AgentRole,
     enriched_input: str,
+    agent_session_id: str,
     extra_context: dict | None = None,
 ) -> AgentTask:
-    """Build a child AgentTask that carries parent context forward.
+    """Build a child AgentTask with its own agent session ID.
 
-    The child inherits session_id, metadata and existing context keys from
-    the parent.  extra_context is merged on top so each step can annotate
-    what it contributed without overwriting parent data.
+    Each step gets a UNIQUE session_id (e.g. conv-abc/po) so its output is
+    stored and retrievable independently.  parent_task_id links it back to
+    the originating task for the orchestrator.
     """
     ctx = {**parent.context}
     if extra_context:
         ctx.update(extra_context)
     return AgentTask(
-        session_id=parent.session_id,
+        session_id=agent_session_id,          # ← agent-specific, not parent's
         role=role,
         masked_input=enriched_input,
         parent_task_id=parent.task_id,
@@ -149,19 +170,18 @@ def _usable(text: str) -> bool:
 #  Step 1 — Product Owner
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _step_product_owner(parent: AgentTask) -> tuple[AgentResponse, str]:
+def _step_product_owner(
+    parent: AgentTask,
+    parent_session: str,
+) -> tuple[AgentResponse, str, str]:
     """Convert the raw project request into structured user stories.
 
-    Wraps the original query in a prompt that explicitly triggers the PO
-    agent's `create_story` deterministic intent, ensuring consistent
-    backlog output regardless of the original phrasing.
+    Returns (response, draft_text, po_session_id).
     """
-    original = parent.masked_input
+    original  = parent.masked_input
+    po_sid    = _agent_session_id(parent_session, "po")
 
-    # Include "kullanıcı hikayeleri oluştur" to reliably trigger create_story.
-    # The full original query is preserved so PO has project context.
     if re.search(r"hikaye|story|backlog", original, re.I):
-        # Query already carries PO vocabulary — use as-is.
         po_input = original
     else:
         po_input = (
@@ -170,14 +190,31 @@ def _step_product_owner(parent: AgentTask) -> tuple[AgentResponse, str]:
             f"{original}"
         )
 
+    SESSION_STORE.create_session(
+        session_id=po_sid,
+        agent_role=AgentRole.PRODUCT_OWNER.value,
+        query=po_input,
+        parent_session_id=parent_session,
+        metadata={"workflow_step": "product_owner"},
+    )
+
     task = _make_child_task(
         parent,
         AgentRole.PRODUCT_OWNER,
         po_input,
+        agent_session_id=po_sid,
         extra_context={"workflow_step": "product_owner", "original_request": original},
     )
     response = run_product_owner_pipeline(task)
-    return response, _extract_draft(response)
+    draft    = _extract_draft(response)
+
+    SESSION_STORE.record_output(
+        session_id=po_sid,
+        output=draft,
+        status=response.status.value if hasattr(response.status, "value") else str(response.status),
+        metadata={"task_id": task.task_id},
+    )
+    return response, draft, po_sid
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -187,14 +224,14 @@ def _step_product_owner(parent: AgentTask) -> tuple[AgentResponse, str]:
 def _step_scrum_master(
     parent: AgentTask,
     po_output: str,
-) -> tuple[AgentResponse, str]:
+    parent_session: str,
+) -> tuple[AgentResponse, str, str]:
     """Plan the sprint and assign tasks based on PO output.
 
-    The prompt is crafted to trigger the SM's `sprint_analysis` LLM-augmented
-    path (keywords: analiz, değerlendir, öneri) so the SM agent has access
-    to both the ontology context and real sprint state when reasoning.
+    Returns (response, draft_text, sm_session_id).
     """
     original = parent.masked_input
+    sm_sid   = _agent_session_id(parent_session, "sm")
     sm_input = (
         f"Proje isteği: {original}\n\n"
         f"Ürün Sahibi (PO) tarafından oluşturulan hikayeler ve iş kalemleri:\n"
@@ -205,18 +242,35 @@ def _step_scrum_master(
         f"Sprint sağlığını değerlendir ve somut öneriler sun."
     )
 
+    SESSION_STORE.create_session(
+        session_id=sm_sid,
+        agent_role=AgentRole.SCRUM_MASTER.value,
+        query=sm_input,
+        parent_session_id=parent_session,
+        metadata={"workflow_step": "scrum_master"},
+    )
+
     task = _make_child_task(
         parent,
         AgentRole.SCRUM_MASTER,
         sm_input,
+        agent_session_id=sm_sid,
         extra_context={
             "workflow_step": "scrum_master",
             "po_output": po_output,
-            "original_request": parent.masked_input,
+            "original_request": original,
         },
     )
     response = run_scrum_master_pipeline(task)
-    return response, _extract_draft(response)
+    draft    = _extract_draft(response)
+
+    SESSION_STORE.record_output(
+        session_id=sm_sid,
+        output=draft,
+        status=response.status.value if hasattr(response.status, "value") else str(response.status),
+        metadata={"task_id": task.task_id},
+    )
+    return response, draft, sm_sid
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -227,13 +281,14 @@ def _step_developer(
     parent: AgentTask,
     sm_output: str,
     po_output: str,
-) -> tuple[AgentResponse, str]:
+    parent_session: str,
+) -> tuple[AgentResponse, str, str]:
     """Execute assigned tasks based on the SM sprint plan.
 
-    Passes both the SM plan and the original PO stories as context so
-    the Developer agent can align technical work with acceptance criteria.
+    Returns (response, draft_text, dev_session_id).
     """
-    original = parent.masked_input
+    original  = parent.masked_input
+    dev_sid   = _agent_session_id(parent_session, "dev")
     dev_input = (
         f"Proje isteği: {original}\n\n"
         f"Scrum Master sprint planı ve görev atamaları:\n{sm_output}\n\n"
@@ -242,10 +297,19 @@ def _step_developer(
         f"değerlendir ve uygulama adımlarını belirt."
     )
 
+    SESSION_STORE.create_session(
+        session_id=dev_sid,
+        agent_role=AgentRole.DEVELOPER.value,
+        query=dev_input,
+        parent_session_id=parent_session,
+        metadata={"workflow_step": "developer"},
+    )
+
     task = _make_child_task(
         parent,
         AgentRole.DEVELOPER,
         dev_input,
+        agent_session_id=dev_sid,
         extra_context={
             "workflow_step": "developer",
             "sm_output": sm_output,
@@ -253,11 +317,18 @@ def _step_developer(
             "original_request": original,
         },
     )
-    # Developer runner requires strategy in metadata.
     task.metadata["strategy"] = task.metadata.get("strategy", "auto")
 
     response = _process_developer_message(task)
-    return response, _extract_draft(response)
+    draft    = _extract_draft(response)
+
+    SESSION_STORE.record_output(
+        session_id=dev_sid,
+        output=draft,
+        status=response.status.value if hasattr(response.status, "value") else str(response.status),
+        metadata={"task_id": task.task_id},
+    )
+    return response, draft, dev_sid
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -285,59 +356,77 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
       • status     = COMPLETED (even if some steps failed, as long as ≥1 succeeded)
       • metadata["workflow"] = step counts, agent list, warnings
     """
+    # Determine a stable session ID for this workflow run.
+    # Falls back to task_id when the HTTP layer didn't supply a session_id.
+    parent_session = _effective_session_id(task)
+
     logger.info(
-        "agile-workflow: starting PO→SM→Developer chain  task=%s", task.task_id
+        "agile-workflow: starting PO->SM->Developer  task=%s  session=%s",
+        task.task_id, parent_session,
     )
 
-    collected: list[dict[str, str]] = []   # {"agent": ..., "draft": ...}
-    warnings:  list[str]            = []
+    # Register the parent (Composer) session so children can attach to it.
+    SESSION_STORE.create_session(
+        session_id=parent_session,
+        agent_role=AgentRole.COMPOSER.value,
+        query=task.masked_input,
+        parent_session_id=None,
+        metadata={"workflow": "agile_sequential"},
+    )
+
+    collected:    list[dict[str, str]] = []   # {"agent": ..., "draft": ...}
+    warnings:     list[str]            = []
+    child_sessions: list[str]          = []
 
     # ── Step 1: Product Owner ─────────────────────────────────────────────────
     po_text = ""
+    po_sid  = ""
     try:
-        _, po_text = _step_product_owner(task)
+        _, po_text, po_sid = _step_product_owner(task, parent_session)
+        child_sessions.append(po_sid)
         if _usable(po_text):
             collected.append({"agent": AgentRole.PRODUCT_OWNER.value, "draft": po_text})
-            logger.info("agile-workflow: PO step OK  (%d chars)", len(po_text))
+            logger.info("agile-workflow: PO OK  session=%s  (%d chars)", po_sid, len(po_text))
         else:
             warnings.append("Ürün Sahibi: kullanılabilir çıktı üretilemedi.")
             po_text = ""
-            logger.warning("agile-workflow: PO step returned unusable output")
+            logger.warning("agile-workflow: PO step returned unusable output  session=%s", po_sid)
     except Exception as exc:
         warnings.append(f"Ürün Sahibi adımı başarısız oldu: {exc}")
         po_text = ""
         logger.error("agile-workflow: PO step failed: %s", exc, exc_info=True)
 
     # ── Step 2: Scrum Master ──────────────────────────────────────────────────
-    # If PO produced nothing, fall back to the original query as SM context
-    # so the sprint planner still has the project description.
     sm_context = po_text if _usable(po_text) else f"Proje isteği: {task.masked_input}"
     sm_text = ""
+    sm_sid  = ""
     try:
-        _, sm_text = _step_scrum_master(task, sm_context)
+        _, sm_text, sm_sid = _step_scrum_master(task, sm_context, parent_session)
+        child_sessions.append(sm_sid)
         if _usable(sm_text):
             collected.append({"agent": AgentRole.SCRUM_MASTER.value, "draft": sm_text})
-            logger.info("agile-workflow: SM step OK  (%d chars)", len(sm_text))
+            logger.info("agile-workflow: SM OK  session=%s  (%d chars)", sm_sid, len(sm_text))
         else:
             warnings.append("Scrum Master: kullanılabilir çıktı üretilemedi.")
             sm_text = ""
-            logger.warning("agile-workflow: SM step returned unusable output")
+            logger.warning("agile-workflow: SM step returned unusable output  session=%s", sm_sid)
     except Exception as exc:
         warnings.append(f"Scrum Master adımı başarısız oldu: {exc}")
         sm_text = ""
         logger.error("agile-workflow: SM step failed: %s", exc, exc_info=True)
 
     # ── Step 3: Developer ─────────────────────────────────────────────────────
-    # Developer receives SM output; fall back to sm_context if SM failed.
     dev_context = sm_text if _usable(sm_text) else sm_context
+    dev_sid     = ""
     try:
-        _, dev_text = _step_developer(task, dev_context, po_text)
+        _, dev_text, dev_sid = _step_developer(task, dev_context, po_text, parent_session)
+        child_sessions.append(dev_sid)
         if _usable(dev_text):
             collected.append({"agent": AgentRole.DEVELOPER.value, "draft": dev_text})
-            logger.info("agile-workflow: Developer step OK  (%d chars)", len(dev_text))
+            logger.info("agile-workflow: Dev OK  session=%s  (%d chars)", dev_sid, len(dev_text))
         else:
             warnings.append("Developer: kullanılabilir çıktı üretilemedi.")
-            logger.warning("agile-workflow: Developer step returned unusable output")
+            logger.warning("agile-workflow: Developer step returned unusable output  session=%s", dev_sid)
     except Exception as exc:
         warnings.append(f"Developer adımı başarısız oldu: {exc}")
         logger.error("agile-workflow: Developer step failed: %s", exc, exc_info=True)
@@ -346,7 +435,6 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
     composer = ComposerAgent()
 
     if not collected:
-        # Every step failed — safe failure response.
         response_text = composer.format_final_response(
             summary="Agile workflow tüm adımlarda başarısız oldu.",
             key_points=["Hiçbir ajan kullanılabilir çıktı üretemedi."],
@@ -356,6 +444,12 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
                 "Lütfen isteği yeniden belirtin veya sistem yöneticisiyle iletişime geçin."
             ),
         )
+        SESSION_STORE.record_output(
+            session_id=parent_session,
+            output=response_text,
+            status="failed",
+            metadata={"child_sessions": child_sessions, "warnings": warnings},
+        )
         return AgentResponse(
             task_id=task.task_id,
             agent_role=AgentRole.COMPOSER,
@@ -363,10 +457,12 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
             status=TaskStatus.FAILED,
             metadata={
                 "workflow": {
+                    "session_id":      parent_session,
+                    "child_sessions":  child_sessions,
                     "steps_completed": 0,
                     "steps_attempted": 3,
-                    "agents_used": [],
-                    "warnings": warnings,
+                    "agents_used":     [],
+                    "warnings":        warnings,
                 }
             },
         )
@@ -374,19 +470,28 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
     composed = composer.compose(collected)
 
     workflow_meta: dict = {
+        "session_id":      parent_session,
+        "child_sessions":  child_sessions,   # ← PO, SM, Developer session IDs
         "steps_completed": len(collected),
         "steps_attempted": 3,
-        "agents_used": [s["agent"] for s in collected],
-        "warnings": warnings,
+        "agents_used":     [s["agent"] for s in collected],
+        "warnings":        warnings,
         "useful_count":    composed.get("useful_count", 0),
         "merged_count":    composed.get("merged_count", 0),
         "conflict_count":  len(composed.get("conflicts", [])),
     }
 
+    # Record the Composer's final merged output back to the parent session.
+    SESSION_STORE.record_output(
+        session_id=parent_session,
+        output=composed["response_text"],
+        status="completed",
+        metadata=workflow_meta,
+    )
+
     logger.info(
-        "agile-workflow: complete  %d/3 steps succeeded  conflicts=%d",
-        len(collected),
-        workflow_meta["conflict_count"],
+        "agile-workflow: complete  session=%s  %d/3 steps  children=%s",
+        parent_session, len(collected), child_sessions,
     )
 
     return AgentResponse(

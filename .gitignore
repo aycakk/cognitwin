@@ -13,6 +13,12 @@ tests/
 # ChromaDB
 static/chromadb/
 
+# Runtime session storage (per-agent outputs — regenerated on each run)
+data/sessions/
+
+# Filelock runtime files
+*.lock
+
 # OS files
 .DS_Store
 Thumbs.db
