@@ -2,6 +2,10 @@
 __pycache__/
 *.pyc
 .venv/
+venv/
+
+# Environment secrets (never commit — use .env.example as template)
+.env
 
 # Tests
 tests/
