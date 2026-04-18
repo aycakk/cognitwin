@@ -21,7 +21,14 @@ class ChatCompletionRequest(BaseModel):
 @openai_router.get("/v1/models")
 async def list_models():
     now = int(time.time())
-    model_ids = ["llama3.2", "cognitwin-student-llm", "cognitwin-developer", "cognitwin-scrum", "cognitwin-product-owner"]
+    model_ids = [
+        "llama3.2",
+        "cognitwin-student-llm",
+        "cognitwin-developer",
+        "cognitwin-scrum",
+        "cognitwin-product-owner",
+        "cognitwin-composer",
+    ]
     payload = {
         "object": "list",
         "data": [
