@@ -76,6 +76,11 @@ GATE_POLICY: dict[str, list[str]] = {
         # Rule-based deterministic agent — same gate profile as ScrumMaster.
         "C4",
     ],
+    "POLLMAgent": [
+        # LLM-backed PO used by the autonomous sprint loop.
+        # Produces goal/story text — hallucination guard applies.
+        "C4",
+    ],
 }
 
 # Default gate list for any role not explicitly listed above.

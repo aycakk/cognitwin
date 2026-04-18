@@ -83,13 +83,34 @@ def print_startup_banner() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  SPRINT COMMAND HELPER
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _run_sprint_command(goal: str) -> None:
+    """/sprint <goal> — run a single autonomous sprint and print the summary."""
+    if not goal:
+        print("  Kullanım: /sprint <hedef>  (örn. /sprint 'Add login screen')\n")
+        return
+
+    print(f"\n  🚀 Sprint başlatılıyor — hedef: {goal}\n")
+    print(f"  (analyze → plan → execute → validate)\n")
+
+    try:
+        from src.loop.sprint_loop import run_sprint
+        result = run_sprint(goal)
+        print(f"\n{result.summary}\n")
+    except Exception as exc:
+        print(f"\n  ❌ Sprint hatası: {exc}\n")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  CLI ENTRYPOINT
 # ─────────────────────────────────────────────────────────────────────────────
 
 def ask() -> None:
     print_startup_banner()
     print(f"\n  Geçerli roller : {', '.join(VALID_ROLES)}")
-    print("  Komutlar       : /exit | /gates | /role <ROL> | /context\n")
+    print("  Komutlar       : /exit | /gates | /role <ROL> | /context | /sprint <hedef>\n")
 
     last_gate_report: dict = {}
     current_role = "StudentAgent"
@@ -128,6 +149,10 @@ def ask() -> None:
                 print(f"  ✅ Rol: {current_role}\n")
             else:
                 print(f"  ❌ Geçersiz rol. Seçenekler: {', '.join(VALID_ROLES)}\n")
+            continue
+
+        if q.lower().startswith("/sprint "):
+            _run_sprint_command(q[8:].strip())
             continue
 
         # ── Main pipeline ─────────────────────────────────────────────────────

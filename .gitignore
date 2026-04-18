@@ -1,14 +1,37 @@
-# Python
+# Ozel ayarlar ve sifreler
+.env
+infra/librechat/.env
+infra/librechat/.env.local
+
+# LibreChat yerel veri ve ciktilari
+infra/librechat/data-node/
+infra/librechat/logs/
+infra/librechat/meili_data_v1.35.1/
+infra/librechat/uploads/
+infra/librechat/images/
+
+# Python kutuphane klasoru
+venv/
+env/
+bin/
+lib/
+.deps/
+.api-venv/
+.venv-clean/
+
+# Gecici dosyalar ve cache
 __pycache__/
 *.pyc
+.pytest_cache/
 .venv/
 venv/
 
 # Environment secrets (never commit — use .env.example as template)
 .env
 
-# Tests
-tests/
+# Veritabani dosyalari
+*.db
+*.sqlite3
 
 # ChromaDB
 static/chromadb/
