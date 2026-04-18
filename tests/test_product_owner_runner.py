@@ -123,3 +123,49 @@ class TestProductOwnerRunner:
         )
         response = runner.run_product_owner_pipeline(task)
         assert response.task_id == "test-task-123"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Turkish planning intent detection smoke tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestTurkishPlanningIntentDetection:
+    """Verify _is_planning_request correctly routes Turkish prompts."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        from src.pipeline.product_owner_runner import _is_planning_request
+        self._detect = _is_planning_request
+
+    # ── Planning prompts — must resolve True ─────────────────────────────────
+
+    @pytest.mark.parametrize("query", [
+        "epic oluştur",
+        "epikler oluştur",
+        "epik yaz",
+        "backlog oluştur",
+        "hikaye oluştur",
+        "hikayeler oluştur",
+        "hikaye yaz",
+        "kullanıcı hikayeleri yaz",
+        "kullanıcı hikayelerini yaz",
+        "kabul kriterleri oluştur",
+        "kabul kriterlerini yaz",
+        "kriter oluştur",
+        "gereksinimler oluştur",
+        "gereksinim yaz",
+    ])
+    def test_turkish_planning_detected(self, query):
+        assert self._detect(query) is True, f"Expected True for: {query!r}"
+
+    # ── Command prompts — must resolve False ──────────────────────────────────
+
+    @pytest.mark.parametrize("query", [
+        "hikaye oluştur: login ekranı",  # colon → explicit command
+        "S-001 öncelik high",
+        "backlog listele",
+        "backlog status",
+        "review completed",
+    ])
+    def test_turkish_command_not_rerouted(self, query):
+        assert self._detect(query) is False, f"Expected False for: {query!r}"
