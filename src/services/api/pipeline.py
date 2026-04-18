@@ -6,7 +6,7 @@ Gate Array    : C1 ∧ C2 ∧ C3 ∧ C4 ∧ C5 ∧ C6 ∧ C7 ∧ C8  (BOTH paths
 Memory        : ChromaDB  (k=15)
 Ontology      : cognitwin-upper.ttl + student_ontology.ttl  (rdflib, lazy-loaded)
 LLM           : Ollama llama3.2  (local)
-Routing       : model name → student (default) | developer (cognitwin-developer)
+Routing       : model name → student (default) | developer | scrum | product_owner | composer
 
 Entry points (called by routes.py and openai_routes.py):
   process_user_message(user_text, agent_role, model, messages) -> dict
@@ -37,6 +37,7 @@ from src.pipeline.student_runner import run_pipeline       # noqa: F401 (re-expo
 from src.pipeline.developer_runner import _process_developer_message
 from src.pipeline.scrum_master_runner import run_scrum_master_pipeline
 from src.pipeline.product_owner_runner import run_product_owner_pipeline
+from src.pipeline.composer_runner import run_composer_pipeline
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -84,6 +85,7 @@ def process_user_message(
     Mask PII, resolve routing mode, execute the appropriate pipeline.
 
     Routing:
+      model contains 'composer'      →  Composer deterministic orchestration pipeline
       model contains 'product_owner' →  ProductOwner rule pipeline (backlog)
       model contains 'developer'     →  DeveloperOrchestrator + C1-C8 + REDO
       model contains 'scrum'         →  ScrumMaster rule pipeline
@@ -108,6 +110,13 @@ def process_user_message(
                 },
             )
             response = _process_developer_message(task)
+        elif mode == "composer":
+            task = AgentTask(
+                session_id=session_id,
+                role=AgentRole.COMPOSER,
+                masked_input=masked,
+            )
+            response = run_composer_pipeline(task)
         elif mode == "product_owner":
             task = AgentTask(
                 session_id=session_id,

@@ -37,3 +37,12 @@ endpoints:
           - "cognitwin-product-owner"
         fetch: false
       modelDisplayLabel: "CogniTwin Product Owner"
+
+    - name: "CogniTwin Composer"
+      apiKey: "cognitwin"
+      baseURL: "http://cognitwin-api:8011/v1/"
+      models:
+        default:
+          - "cognitwin-composer"
+        fetch: false
+      modelDisplayLabel: "CogniTwin Composer"
