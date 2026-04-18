@@ -51,12 +51,28 @@ Gate coverage
 
 ChromaDB isolation
 ──────────────────
+Model loading
+─────────────
+  LOCAL MODEL PATH (SCRUM_MODEL_PATH env var points to a directory)
+  ──────────────────────────────────────────────────────────────────
+  When SCRUM_MODEL_PATH is set and the directory exists, the runner loads
+  the locally trained Scrum Master model using the HuggingFace Transformers
+  pipeline.  The model is expected to be in AutoModelForCausalLM format
+  (saved with model.save_pretrained / tokenizer.save_pretrained).
+
+  OLLAMA FALLBACK (SCRUM_MODEL_PATH not set or directory missing)
+  ───────────────────────────────────────────────────────────────
+  When no local model is found, the runner falls back to llama3.2 via
+  Ollama.  This keeps the pipeline functional during development even if
+  the trained model has not been placed in models/scrum_model yet.
+
 This module imports ONLY from:
   • src.agents.scrum_master_agent
   • src.core.schemas
   • src.pipeline.scrum_team.sprint_state_store
   • src.ontology.loader  (no ChromaDB dependency)
-  • ollama
+  • ollama         (Ollama fallback)
+  • transformers   (local model — optional, only used when model dir exists)
 
 This keeps the runner independent of the vector-memory singletons
 instantiated in src/pipeline/shared.py.
@@ -65,9 +81,20 @@ instantiated in src/pipeline/shared.py.
 from __future__ import annotations
 
 import logging
+import os
 import re
+from typing import Any
 
 from ollama import chat as _ollama_chat
+
+# Path to the locally trained Scrum Master model, mounted via Docker volume.
+# When the directory exists → local HuggingFace model is loaded.
+# When missing or empty    → Ollama llama3.2 fallback is used.
+_SCRUM_MODEL_PATH: str = os.environ.get("SCRUM_MODEL_PATH", "")
+
+# Lazy-loaded transformers pipeline singleton.
+# Populated on first LLM call when the local model directory is present.
+_local_pipe: Any = None
 
 from src.agents.scrum_master_agent import ScrumMasterAgent
 from src.core.schemas import AgentTask, AgentResponse, AgentRole, TaskStatus
@@ -151,13 +178,59 @@ SECTION 1 ▸ RESPONSE PROTOCOL
 #  Internal helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _load_local_pipe():
+    """
+    Lazy-load the local Scrum Master model via transformers.pipeline.
+
+    Called at most once.  Returns the pipeline on success, None on failure.
+    The None return causes _sm_chat to fall back to Ollama automatically.
+    """
+    global _local_pipe
+    if _local_pipe is not None:
+        return _local_pipe
+    try:
+        from transformers import pipeline as hf_pipeline
+        _local_pipe = hf_pipeline(
+            "text-generation",
+            model=_SCRUM_MODEL_PATH,
+            max_new_tokens=512,
+            do_sample=True,
+            temperature=0.15,
+            top_p=0.9,
+        )
+        logger.info("scrum: local model loaded from %s", _SCRUM_MODEL_PATH)
+    except Exception as exc:
+        logger.error("scrum: local model load failed (%s) — falling back to Ollama", exc)
+        _local_pipe = None
+    return _local_pipe
+
+
 def _sm_chat(messages: list[dict]) -> str:
     """
-    Lightweight Ollama wrapper for the Scrum Master LLM path.
+    Dual-mode LLM call for the Scrum Master hybrid path.
 
-    Returns the stripped content string.  Handles both the ChatResponse
-    object (ollama ≥ 0.2) and the legacy dict shape (older versions).
+    Priority 1 — Local trained model (SCRUM_MODEL_PATH directory exists):
+      Calls the HuggingFace transformers pipeline loaded from the Docker
+      volume mount at /app/models/scrum_model.
+
+    Priority 2 — Ollama fallback (no local model or load failure):
+      Calls llama3.2 via the Ollama runtime.  Used during development
+      when the trained model has not been placed in models/scrum_model.
+
+    Returns the stripped response string in both cases.
     """
+    # ── Priority 1: local HuggingFace model ──────────────────────────────────
+    if _SCRUM_MODEL_PATH and os.path.isdir(_SCRUM_MODEL_PATH):
+        pipe = _load_local_pipe()
+        if pipe is not None:
+            result = pipe(messages, max_new_tokens=512)
+            generated = result[0]["generated_text"]
+            if isinstance(generated, list):
+                # Chat-template output: list of messages, last is assistant
+                return generated[-1].get("content", "").strip()
+            return str(generated).strip()
+
+    # ── Priority 2: Ollama fallback ───────────────────────────────────────────
     resp = _ollama_chat(
         model="llama3.2",
         messages=messages,

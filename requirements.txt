@@ -2,9 +2,15 @@
 fastapi==0.115.0
 uvicorn[standard]==0.34.0
 
-# LLM (local Ollama runtime)
+# LLM — Ollama runtime (used as fallback when local model is not mounted)
 ollama==0.4.7
 openai==1.68.0
+
+# Local Scrum Master model inference (HuggingFace Transformers)
+# Required when SCRUM_MODEL_PATH points to a locally trained model directory.
+transformers>=4.40.0
+accelerate>=0.26.0
+torch
 
 # Ontology & symbolic AI
 owlready2==0.47

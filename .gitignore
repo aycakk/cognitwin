@@ -31,3 +31,8 @@ __pycache__/
 # Isletim sistemi dosyalari
 .DS_Store
 Thumbs.db
+
+# Locally trained model weights — each developer places their own copy here.
+# The folder structure is tracked; the model files are not.
+models/scrum_model/*
+!models/scrum_model/.gitkeep
