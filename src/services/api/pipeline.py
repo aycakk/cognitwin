@@ -118,12 +118,17 @@ def process_user_message(
             )
             response = run_composer_pipeline(task)
         elif mode == "product_owner":
+            from src.pipeline.agile_workflow import is_workflow_request, run_agile_workflow
             task = AgentTask(
                 session_id=session_id,
                 role=AgentRole.PRODUCT_OWNER,
                 masked_input=masked,
             )
-            response = run_product_owner_pipeline(task)
+            if is_workflow_request(masked):
+                # Full PO-first chain: PO → [C] → SM → [C] → Dev → [C] → PO review
+                response = run_agile_workflow(task)
+            else:
+                response = run_product_owner_pipeline(task)
         elif mode == "scrum_master":
             task = AgentTask(
                 session_id=session_id,

@@ -2,60 +2,68 @@
 
 Architecture
 ────────────
-This module implements the full project-to-delivery workflow.  Unlike the
-parallel dispatcher in composer_runner.py (which routes a single query to
-one or more agents simultaneously), this workflow chains agent outputs:
+Implements the full PO-first project delivery workflow:
 
-  STEP 1  Product Owner   — Receives raw project request.
-                            Converts it into structured user stories with
-                            acceptance criteria and priority.
+  User → PO → [Composer gate] → SM → [Composer gate] → Dev → [Composer gate] → PO review → User
 
-  STEP 2  Scrum Master    — Receives PO output as enriched context.
-                            Plans the sprint, assigns tasks, and evaluates
-                            sprint health using the SM ontology (agile.ttl +
-                            scrum_master.ttl) and the real sprint state.
+  STEP 1  Product Owner      — Receives raw project request.
+                               Converts it into structured user stories with
+                               acceptance criteria and priority.
 
-  STEP 3  Developer       — Receives SM sprint plan as enriched context.
-                            Executes assigned tasks, provides technical
-                            assessment, and documents implementation steps.
+  GATE 1  Composer           — Validates PO output before passing to SM.
+                               No LLM. Checks usability, logs transition.
 
-  STEP 4  Composer        — Collects all three outputs and merges them into
-                            one coherent, structured final response via
-                            ComposerAgent.compose().
+  STEP 2  Scrum Master       — Receives PO output as enriched context.
+                               Plans the sprint, assigns tasks, evaluates
+                               sprint health using the SM ontology and real
+                               sprint state.
+
+  GATE 2  Composer           — Validates SM output before passing to Developer.
+                               No LLM. Checks usability, logs transition.
+
+  STEP 3  Developer          — Receives SM sprint plan as enriched context.
+                               Executes assigned tasks, provides technical
+                               assessment and implementation steps.
+
+  GATE 3  Composer           — Validates Developer output before PO review.
+                               No LLM. Merges all collected outputs into a
+                               team summary for the PO to review.
+
+  STEP 4  Product Owner      — Final review: receives the merged team output
+  (final review)               and presents a user-friendly delivery summary
+                               in the PO's voice via LLM. Falls back to the
+                               raw Composer merge if the LLM is unavailable.
 
 Context passing
 ───────────────
 Each step builds a fresh AgentTask whose masked_input is an enriched
 prompt containing the previous agent's output.  The original query is
-always preserved in the enriched prompt so agents have full project context.
-State (sprint_state.json) is shared through SprintStateStore — no extra
-wiring needed.
+always preserved.  SprintStateStore is shared across all agents — no
+extra wiring needed.
 
-Triggering
-──────────
-Activated from composer_runner.run_composer_pipeline() when
-is_workflow_request(query) returns True.  All other Composer queries
-continue to use the existing parallel dispatch path unchanged.
+Entry points
+────────────
+  run_agile_workflow(task)        — called by composer_runner.py (Composer model)
+                                    and by pipeline.py (PO model + workflow query)
+  is_workflow_request(query)      — used by both callers to detect full-chain intent
 
 SM intent routing
 ─────────────────
-The SM prompt is written to trigger the `sprint_analysis` intent
-(keywords: analiz, değerlendir, öneri) which routes to the LLM-augmented
-path.  This gives the SM access to ontology context + sprint state when
-reasoning about the PO's plan — exactly the right behaviour for the
-orchestration use case.
+The SM prompt triggers the `sprint_analysis` intent (keywords: analiz,
+değerlendir, öneri) which routes to the LLM-augmented path — giving SM
+access to ontology context + sprint state.
 
 PO intent routing
 ─────────────────
 The PO prompt includes "kullanıcı hikayeleri oluştur" to trigger the
-`create_story` deterministic intent regardless of the original query phrasing.
+`create_story` deterministic intent regardless of original query phrasing.
 
 Failure handling
 ────────────────
-Each step is isolated in a try/except.  If a step fails or returns unusable
-output the workflow continues with what it has.  The final ComposerAgent
-merges only successful outputs and records warnings for failed steps in the
-response metadata.
+Each step is isolated in try/except.  If a step fails or returns unusable
+output the workflow continues with what it has.  Gates fall back to the
+original request context when the upstream agent produced nothing usable.
+The final PO review falls back to the raw Composer merge on LLM failure.
 """
 
 from __future__ import annotations
@@ -63,7 +71,7 @@ from __future__ import annotations
 import logging
 import re
 
-from src.agents.composer_agent import ComposerAgent
+from src.agents.composer_agent import ComposerAgent, HandoffResult
 from src.core.schemas import AgentTask, AgentResponse, AgentRole, TaskStatus
 from src.core.session_store import SESSION_STORE
 from src.pipeline.developer_runner import _process_developer_message
@@ -74,9 +82,6 @@ logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Workflow trigger detection
-#  Patterns that indicate a full PO→SM→Developer chain is appropriate.
-#  Single-agent targeted queries (e.g. "sprint durumu nedir?") are NOT
-#  captured here — those continue through the parallel dispatch path.
 # ─────────────────────────────────────────────────────────────────────────────
 
 _WORKFLOW_RE = re.compile(
@@ -92,17 +97,17 @@ _WORKFLOW_RE = re.compile(
     r"|end.to.end|u[çc]tan\s+uca"
     r"|tam\s+sprint"
     r"|sıfırdan\s+(?:planla|başlat|geliştir)"
-    r"|proje\s+(?:teslim|delivery|deliverable)",
+    r"|proje\s+(?:teslim|delivery|deliverable)"
+    r"|ekibi\s+(?:çalıştır|organize\s+et|koordine\s+et)"
+    r"|tüm\s+ajanlar[ıi]"
+    r"|sırayla\s+çalıştır"
+    r"|takım[ıi]\s+(?:çalıştır|organize)",
     re.I,
 )
 
 
 def is_workflow_request(query: str) -> bool:
-    """Return True when the query describes a full project / sprint workflow.
-
-    Used by composer_runner to decide between sequential orchestration
-    (this module) and the existing parallel single-query dispatch.
-    """
+    """Return True when the query calls for a full PO→SM→Dev chain."""
     return bool(_WORKFLOW_RE.search(query or ""))
 
 
@@ -111,21 +116,10 @@ def is_workflow_request(query: str) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _effective_session_id(task: AgentTask) -> str:
-    """Return a non-empty session ID for a task.
-
-    Falls back to task_id when session_id is blank so every workflow run
-    always has a stable, unique identifier even if the HTTP layer didn't
-    supply one.
-    """
     return task.session_id or task.task_id
 
 
 def _agent_session_id(parent_session: str, role_slug: str) -> str:
-    """Build the agent-scoped child session ID.
-
-    Convention:  <parent_session>/<role_slug>
-    Examples:    conv-abc-123/po   conv-abc-123/sm   conv-abc-123/dev
-    """
     return f"{parent_session}/{role_slug}"
 
 
@@ -136,17 +130,11 @@ def _make_child_task(
     agent_session_id: str,
     extra_context: dict | None = None,
 ) -> AgentTask:
-    """Build a child AgentTask with its own agent session ID.
-
-    Each step gets a UNIQUE session_id (e.g. conv-abc/po) so its output is
-    stored and retrievable independently.  parent_task_id links it back to
-    the originating task for the orchestrator.
-    """
     ctx = {**parent.context}
     if extra_context:
         ctx.update(extra_context)
     return AgentTask(
-        session_id=agent_session_id,          # ← agent-specific, not parent's
+        session_id=agent_session_id,
         role=role,
         masked_input=enriched_input,
         parent_task_id=parent.task_id,
@@ -156,14 +144,36 @@ def _make_child_task(
 
 
 def _extract_draft(response: AgentResponse) -> str:
-    """Pull the text from an AgentResponse, returning '' on failure."""
     draft = getattr(response, "draft", None)
     return str(draft).strip() if draft else ""
 
 
 def _usable(text: str) -> bool:
-    """Return True if the text is long enough to be meaningful."""
     return bool(text) and len(text.strip()) >= 15
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Composer gate — lightweight hop validator (no LLM)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _composer_gate(
+    from_agent: str,
+    text: str,
+    to_agent: str,
+    parent_session: str,
+) -> HandoffResult:
+    """Explicit Composer checkpoint between agent handoffs.
+
+    No LLM call — just validates the outgoing text and logs the transition
+    so that Composer is visibly present at every hop in the orchestration.
+    """
+    composer = ComposerAgent()
+    result = composer.validate_handoff(from_agent, text, to_agent)
+    logger.info(
+        "agile-workflow: composer-gate  %s → %s  ok=%s  reason=%s  session=%s",
+        from_agent, to_agent, result.ok, result.reason, parent_session,
+    )
+    return result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -174,12 +184,9 @@ def _step_product_owner(
     parent: AgentTask,
     parent_session: str,
 ) -> tuple[AgentResponse, str, str]:
-    """Convert the raw project request into structured user stories.
-
-    Returns (response, draft_text, po_session_id).
-    """
-    original  = parent.masked_input
-    po_sid    = _agent_session_id(parent_session, "po")
+    """Convert the raw project request into structured user stories."""
+    original = parent.masked_input
+    po_sid   = _agent_session_id(parent_session, "po")
 
     if re.search(r"hikaye|story|backlog", original, re.I):
         po_input = original
@@ -199,10 +206,7 @@ def _step_product_owner(
     )
 
     task = _make_child_task(
-        parent,
-        AgentRole.PRODUCT_OWNER,
-        po_input,
-        agent_session_id=po_sid,
+        parent, AgentRole.PRODUCT_OWNER, po_input, po_sid,
         extra_context={"workflow_step": "product_owner", "original_request": original},
     )
     response = run_product_owner_pipeline(task)
@@ -226,10 +230,7 @@ def _step_scrum_master(
     po_output: str,
     parent_session: str,
 ) -> tuple[AgentResponse, str, str]:
-    """Plan the sprint and assign tasks based on PO output.
-
-    Returns (response, draft_text, sm_session_id).
-    """
+    """Plan the sprint and assign tasks based on PO output."""
     original = parent.masked_input
     sm_sid   = _agent_session_id(parent_session, "sm")
     sm_input = (
@@ -251,10 +252,7 @@ def _step_scrum_master(
     )
 
     task = _make_child_task(
-        parent,
-        AgentRole.SCRUM_MASTER,
-        sm_input,
-        agent_session_id=sm_sid,
+        parent, AgentRole.SCRUM_MASTER, sm_input, sm_sid,
         extra_context={
             "workflow_step": "scrum_master",
             "po_output": po_output,
@@ -283,10 +281,7 @@ def _step_developer(
     po_output: str,
     parent_session: str,
 ) -> tuple[AgentResponse, str, str]:
-    """Execute assigned tasks based on the SM sprint plan.
-
-    Returns (response, draft_text, dev_session_id).
-    """
+    """Execute assigned tasks based on the SM sprint plan."""
     original  = parent.masked_input
     dev_sid   = _agent_session_id(parent_session, "dev")
     dev_input = (
@@ -306,10 +301,7 @@ def _step_developer(
     )
 
     task = _make_child_task(
-        parent,
-        AgentRole.DEVELOPER,
-        dev_input,
-        agent_session_id=dev_sid,
+        parent, AgentRole.DEVELOPER, dev_input, dev_sid,
         extra_context={
             "workflow_step": "developer",
             "sm_output": sm_output,
@@ -332,51 +324,140 @@ def _step_developer(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  Step 4 — PO Final Review
+# ─────────────────────────────────────────────────────────────────────────────
+
+_PO_REVIEW_SYSTEM = (
+    "Sen bir Ürün Sahibi (Product Owner) olarak çalışıyorsun.\n"
+    "Agile geliştirme ekibinin ürettiği teknik çıktıyı alıp kullanıcıya\n"
+    "anlaşılır, iş odaklı bir proje teslim özeti sunuyorsun.\n\n"
+    "KURALLAR:\n"
+    "- Teknik jargonu kullanıcı diline çevir.\n"
+    "- Tamamlanan iş kalemlerini (epic, story, görev) net biçimde özetle.\n"
+    "- Sprint planı ve geliştirici değerlendirmesini entegre et.\n"
+    "- Varsa açık maddeler ve önerilen sonraki adımları belirt.\n"
+    "- Kısa, profesyonel ve kullanıcı odaklı bir dil kullan.\n"
+    "- Markdown kullanabilirsin (başlıklar, liste).\n"
+    "- Türkçe yanıt ver.\n"
+)
+
+
+def _format_po_fallback(team_output: str, original: str) -> str:
+    """Plain-text PO delivery summary when the LLM is unavailable."""
+    return (
+        "## Proje Teslim Özeti\n\n"
+        f"**Kullanıcı İsteği:** {original}\n\n"
+        f"**Agile Ekip Çıktısı:**\n\n{team_output}\n\n"
+        "---\n"
+        "_Not: Ürün Sahibi LLM özeti üretilemedi. Ekip çıktısı doğrudan sunulmaktadır._"
+    )
+
+
+def _step_po_final_review(
+    parent: AgentTask,
+    team_output: str,
+    parent_session: str,
+) -> tuple[AgentResponse, str, str]:
+    """PO reviews the merged team output and presents a user-friendly summary.
+
+    Uses the LLM directly (_safe_chat) with a PO-persona system prompt.
+    Falls back to a formatted plain-text summary if the LLM is unavailable.
+    This is the last step before the response reaches the user — closing the
+    loop: User → PO → ... → PO → User.
+    """
+    po_review_sid = _agent_session_id(parent_session, "po_review")
+    original      = parent.masked_input
+
+    user_prompt = (
+        f"Kullanıcı isteği: {original}\n\n"
+        f"Agile ekibinin ürettiği sonuç:\n{team_output}\n\n"
+        "Yukarıdaki ekip çıktısını, kullanıcıya sunacağın bir Ürün Sahibi "
+        "teslim özeti olarak yeniden yaz."
+    )
+
+    SESSION_STORE.create_session(
+        session_id=po_review_sid,
+        agent_role=AgentRole.PRODUCT_OWNER.value,
+        query=user_prompt,
+        parent_session_id=parent_session,
+        metadata={"workflow_step": "po_final_review"},
+    )
+
+    draft = ""
+    try:
+        from src.pipeline.shared import _safe_chat  # lazy import — avoids ollama at module load
+        resp  = _safe_chat(
+            "llama3.2",
+            [
+                {"role": "system", "content": _PO_REVIEW_SYSTEM},
+                {"role": "user",   "content": user_prompt},
+            ],
+        )
+        draft = (resp.get("message", {}).get("content", "") or "").strip()
+        logger.info(
+            "agile-workflow: PO final review OK  session=%s  (%d chars)",
+            po_review_sid, len(draft),
+        )
+    except Exception as exc:
+        logger.error("agile-workflow: PO final review LLM failed: %s", exc, exc_info=True)
+        draft = _format_po_fallback(team_output, original)
+
+    SESSION_STORE.record_output(
+        session_id=po_review_sid,
+        output=draft,
+        status="completed" if _usable(draft) else "failed",
+        metadata={},
+    )
+
+    response = AgentResponse(
+        task_id=parent.task_id,
+        agent_role=AgentRole.PRODUCT_OWNER,
+        draft=draft,
+        status=TaskStatus.COMPLETED if _usable(draft) else TaskStatus.FAILED,
+    )
+    return response, draft, po_review_sid
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  Main orchestration entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_agile_workflow(task: AgentTask) -> AgentResponse:
-    """Execute the full sequential Agile workflow: PO → SM → Developer → Composer.
+    """Execute the full PO-first Agile workflow.
 
-    Each agent receives the previous agent's output as enriched context
-    (not just the raw original query).  Composer merges all outputs into
-    a single structured final response.
+    Flow: PO → [Composer gate] → SM → [Composer gate] → Dev → [Composer gate]
+          → Composer merge → PO final review → User
 
-    Failure handling
-    ────────────────
-    Each step is wrapped in try/except.  If a step fails or produces unusable
-    output, the workflow continues with what it has and notes the failure in
-    warnings.  A completely empty pipeline emits a safe FAILED response.
+    Composer is explicitly present at every agent handoff as a lightweight
+    gate (no LLM per hop).  The final response comes from the PO, not the
+    Composer, matching the real-world product-owner-led delivery model.
 
     Returns
     ───────
     AgentResponse with:
-      • agent_role = COMPOSER
-      • draft      = final merged text from ComposerAgent.compose()
-      • status     = COMPLETED (even if some steps failed, as long as ≥1 succeeded)
-      • metadata["workflow"] = step counts, agent list, warnings
+      • agent_role = PRODUCT_OWNER  (PO is the final voice to the user)
+      • draft      = PO final review text (fallback: Composer merge)
+      • status     = COMPLETED
+      • metadata["workflow"] = step counts, agent list, child sessions, warnings
     """
-    # Determine a stable session ID for this workflow run.
-    # Falls back to task_id when the HTTP layer didn't supply a session_id.
     parent_session = _effective_session_id(task)
 
     logger.info(
-        "agile-workflow: starting PO->SM->Developer  task=%s  session=%s",
+        "agile-workflow: starting PO→[C]→SM→[C]→Dev→[C]→PO  task=%s  session=%s",
         task.task_id, parent_session,
     )
 
-    # Register the parent (Composer) session so children can attach to it.
     SESSION_STORE.create_session(
         session_id=parent_session,
         agent_role=AgentRole.COMPOSER.value,
         query=task.masked_input,
         parent_session_id=None,
-        metadata={"workflow": "agile_sequential"},
+        metadata={"workflow": "agile_po_first"},
     )
 
-    collected:    list[dict[str, str]] = []   # {"agent": ..., "draft": ...}
-    warnings:     list[str]            = []
-    child_sessions: list[str]          = []
+    collected:      list[dict[str, str]] = []
+    warnings:       list[str]            = []
+    child_sessions: list[str]            = []
 
     # ── Step 1: Product Owner ─────────────────────────────────────────────────
     po_text = ""
@@ -390,14 +471,20 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
         else:
             warnings.append("Ürün Sahibi: kullanılabilir çıktı üretilemedi.")
             po_text = ""
-            logger.warning("agile-workflow: PO step returned unusable output  session=%s", po_sid)
     except Exception as exc:
         warnings.append(f"Ürün Sahibi adımı başarısız oldu: {exc}")
         po_text = ""
         logger.error("agile-workflow: PO step failed: %s", exc, exc_info=True)
 
+    # ── Composer Gate 1: PO → SM ──────────────────────────────────────────────
+    gate1 = _composer_gate(
+        "ProductOwnerAgent", po_text, "ScrumMasterAgent", parent_session,
+    )
+    if not gate1.ok:
+        warnings.append(gate1.reason)
+    sm_context = gate1.payload if gate1.ok else f"Proje isteği: {task.masked_input}"
+
     # ── Step 2: Scrum Master ──────────────────────────────────────────────────
-    sm_context = po_text if _usable(po_text) else f"Proje isteği: {task.masked_input}"
     sm_text = ""
     sm_sid  = ""
     try:
@@ -409,15 +496,22 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
         else:
             warnings.append("Scrum Master: kullanılabilir çıktı üretilemedi.")
             sm_text = ""
-            logger.warning("agile-workflow: SM step returned unusable output  session=%s", sm_sid)
     except Exception as exc:
         warnings.append(f"Scrum Master adımı başarısız oldu: {exc}")
         sm_text = ""
         logger.error("agile-workflow: SM step failed: %s", exc, exc_info=True)
 
+    # ── Composer Gate 2: SM → Developer ──────────────────────────────────────
+    gate2 = _composer_gate(
+        "ScrumMasterAgent", sm_text, "DeveloperAgent", parent_session,
+    )
+    if not gate2.ok:
+        warnings.append(gate2.reason)
+    dev_context = gate2.payload if gate2.ok else sm_context
+
     # ── Step 3: Developer ─────────────────────────────────────────────────────
-    dev_context = sm_text if _usable(sm_text) else sm_context
-    dev_sid     = ""
+    dev_text = ""
+    dev_sid  = ""
     try:
         _, dev_text, dev_sid = _step_developer(task, dev_context, po_text, parent_session)
         child_sessions.append(dev_sid)
@@ -426,16 +520,22 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
             logger.info("agile-workflow: Dev OK  session=%s  (%d chars)", dev_sid, len(dev_text))
         else:
             warnings.append("Developer: kullanılabilir çıktı üretilemedi.")
-            logger.warning("agile-workflow: Developer step returned unusable output  session=%s", dev_sid)
     except Exception as exc:
         warnings.append(f"Developer adımı başarısız oldu: {exc}")
         logger.error("agile-workflow: Developer step failed: %s", exc, exc_info=True)
 
-    # ── Step 4: Composer — merge all outputs ──────────────────────────────────
+    # ── Composer Gate 3: Developer → PO final review ─────────────────────────
+    gate3 = _composer_gate(
+        "DeveloperAgent", dev_text, "ProductOwnerAgent (final review)", parent_session,
+    )
+    if not gate3.ok:
+        warnings.append(gate3.reason)
+
+    # ── Composer merge — intermediate team summary for PO review ─────────────
     composer = ComposerAgent()
 
     if not collected:
-        response_text = composer.format_final_response(
+        error_text = composer.format_final_response(
             summary="Agile workflow tüm adımlarda başarısız oldu.",
             key_points=["Hiçbir ajan kullanılabilir çıktı üretemedi."],
             warnings=warnings or ["Bilinmeyen pipeline hatası."],
@@ -446,58 +546,79 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
         )
         SESSION_STORE.record_output(
             session_id=parent_session,
-            output=response_text,
+            output=error_text,
             status="failed",
             metadata={"child_sessions": child_sessions, "warnings": warnings},
         )
         return AgentResponse(
             task_id=task.task_id,
             agent_role=AgentRole.COMPOSER,
-            draft=response_text,
+            draft=error_text,
             status=TaskStatus.FAILED,
             metadata={
                 "workflow": {
                     "session_id":      parent_session,
                     "child_sessions":  child_sessions,
                     "steps_completed": 0,
-                    "steps_attempted": 3,
+                    "steps_attempted": 4,
                     "agents_used":     [],
                     "warnings":        warnings,
                 }
             },
         )
 
-    composed = composer.compose(collected)
+    composed     = composer.compose(collected)
+    team_summary = composed["response_text"]
+
+    # ── Step 4: PO Final Review ───────────────────────────────────────────────
+    po_review_text = ""
+    po_review_sid  = ""
+    try:
+        _, po_review_text, po_review_sid = _step_po_final_review(
+            task, team_summary, parent_session,
+        )
+        child_sessions.append(po_review_sid)
+        if not _usable(po_review_text):
+            warnings.append("PO final review: kullanılabilir çıktı üretilemedi, Composer çıktısı kullanılıyor.")
+            po_review_text = team_summary
+    except Exception as exc:
+        warnings.append(f"PO final review adımı başarısız oldu: {exc} — Composer çıktısı kullanılıyor.")
+        po_review_text = team_summary
+        logger.error("agile-workflow: PO review step failed: %s", exc, exc_info=True)
+
+    final_output = po_review_text if _usable(po_review_text) else team_summary
+    final_reviewer = "product_owner" if _usable(po_review_text) else "composer"
 
     workflow_meta: dict = {
         "session_id":      parent_session,
-        "child_sessions":  child_sessions,   # ← PO, SM, Developer session IDs
+        "child_sessions":  child_sessions,   # [po, sm, dev, po_review]
         "steps_completed": len(collected),
-        "steps_attempted": 3,
+        "steps_attempted": 4,
         "agents_used":     [s["agent"] for s in collected],
+        "final_reviewer":  final_reviewer,
         "warnings":        warnings,
         "useful_count":    composed.get("useful_count", 0),
         "merged_count":    composed.get("merged_count", 0),
         "conflict_count":  len(composed.get("conflicts", [])),
     }
 
-    # Record the Composer's final merged output back to the parent session.
     SESSION_STORE.record_output(
         session_id=parent_session,
-        output=composed["response_text"],
+        output=final_output,
         status="completed",
         metadata=workflow_meta,
     )
 
     logger.info(
-        "agile-workflow: complete  session=%s  %d/3 steps  children=%s",
-        parent_session, len(collected), child_sessions,
+        "agile-workflow: complete  session=%s  %d/3 agent steps  "
+        "final_reviewer=%s  children=%s",
+        parent_session, len(collected), final_reviewer, child_sessions,
     )
 
     return AgentResponse(
         task_id=task.task_id,
-        agent_role=AgentRole.COMPOSER,
-        draft=composed["response_text"],
+        agent_role=AgentRole.PRODUCT_OWNER,   # PO is the final voice to the user
+        draft=final_output,
         status=TaskStatus.COMPLETED,
         metadata={"workflow": workflow_meta},
     )

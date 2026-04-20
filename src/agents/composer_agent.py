@@ -57,6 +57,16 @@ class NormalizedOutput:
     index: int
 
 
+@dataclass
+class HandoffResult:
+    """Result of a Composer gate validation between agent handoffs."""
+    ok: bool          # True → proceed to next agent with payload
+    from_agent: str
+    to_agent: str
+    reason: str       # human-readable explanation
+    payload: str      # cleaned text to forward (empty when ok=False)
+
+
 class ComposerAgent:
     """Simple, extensible output composer for multi-agent pipelines."""
 
@@ -254,6 +264,33 @@ class ComposerAgent:
     def _split_sentences(text: str) -> list[str]:
         parts = re.split(r"[.!?\n]+", text)
         return [p.strip() for p in parts if p.strip()]
+
+    def validate_handoff(self, from_agent: str, text: str, to_agent: str) -> "HandoffResult":
+        """Lightweight Composer gate between agent handoffs. No LLM call.
+
+        Checks whether the outgoing text is usable before passing it to the
+        next agent.  Called explicitly in agile_workflow.py at every hop so
+        that Composer is an active coordinator, not a passive end-of-chain merger.
+        """
+        cleaned = self._clean_text(text)
+        if not cleaned or cleaned.lower() in _USELESS_OUTPUTS or len(cleaned) < 15:
+            return HandoffResult(
+                ok=False,
+                from_agent=from_agent,
+                to_agent=to_agent,
+                reason=(
+                    f"{from_agent} çıktısı yetersiz veya boş — "
+                    f"{to_agent} orijinal istek bağlamıyla devam edecek."
+                ),
+                payload="",
+            )
+        return HandoffResult(
+            ok=True,
+            from_agent=from_agent,
+            to_agent=to_agent,
+            reason=f"{from_agent} → {to_agent} geçişi onaylandı ({len(cleaned)} karakter).",
+            payload=cleaned,
+        )
 
     def _first_sentence(self, text: str) -> str:
         sentences = self._split_sentences(text)
