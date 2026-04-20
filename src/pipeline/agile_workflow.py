@@ -353,6 +353,41 @@ def _format_po_fallback(team_output: str, original: str) -> str:
     )
 
 
+def _build_visible_workflow_output(
+    po_text: str,
+    sm_text: str,
+    dev_text: str,
+    po_review_text: str,
+    warnings: list[str],
+) -> str:
+    """Build the final LibreChat-visible response with labeled agent sections.
+
+    Each agent's contribution appears under its own Markdown heading so the
+    user can see every step of the workflow in a single response message.
+    The PO final review is always placed last as the delivery summary.
+    """
+    divider = "\n\n---\n\n"
+    parts: list[str] = []
+
+    if _usable(po_text):
+        parts.append(f"## 📋 Ürün Sahibi — Proje Hikayeleri\n\n{po_text}")
+
+    if _usable(sm_text):
+        parts.append(f"## 🏃 Scrum Master — Sprint Planı\n\n{sm_text}")
+
+    if _usable(dev_text):
+        parts.append(f"## 💻 Developer — Teknik Değerlendirme\n\n{dev_text}")
+
+    if _usable(po_review_text):
+        parts.append(f"## ✅ Ürün Sahibi — Teslim Özeti\n\n{po_review_text}")
+
+    if warnings:
+        warn_block = "\n".join(f"- {w}" for w in warnings)
+        parts.append(f"## ⚠️ Uyarılar\n\n{warn_block}")
+
+    return divider.join(parts) if parts else "Workflow tamamlanamadı."
+
+
 def _step_po_final_review(
     parent: AgentTask,
     team_output: str,
@@ -520,8 +555,10 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
             logger.info("agile-workflow: Dev OK  session=%s  (%d chars)", dev_sid, len(dev_text))
         else:
             warnings.append("Developer: kullanılabilir çıktı üretilemedi.")
+            dev_text = ""
     except Exception as exc:
         warnings.append(f"Developer adımı başarısız oldu: {exc}")
+        dev_text = ""
         logger.error("agile-workflow: Developer step failed: %s", exc, exc_info=True)
 
     # ── Composer Gate 3: Developer → PO final review ─────────────────────────
@@ -586,8 +623,18 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
         po_review_text = team_summary
         logger.error("agile-workflow: PO review step failed: %s", exc, exc_info=True)
 
-    final_output = po_review_text if _usable(po_review_text) else team_summary
     final_reviewer = "product_owner" if _usable(po_review_text) else "composer"
+
+    # Build the visible response — each agent gets a labeled section so the
+    # user can see PO stories, SM plan, Developer output, and PO review in
+    # a single LibreChat message instead of just the final merged text.
+    final_output = _build_visible_workflow_output(
+        po_text=po_text,
+        sm_text=sm_text,
+        dev_text=dev_text,
+        po_review_text=po_review_text if _usable(po_review_text) else "",
+        warnings=warnings,
+    )
 
     workflow_meta: dict = {
         "session_id":      parent_session,
