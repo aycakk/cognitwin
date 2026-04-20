@@ -318,3 +318,64 @@ def evaluate_all_gates(
         "role": agent_role,
         "active_gates": list(gates.keys()),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  RICH GATE AGGREGATOR  (extends evaluate_all_gates with GateResult objects)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def evaluate_all_gates_rich(
+    draft: str,
+    vector_context: str,
+    is_empty: bool,
+    agent_role: str,
+    redo_log: list[dict],
+    *,
+    codebase_context: str = "",
+) -> dict:
+    """
+    Same as evaluate_all_gates() but attaches revision_hint and confidence_score
+    to every gate entry.
+
+    Returns the same top-level shape as evaluate_all_gates() so callers can
+    drop in this function without breaking existing consumers, plus:
+      report["gates"][gate_id]["revision_hint"]    — str
+      report["gates"][gate_id]["confidence_score"] — float 0.0–1.0
+      report["avg_confidence"]                     — float, mean across all gates
+
+    The underlying evaluate_all_gates() call is NOT modified — this wrapper
+    only enriches its output.
+    """
+    from src.gates.gate_result import build_gate_result
+
+    base = evaluate_all_gates(
+        draft,
+        vector_context,
+        is_empty,
+        agent_role,
+        redo_log,
+        codebase_context=codebase_context,
+    )
+
+    enriched: dict[str, dict] = {}
+    confidence_values: list[float] = []
+
+    for gate_id, info in base["gates"].items():
+        gr = build_gate_result(gate_id, info["pass"], info["evidence"])
+        enriched[gate_id] = {
+            "pass":             gr.passed,
+            "evidence":         gr.evidence,
+            "revision_hint":    gr.revision_hint,
+            "confidence_score": gr.confidence_score,
+        }
+        confidence_values.append(gr.confidence_score)
+
+    avg_conf = round(sum(confidence_values) / len(confidence_values), 2) if confidence_values else 0.0
+
+    return {
+        "conjunction":      base["conjunction"],
+        "gates":            enriched,
+        "role":             base["role"],
+        "active_gates":     base["active_gates"],
+        "avg_confidence":   avg_conf,
+    }

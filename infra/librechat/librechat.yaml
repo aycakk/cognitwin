@@ -29,6 +29,15 @@ endpoints:
         fetch: false
       modelDisplayLabel: "CogniTwin Scrum Master"
 
+    - name: "CogniTwin Product Owner"
+      apiKey: "cognitwin"
+      baseURL: "http://cognitwin-api:8011/v1/"
+      models:
+        default:
+          - "cognitwin-product-owner"
+        fetch: false
+      modelDisplayLabel: "CogniTwin Product Owner"
+
     - name: "CogniTwin Composer"
       apiKey: "cognitwin"
       baseURL: "http://cognitwin-api:8011/v1/"

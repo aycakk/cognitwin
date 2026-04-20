@@ -474,3 +474,36 @@ class SprintStateStore:
             t for t in state.get("tasks", [])
             if t.get("po_status") == "ready_for_review"
         ]
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Sprint loop helpers  (used by sprint_loop.py for autonomous runs)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def assign_task(self, task_id: str, assignee_id: str) -> bool:
+        """Assign a task to an agent/developer and record the timestamp.
+
+        Returns False when the task_id is not found.
+        Only the sprint loop should call this — interactive assignment is
+        handled by ScrumMasterAgent._handle_assign().
+        """
+        with self.state_lock():
+            state = self.load()
+            for t in state.get("tasks", []):
+                if t["id"] == task_id:
+                    t["assignee"]    = assignee_id
+                    t["assigned_at"] = datetime.now().isoformat(timespec="seconds")
+                    self.save(state)
+                    return True
+        return False
+
+    def set_sprint_goal(self, goal: str) -> None:
+        """Update the sprint goal text.
+
+        Only used by the autonomous sprint loop to stamp the goal into state
+        so downstream agents (Developer, ScrumMaster) can read it via
+        read_context_block().
+        """
+        with self.state_lock():
+            state = self.load()
+            state.setdefault("sprint", {})["goal"] = goal[:200]
+            self.save(state)
