@@ -177,25 +177,28 @@ Sen bir Scrum takımında görev yapan CogniTwin Developer Agent'sın.
 Rol tabanlı çalışırsın — kişisel profil veya dijital ayak izi kullanmazsın.
 
 Bağlam kaynakların:
-  • Proje kaynak kodu (CODEBASE CONTEXT)
-  • Sprint durumu (SPRINT CONTEXT)
-  • Ontoloji kısıtları (developer_ontology.ttl)
+  • Proje kaynak kodu       (CODEBASE CONTEXT)
+  • Sprint durumu           (SPRINT CONTEXT)
+  • Ontoloji kısıtları     (developer_ontology.ttl)
+  • İş akışı bağlamı       (WORKFLOW CONTEXT) — Scrum Master sprint planı ve
+                            Ürün Sahibi hikayeleri. Agile workflow modunda mevcuttur.
 
 TEMEL KURALLAR (İhlal Edilemez):
-  1. Yalnızca CODEBASE CONTEXT ve SPRINT CONTEXT içinde sağlanan bilgiden yanıt ver.
+  1. CODEBASE CONTEXT, SPRINT CONTEXT ve WORKFLOW CONTEXT içinde sağlanan bilgiden yanıt ver.
+     WORKFLOW CONTEXT varsa (SM sprint planı / PO hikayeleri), o bağlamı birincil girdi olarak kullan.
   2. Bir dosya yolundan (path) bahsediyorsan, o dosya MUTLAKA CODEBASE CONTEXT içinde olmalı.
   3. Bir fonksiyon veya sınıf adından bahsediyorsan, o isim MUTLAKA CODEBASE CONTEXT içinde olmalı.
-  4. CODEBASE CONTEXT boşsa veya yoksa, YALNIZCA şu yanıtı ver: "Bunu hafızamda bulamadım."
+  4. CODEBASE CONTEXT ve WORKFLOW CONTEXT ikisi de boşsa, YALNIZCA şu yanıtı ver: "Bunu hafızamda bulamadım."
   5. Dosya yolu, sınıf adı, fonksiyon adı veya framework TAHMİN ETME — sadece bağlamda gördüklerini kullan.
-  6. Bağlamda olmayan bilgiyi UYDURMA — halüsinasyon BLOKLANDI.
+  6. Bağlamda olmayan teknik detayı UYDURMA — halüsinasyon BLOKLANDI.
   7. PII ifşa etme.
   8. JavaScript, React, Node.js gibi projede OLMAYAN teknolojilere referans verme.
      Bu proje Python 3.11 + FastAPI + Ollama + ChromaDB + rdflib kullanır.
 
 Yanıt verirken:
+  - WORKFLOW CONTEXT (SM sprint planı) mevcutsa, o plana göre teknik uygulama adımları üret.
   - Bahsettiğin her dosya yolunu CODEBASE CONTEXT'ten doğrula.
-  - Bahsettiğin her fonksiyonu CODEBASE CONTEXT'ten doğrula.
-  - Emin olmadığın bilgiyi "tahmin" olarak işaretle veya yanıt verme.
+  - Emin olmadığın teknik detayı "tahmin" olarak işaretle veya yanıt verme.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -231,6 +234,30 @@ _DEV_CONTEXT_MAP: list[tuple[frozenset, str]] = [
 
 # chars read per file — enough for full small files, first section of large ones
 _CODE_SNIPPET_CHARS = 4000
+
+
+def _build_workflow_context(task_ctx: dict) -> str:
+    """Build a labeled context block from SM/PO outputs injected by agile_workflow.
+
+    Returns an empty string when neither output is present so that the caller
+    can use filter(None, ...) without any change to the join logic.
+    """
+    parts: list[str] = []
+    po_output = (task_ctx.get("po_output") or "").strip()
+    sm_output = (task_ctx.get("sm_output") or "").strip()
+    if po_output and len(po_output) >= 15:
+        parts.append(
+            "=== ÜRÜN SAHİBİ HİKAYELERİ ===\n"
+            f"{po_output}\n"
+            "=== END PO HİKAYELERİ ==="
+        )
+    if sm_output and len(sm_output) >= 15:
+        parts.append(
+            "=== SCRUM MASTER SPRINT PLANI ===\n"
+            f"{sm_output}\n"
+            "=== END SPRINT PLANI ==="
+        )
+    return "\n\n".join(parts)
 
 
 def _build_codebase_context(query: str) -> str:
@@ -517,7 +544,14 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
     # gates JSON debug validation on it; that gate must not fire for sprint-only
     # queries where codebase_context is empty.
     sprint_context = _SPRINT_STATE.read_context_block()
-    combined_context = "\n\n".join(filter(None, [codebase_context, sprint_context]))
+
+    # Stage 2b — Workflow context injection (SM sprint plan + PO stories).
+    # Populated when this step is called from agile_workflow._step_developer.
+    # Added LAST so it takes precedence over the generic sprint state when
+    # both are present (the SM plan is project-specific; sprint_state is generic).
+    workflow_context = _build_workflow_context(task.context or {})
+
+    combined_context = "\n\n".join(filter(None, [codebase_context, sprint_context, workflow_context]))
 
     orchestrator = DeveloperOrchestrator(
         chat_fn=_safe_chat,

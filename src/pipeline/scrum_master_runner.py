@@ -131,7 +131,7 @@ _HALLUCINATION_RE = re.compile(
 #  All other intents stay on the deterministic rule path.
 # ─────────────────────────────────────────────────────────────────────────────
 
-_LLM_INTENTS: frozenset[str] = frozenset({"sprint_analysis", "general"})
+_LLM_INTENTS: frozenset[str] = frozenset({"sprint_analysis", "sprint_planning", "general"})
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Scrum Master LLM system prompt
@@ -139,26 +139,36 @@ _LLM_INTENTS: frozenset[str] = frozenset({"sprint_analysis", "general"})
 
 _SM_LLM_SYSTEM_PROMPT = """\
 ████████████████████████████████████████████████████████████████████████████
-          SCRUM MASTER AGENT — ANALYTIC ENGINE v1.0
+          SCRUM MASTER AGENT — ANALYTIC ENGINE v1.1
           Ground sources : Sprint State JSON + scrum_master.ttl + agile.ttl
+                           + PO Stories (workflow mode)
           Gate coverage  : C1 (PII) · C4 (Hallucination)
 ████████████████████████████████████████████████████████████████████████████
 
 SECTION 0 ▸ AGENT IDENTITY
 ══════════════════════════════════════════════════════════
 Sen deneyimli bir Scrum Master AI ajanısın.
-İki yetkili bilgi kaynağın var:
+Üç yetkili bilgi kaynağın var:
 
   • SPRINT STATE    → sprint_state.json'dan alınan gerçek zamanlı veri:
                       görevler, atamalar, engeller, sprint hedefi.
-  • ONTOLOGY       → scrum_master.ttl + agile.ttl:
+  • ONTOLOGY        → scrum_master.ttl + agile.ttl:
                       SprintHealthStatus, RiskSignal, ImpedimentCategory
                       ve RemediationAction tanım ve kural tabanı.
+  • PO HİKAYELERİ  → Yeni proje senaryolarında Ürün Sahibi'nin ürettiği
+                      kullanıcı hikayeleri, kabul kriterleri ve öncelik
+                      sıralaması. Bu kaynak sprint planlama görevi için
+                      birincil girdi olarak kullanılmalıdır.
 
-TEMEL KURAL: Yanıtların YALNIZCA bu iki kaynaktan türetilmeli.
+TEMEL KURAL: Birden fazla kaynak mevcutsa hepsini entegre et.
+PO hikayeleri varsa sprint planı ONLARA GÖRE yapılmalı — eski state'e
+takılıp kalmadan.
 
 SECTION 1 ▸ RESPONSE PROTOCOL
 ══════════════════════════════════════════════════════════
+• Sprint planlama  → PO hikayelerindeki her story için sprint görevi oluştur.
+                     Öncelik sırasını PO'nun belirlediği önceliğe göre yap.
+                     Her göreve developer-default atama yap ve story point tahmin et.
 • Risk analizi     → Ontoloji'deki RiskSignal bireylerini ve severityLevel
                      değerlerini kullanarak önceliklendir.
 • Sprint sağlığı   → SprintHealthStatus (healthy / at_risk / critical)
@@ -169,7 +179,7 @@ SECTION 1 ▸ RESPONSE PROTOCOL
   (örn. "T-003'ü developer-02'ye devret", "bugün standup'ta T-001 öncelikli").
 • Türkçe yanıt ver.
 • Kanıtsız tahmin YAPMA.
-  Sprint state'te bilgi yoksa "mevcut veride bu bilgi yok" de.
+  Mevcut veride bilgi yoksa "bu bilgi mevcut veride yok" de.
 ████████████████████████████████████████████████████████████████████████████
 """
 
@@ -209,26 +219,52 @@ def _sm_chat(messages: list[dict]) -> str:
     """
     Dual-mode LLM call for the Scrum Master hybrid path.
 
-    Priority 1 — Local trained model (SCRUM_MODEL_PATH directory exists):
+    Priority 1 — Local trained model (SCRUM_MODEL_PATH directory exists)
+                 ONLY when the input fits within the model's context window.
       Calls the HuggingFace transformers pipeline loaded from the Docker
       volume mount at /app/models/scrum_model.
 
-    Priority 2 — Ollama fallback (no local model or load failure):
-      Calls llama3.2 via the Ollama runtime.  Used during development
-      when the trained model has not been placed in models/scrum_model.
+    Priority 2 — Ollama llama3.2 fallback in all other cases:
+      • No local model directory.
+      • Local model failed to load.
+      • Input is too long for the local model (estimated token count >
+        _LOCAL_MODEL_MAX_INPUT_TOKENS).  Agile-workflow prompts include PO
+        stories + backlog + sprint state + ontology, easily exceeding 2048
+        tokens.  Sending an oversized input causes "indexing errors" and
+        produces garbage output — we skip the local model in that case.
 
     Returns the stripped response string in both cases.
     """
     # ── Priority 1: local HuggingFace model ──────────────────────────────────
+    _LOCAL_MODEL_MAX_INPUT_TOKENS = 1400   # local model max_length=2048, reserve 512 for output + margin
+    _CHARS_PER_TOKEN               = 4     # rough but reliable estimate for Turkish/English mixed text
+
     if _SCRUM_MODEL_PATH and os.path.isdir(_SCRUM_MODEL_PATH):
         pipe = _load_local_pipe()
         if pipe is not None:
-            result = pipe(messages, max_new_tokens=512)
-            generated = result[0]["generated_text"]
-            if isinstance(generated, list):
-                # Chat-template output: list of messages, last is assistant
-                return generated[-1].get("content", "").strip()
-            return str(generated).strip()
+            # Estimate total input token count from raw character length.
+            # If the estimate exceeds the local model's safe input budget,
+            # fall through to Ollama instead of causing indexing errors.
+            total_chars = sum(len(str(m.get("content", ""))) for m in messages)
+            estimated_tokens = total_chars // _CHARS_PER_TOKEN
+            if estimated_tokens > _LOCAL_MODEL_MAX_INPUT_TOKENS:
+                logger.info(
+                    "scrum: input too long for local model (~%d tokens > %d limit) "
+                    "— falling back to Ollama",
+                    estimated_tokens, _LOCAL_MODEL_MAX_INPUT_TOKENS,
+                )
+            else:
+                try:
+                    result    = pipe(messages, max_new_tokens=512)
+                    generated = result[0]["generated_text"]
+                    if isinstance(generated, list):
+                        # Chat-template output: list of messages, last is assistant
+                        return generated[-1].get("content", "").strip()
+                    return str(generated).strip()
+                except Exception as exc:
+                    logger.warning(
+                        "scrum: local model inference failed (%s) — falling back to Ollama", exc,
+                    )
 
     # ── Priority 2: Ollama fallback ───────────────────────────────────────────
     resp = _ollama_chat(
@@ -276,55 +312,94 @@ def _apply_safety_gates(task: AgentTask, response: str) -> AgentResponse:
 
 def _run_llm_augmented(task: AgentTask, query: str, intent: str) -> AgentResponse:
     """
-    LLM-augmented path for analytical and open-ended SM queries.
+    LLM-augmented path for analytical, planning, and open-ended SM queries.
 
     Context assembly:
+      • po_section       — PO stories from task.context (workflow mode only)
+      • backlog_context  — backlog items from sprint_state.json
       • sprint_context   — real sprint state (tasks, blockers, assignments)
       • ontology_context — SM ontology vocabulary from scrum_master.ttl
       • rule_block       — structured risk signals from rule engine
-                           (only for sprint_analysis; general uses state only)
+                           (only for sprint_analysis; planning/general skip this)
 
-    The LLM synthesises all three into a grounded, actionable response.
+    For workflow sprint_planning intent, PO stories are placed FIRST so the
+    LLM treats them as the primary planning input, not as a question to answer.
     """
-    # 1. Sprint state context (read-only, no lock needed)
+    # 1. Extract PO output injected by agile_workflow._make_child_task
+    task_ctx   = task.context or {}
+    po_output  = task_ctx.get("po_output", "")
+    wf_step    = task_ctx.get("workflow_step", "")
+
+    po_section = ""
+    if po_output and len(po_output.strip()) >= 15:
+        po_section = (
+            "=== ÜRÜN SAHİBİ HİKAYELERİ VE PROJE BRIEFİ ===\n"
+            f"{po_output}\n"
+            "=== END PO HİKAYELERİ ===\n\n"
+        )
+
+    # 2. Backlog context — shows stories PO just added (not yet in tasks array)
+    backlog_raw = _SPRINT_STATE.read_backlog_context_block()
+    backlog_context = backlog_raw if "(none)" not in backlog_raw else ""
+
+    # 3. Sprint state context (tasks, assignments, blockers)
     sprint_context = _SPRINT_STATE.read_context_block()
 
-    # 2. Ontology context (SPARQL over agile.ttl + scrum_master.ttl)
+    # 4. Ontology context (SPARQL over agile.ttl + scrum_master.ttl)
     ontology_context = build_scrum_master_ontology_context()
 
-    # 3. Rule engine base output for sprint_analysis (provides deterministic
-    #    risk signals as structured grounding input to the LLM)
+    # 5. Rule engine base output — only for sprint_analysis, not planning
     rule_block = ""
     if intent == "sprint_analysis":
         rule_output = _agent.handle_query(query)
         rule_block  = f"KURAL MOTORU RİSK ANALİZİ:\n{rule_output}\n\n"
 
-    # 4. Build LLM message
-    user_message = (
-        f"{sprint_context}\n\n"
-        f"{ontology_context}\n\n"
-        f"{rule_block}"
-        f"SORU: {query}\n\n"
-        "INSTRUCTION: Yukarıdaki SPRINT STATE ve SCRUM MASTER ONTOLOGY CONTEXT "
-        "bilgilerini kullanarak Scrum Master perspektifinden yanıt ver. "
-        "Risk sinyallerini ontoloji tanımlarıyla eşleştir. "
-        "SprintHealthStatus'a göre sprint sağlığını değerlendir. "
-        "Somut ve uygulanabilir RemediationAction öner. "
-        "Kural motoru çıktısı varsa onu temel al ve zenginleştir. "
-        "Türkçe yanıt ver. Kanıtsız tahmin yapma."
-    )
+    # 6. Build instruction — sprint_planning gets a concrete task-generation goal
+    if intent == "sprint_planning" or wf_step == "scrum_master":
+        instruction = (
+            "GÖREV: Yukarıdaki PO hikayelerini ve backlog içeriğini kullanarak "
+            "somut bir sprint planı üret. Her hikaye için:\n"
+            "  1. Görev başlığı ve kısa açıklama yaz\n"
+            "  2. Story point tahmini yap (1-8 arası)\n"
+            "  3. developer-default'a atama yap\n"
+            "  4. Kabul kriterlerini listele\n"
+            "  5. Potansiyel risk veya engelleri belirt\n"
+            "Backlog boşsa veya PO hikayeleri yoksa kullanıcı isteğinden "
+            "çıkarım yaparak temsili bir sprint planı oluştur. "
+            "Türkçe yanıt ver. 'Görev ID gerekli' deme — bu yeni bir proje planlamasıdır."
+        )
+    else:
+        instruction = (
+            "INSTRUCTION: Yukarıdaki SPRINT STATE, BACKLOG ve SCRUM MASTER ONTOLOGY "
+            "bilgilerini kullanarak Scrum Master perspektifinden yanıt ver. "
+            "Risk sinyallerini ontoloji tanımlarıyla eşleştir. "
+            "SprintHealthStatus'a göre sprint sağlığını değerlendir. "
+            "Somut ve uygulanabilir RemediationAction öner. "
+            "Kural motoru çıktısı varsa onu temel al ve zenginleştir. "
+            "Türkçe yanıt ver. Kanıtsız tahmin yapma."
+        )
+
+    user_message = "".join([
+        po_section,
+        f"{backlog_context}\n\n" if backlog_context else "",
+        f"{sprint_context}\n\n",
+        f"{ontology_context}\n\n",
+        rule_block,
+        f"KULLANICI İSTEĞİ: {query}\n\n",
+        instruction,
+    ])
 
     base_messages = [
         {"role": "system", "content": _SM_LLM_SYSTEM_PROMPT},
         {"role": "user",   "content": user_message},
     ]
 
-    logger.debug("scrum-llm: intent=%r query=%r", intent, query[:80])
+    logger.debug("scrum-llm: intent=%r wf_step=%r query=%r", intent, wf_step, query[:80])
 
-    # 5. LLM call
+    # 7. LLM call
     draft = _sm_chat(base_messages)
 
-    # 6. Safety gates (C1 + C4) — same as deterministic path
+    # 8. Safety gates (C1 + C4) — same as deterministic path
     return _apply_safety_gates(task, draft)
 
 
@@ -338,12 +413,23 @@ def run_scrum_master_pipeline(task: AgentTask) -> AgentResponse:
 
     Routing decision
     ────────────────
-    intent in _LLM_INTENTS  →  LLM-augmented path (_run_llm_augmented)
-    all other intents        →  Deterministic rule path (ScrumMasterAgent)
+    workflow_step == "scrum_master"  →  LLM sprint_planning path (always)
+                                        Bypasses keyword detection — agile_workflow
+                                        already built an enriched prompt with PO output;
+                                        the SM's only job here is sprint planning.
+    intent in _LLM_INTENTS           →  LLM-augmented path (_run_llm_augmented)
+    all other intents                →  Deterministic rule path (ScrumMasterAgent)
 
     Both paths apply C1 + C4 safety gates before emitting.
     """
-    query  = task.masked_input
+    query       = task.masked_input
+    task_ctx    = task.context or {}
+    workflow_step = task_ctx.get("workflow_step", "")
+
+    # ── Workflow fast-path: always plan the sprint when called from agile_workflow
+    if workflow_step == "scrum_master":
+        return _run_llm_augmented(task, query, "sprint_planning")
+
     intent = _agent.detect_intent(query)
 
     # ── Deterministic path ────────────────────────────────────────────────────

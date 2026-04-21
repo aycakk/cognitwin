@@ -147,6 +147,11 @@ def _safe_chat(model: str, messages: list) -> dict:
 
     Ollama returns a ChatResponse object; orchestrator expects
     {"message": {"content": str}}.  This wrapper normalises both shapes.
+
+    The overall timeout is enforced at the API layer via asyncio.wait_for
+    in openai_routes.chat_completions — individual calls here are not
+    independently capped because Ollama does not expose a clean per-call
+    deadline through the Python client's options dict.
     """
     resp = chat(
         model=model,

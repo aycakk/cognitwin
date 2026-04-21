@@ -14,7 +14,12 @@ services:
     container_name: cognitwin-api
     restart: unless-stopped
     ports:
-      - "8011:8011"
+      # Host port 8011 falls in the Windows Hyper-V/WinNAT reserved range
+      # (7962–8061) and cannot be bound on this machine.
+      # The container still listens on 8011 internally — LibreChat connects
+      # via Docker networking (http://cognitwin-api:8011/v1/) and is unaffected.
+      # Use http://localhost:8600 for direct host-side access to the API.
+      - "8600:8011"
     environment:
       OLLAMA_HOST: "http://ollama:11434"
     volumes:
@@ -99,7 +104,11 @@ services:
       cognitwin-api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3900/health"]
+      # LibreChat does not expose /health.
+      # Use 127.0.0.1 explicitly — inside this container wget resolves
+      # "localhost" → ::1 (IPv6) but Node.js only binds on 0.0.0.0 (IPv4),
+      # so the IPv6 attempt always gets "Connection refused".
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3900/"]
       interval: 15s
       timeout: 5s
       retries: 5

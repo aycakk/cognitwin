@@ -51,6 +51,17 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"güncelle|update\s+task|durum\s+değiştir|status\s+set|tamamlandı\s+olarak", re.I)),
     ("set_goal",      re.compile(
         r"sprint\s+hedef|hedef\s+belirle|goal\s+set|set\s+goal", re.I)),
+    # New-project sprint planning from PO stories — must precede sprint_analysis
+    # so that workflow-generated prompts containing PO output are caught here.
+    ("sprint_planning", re.compile(
+        r"ürün\s+sahibi.*hikaye"
+        r"|po.*oluşturulan"
+        r"|hangi\s+görevler.*önceliklendirilmeli"
+        r"|sprint\s+kapasite.*atama"
+        r"|kabul\s+kriterleri.*öncelik"
+        r"|backlog.*sprint\s+plan",
+        re.I,
+    )),
     # Open-ended reasoning questions — must stay LAST so specific patterns win first.
     ("sprint_analysis", re.compile(
         r"riskli|risk\s+ne|en\s+büyük|kritik|tehlike|sorun\s+ne"
