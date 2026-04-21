@@ -1,14 +1,33 @@
 """pipeline/composer_runner.py — Composer pipeline path.
 
-Deterministic orchestration:
-  - Analyze masked query intent.
-  - Select one or more domain runners.
-  - Dispatch to existing runners.
-  - Merge runner outputs via ComposerAgent.
+Two dispatch modes
+──────────────────
+
+SEQUENTIAL WORKFLOW MODE  (agile_workflow.py)
+─────────────────────────────────────────────
+Triggered when is_workflow_request(query) returns True.
+Activates the full PO → SM → Developer → Composer chain where each agent
+receives the PREVIOUS agent's output as enriched context.
+
+Use this for:
+  • New project requests ("yeni proje başlat", "feature request")
+  • End-to-end sprint planning ("sprint planla ve uygula")
+  • Full agile lifecycle queries ("uçtan uca", "tam süreç")
+
+PARALLEL DISPATCH MODE  (this file)
+────────────────────────────────────
+For targeted single-agent queries (e.g. "sprint durumu nedir?",
+"blocker'lar neler?").  Scores the query against SM / Developer / PO
+vocabulary, selects one or more roles, and dispatches the SAME original
+query to each.  Composer merges the outputs.
+
+Routing decision is made once at the top of run_composer_pipeline().
+All other logic below is unchanged.
 """
 
 from __future__ import annotations
 
+import logging
 import re
 
 from src.agents.composer_agent import ComposerAgent
@@ -16,6 +35,9 @@ from src.core.schemas import AgentTask, AgentResponse, AgentRole, TaskStatus
 from src.pipeline.developer_runner import _process_developer_message
 from src.pipeline.product_owner_runner import run_product_owner_pipeline
 from src.pipeline.scrum_master_runner import run_scrum_master_pipeline
+from src.pipeline.agile_workflow import is_workflow_request, run_agile_workflow
+
+logger = logging.getLogger(__name__)
 
 
 _MUTATION_RE = re.compile(
@@ -210,7 +232,21 @@ def _safe_insufficient_response(reason: str) -> dict[str, object]:
 
 
 def run_composer_pipeline(task: AgentTask) -> AgentResponse:
-    """Run deterministic orchestration and return AgentResponse."""
+    """Run Composer orchestration and return AgentResponse.
+
+    Routing decision (evaluated once, at entry):
+      is_workflow_request → sequential PO→SM→Developer chain (agile_workflow)
+      otherwise           → parallel single-query dispatch (this module)
+    """
+    # ── Sequential workflow path ──────────────────────────────────────────────
+    if is_workflow_request(task.masked_input):
+        logger.info(
+            "composer: workflow request detected — delegating to agile_workflow  "
+            "task=%s", task.task_id
+        )
+        return run_agile_workflow(task)
+
+    # ── Parallel dispatch path ────────────────────────────────────────────────
     roles, selection_reason = _select_roles(task.masked_input)
     if not roles:
         composed = _safe_insufficient_response(selection_reason)
