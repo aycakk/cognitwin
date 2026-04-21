@@ -143,7 +143,13 @@ def process_user_message(
             )
             response = run_pipeline(task)
 
-        return {"answer": response.draft}
+        # Include workflow session metadata when available so the HTTP layer
+        # can surface child session IDs to the client.
+        result: dict = {"answer": response.draft}
+        wf_meta = (response.metadata or {}).get("workflow")
+        if wf_meta:
+            result["workflow_meta"] = wf_meta
+        return result
     except UnknownModelError as exc:
         # Do NOT swallow this — it means LibreChat sent a model name we have
         # never seen.  Return a clear message so the user (and logs) know.
