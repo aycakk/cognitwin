@@ -40,3 +40,15 @@ services:
   meilisearch:
     ports:
       - "7700:7700"
+
+  # Dev modunda her iki LibreChat instance da cognitwin-api'nin --reload'unu bekler.
+  # Bu blok sadece bağımlılık zincirini belgelemek için; ek override gerekmez.
+  librechat:
+    depends_on:
+      cognitwin-api:
+        condition: service_healthy
+
+  librechat-agile:
+    depends_on:
+      cognitwin-api:
+        condition: service_healthy

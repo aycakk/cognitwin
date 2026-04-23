@@ -1,33 +1,105 @@
-# LibreChat Setup
+# CogniTwin LibreChat Yapılandırması
 
-This folder contains the team-shareable LibreChat configuration for connecting to the CogniTwin API.
+Bu klasör LibreChat'in CogniTwin backend'ine bağlanması için gerekli endpoint
+yapılandırma dosyalarını içerir.
 
-## What To Commit
+---
 
-- `infra/librechat/.env.example`
-- `infra/librechat/librechat.yaml`
-- `infra/librechat/docker-compose.override.yml.example`
-- `infra/librechat/README.md`
+## İki Ayrı LibreChat Instance
 
-Do not commit real `.env` files, logs, uploads, databases, or LibreChat secrets.
+CogniTwin iki farklı LibreChat instance çalıştırır.  Her instance yalnızca kendi
+kullanıcı kitlesine ait model(ler)i görünür kılar.
 
-## Team Setup
+| Instance       | Port   | Hedef Kullanıcı       | Görünen Modeller                                    |
+|----------------|--------|-----------------------|-----------------------------------------------------|
+| **Student**    | 3900   | Öğrenciler            | `cognitwin-student-llm`                             |
+| **Agile**      | 3901   | Proje kullanıcıları   | Composer · Product Owner · Scrum Master · Developer |
 
-1. In this folder, copy `.env.example` to `.env`.
-2. (Windows optional) copy `docker-compose.override.yml.example` to `docker-compose.override.yml`.
-3. Start the CogniTwin API locally on port `8011`.
-4. Start LibreChat with `docker compose up -d`.
-5. Open `http://localhost:3900`.
+**Öğrencilere verin:** `http://<sunucu>:3900`
+**Proje kullanıcılarına verin:** `http://<sunucu>:3901`
 
-## CogniTwin API
+---
 
-LibreChat is configured to call:
+## Erişim Denetimi — İki Katman
 
-`http://host.docker.internal:8011/v1/`
+```
+Kullanıcı HTTP isteği
+        │
+        ▼
+LibreChat UI katmanı (YAML config)
+  • librechat.student.yaml → sadece student endpoint var
+  • librechat.agile.yaml   → sadece agile endpoint var
+  • Tüm built-in endpoint'ler (openAI, anthropic, google…) disabled: true
+        │
+        ▼
+CogniTwin backend katmanı (HTTP 403)
+  • Bearer token → rol çözümleme (student / agile / admin)
+  • Yanlış rol + model → HTTP 403 Forbidden
+  • Kullanıcı model adını tahmin edip elle yazsa bile reddedilir
+```
 
-If the CogniTwin API uses another port, update `baseURL` in `librechat.yaml`.
+---
 
-## Notes
+## Yapılandırma Dosyaları
 
-- `PORT=3900` avoids the blocked `3080/3081` ports we hit locally.
-- If LibreChat fails with log permission errors on Windows, use the override file that runs the relevant containers as `0:0`.
+| Dosya                       | Hangi Instance        | İçerik                                  |
+|-----------------------------|-----------------------|-----------------------------------------|
+| `librechat.student.yaml`    | Student (port 3900)   | Sadece CogniTwin Student endpoint       |
+| `librechat.agile.yaml`      | Agile (port 3901)     | Sadece CogniTwin Agile endpoint         |
+| `librechat.yaml`            | ⚠️ Kullanılmıyor      | Eski birleşik config — yalnızca referans|
+
+---
+
+## Hızlı Başlangıç
+
+```bash
+# 1. Değişkenleri ayarla
+cp .env.example .env
+# .env içindeki key'leri değiştir (üretim için zorunlu)
+
+# 2. Stack'i başlat
+docker compose up -d --build
+
+# 3. Öğrenciler için
+open http://localhost:3900
+
+# 4. Proje kullanıcıları için
+open http://localhost:3901
+```
+
+---
+
+## API Key Yönetimi
+
+`.env` dosyasındaki değişkenler:
+
+```
+COGNITWIN_STUDENT_KEY=cognitwin-student   # Öğrenci LibreChat'e gönderilir
+COGNITWIN_AGILE_KEY=cognitwin-agile       # Agile LibreChat'e gönderilir
+COGNITWIN_ADMIN_KEY=cognitwin-admin       # Tüm modellere erişim
+```
+
+**Üretimde** bu değerleri güçlü, rastgele string'lerle değiştirin.
+Agile key'i yalnızca proje kullanıcılarıyla paylaşın.
+
+---
+
+## Stack'i Sıfırlama (Değişiklikler Sonrası)
+
+Yapılandırma değişikliklerinin etkili olması için container'ları yeniden başlatın:
+
+```bash
+docker compose down --remove-orphans
+docker compose up -d --build
+```
+
+> **Windows notu:** Log yazma hatası alırsanız
+> `infra/librechat/docker-compose.override.yml.example` dosyasını
+> `docker-compose.override.yml` olarak kopyalayın.
+
+---
+
+## `infra/librechat/docker-compose.yml` Hakkında
+
+Bu klasördeki `docker-compose.yml` **kullanılmıyor** — yalnızca referans amaçlıdır.
+Tüm servisler kök dizindeki `docker-compose.yml` tarafından yönetilir.

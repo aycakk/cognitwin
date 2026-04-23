@@ -97,6 +97,10 @@ services:
       TRUST_PROXY: "${TRUST_PROXY:-1}"
       JWT_SECRET: "${JWT_SECRET:-change-this-jwt-secret}"
       JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:-change-this-jwt-refresh-secret}"
+      # COGNITWIN_STUDENT_KEY container'a eksplisit geçiriliyor;
+      # librechat.student.yaml içindeki ${COGNITWIN_STUDENT_KEY:-cognitwin-student}
+      # bu değişkeni okur.  Default "cognitwin-student" yerel geliştirme için yeterli.
+      COGNITWIN_STUDENT_KEY: "${COGNITWIN_STUDENT_KEY:-cognitwin-student}"
     volumes:
       - ./infra/librechat/librechat.student.yaml:/app/librechat.yaml:ro
       - librechat_images:/app/client/public/images
@@ -152,6 +156,10 @@ services:
       TRUST_PROXY: "${TRUST_PROXY:-1}"
       JWT_SECRET: "${JWT_SECRET:-change-this-jwt-secret}"
       JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:-change-this-jwt-refresh-secret}"
+      # COGNITWIN_AGILE_KEY container'a eksplisit geçiriliyor;
+      # librechat.agile.yaml içindeki ${COGNITWIN_AGILE_KEY:-cognitwin-agile}
+      # bu değişkeni okur.  Default "cognitwin-agile" yerel geliştirme için yeterli.
+      COGNITWIN_AGILE_KEY: "${COGNITWIN_AGILE_KEY:-cognitwin-agile}"
     volumes:
       - ./infra/librechat/librechat.agile.yaml:/app/librechat.yaml:ro
       - librechat_agile_images:/app/client/public/images

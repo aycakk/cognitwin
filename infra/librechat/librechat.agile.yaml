@@ -1,29 +1,45 @@
 version: "1.3.4"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# CogniTwin — Agile LibreChat endpoint configuration
+# CogniTwin — Agile LibreChat endpoint yapılandırması (port 3901)
 #
-# This file is mounted ONLY by the agile-facing LibreChat instance (port 3901).
-# The student "CogniTwin Student" endpoint is completely absent — project users
-# only see the four agile agents in their model picker.
+# Bu dosya SADECE agile/proje kullanıcısı LibreChat instance'ı tarafından kullanılır.
+# Öğrenci modeli (cognitwin-student-llm) bu dosyada YOK.
+# Proje kullanıcıları yalnızca dört agile agent görür.
 #
-# Access control is two-layer:
-#   UI layer:      only agile agents appear in the model picker on port 3901.
-#   Backend layer: the agile apiKey maps to role="agile" in cognitwin-api.
-#                  The backend returns HTTP 403 for any attempt to reach student
-#                  models, even via a manually crafted request.
+# Erişim denetimi iki katmanlı:
+#   UI katmanı:      Sadece "CogniTwin Agile" endpoint ve dört model görünür.
+#   Backend katmanı: cognitwin-api, öğrenci modellerine gelen her isteği HTTP 403
+#                    ile reddeder — kullanıcı model adını manuel yazmış olsa bile.
 #
-# The Composer model orchestrates the full PO → SM → Developer pipeline.
-# Select it for new project workflow requests.
+# Model seçimi:
+#   • cognitwin-composer      → Tam PO → SM → Developer pipeline'ını başlatır
+#   • cognitwin-product-owner → Sadece PO aşamasını çalıştırır
+#   • cognitwin-scrum         → Sadece SM aşamasını çalıştırır
+#   • cognitwin-developer     → Sadece Developer aşamasını çalıştırır
 # ──────────────────────────────────────────────────────────────────────────────
 
 endpoints:
-  custom:
 
-    # ── Agile / project-workflow path ───────────────────────────────────────
-    # Only endpoint visible to project-track users.
-    # The apiKey encodes the "agile" role — the backend filters model visibility
-    # and enforces HTTP 403 for any student-only model.
+  # ── LibreChat built-in endpoint'lerini tamamen kapat ─────────────────────
+  # Bu satırlar olmazsa LibreChat, API key olmasa bile openAI/anthropic/google
+  # seçeneklerini dropdown'da gösterir.  Agile kullanıcı UI'ında hiçbir
+  # built-in endpoint görünmemeli.
+  openAI:
+    disabled: true
+  azureOpenAI:
+    disabled: true
+  google:
+    disabled: true
+  anthropic:
+    disabled: true
+  assistants:
+    disabled: true
+  gptPlugins:
+    disabled: true
+
+  # ── Agile / proje workflow endpoint ─────────────────────────────────────
+  custom:
     - name: "CogniTwin Agile"
       apiKey: "${COGNITWIN_AGILE_KEY:-cognitwin-agile}"
       baseURL: "http://cognitwin-api:8011/v1/"
