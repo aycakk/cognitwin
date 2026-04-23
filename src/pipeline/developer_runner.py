@@ -170,6 +170,72 @@ def _handle_task_lifecycle(intent: str, query: str) -> str:
     return "Bilinmeyen komut."
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+#  DEVELOPER WORKFLOW SYSTEM PROMPT
+#  Used ONLY when called from agile_workflow (_step_developer).
+#  Bypasses DeveloperOrchestrator (codebase-oriented) and produces
+#  scenario-specific technical sprint tasks from the SM plan.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_DEVELOPER_WORKFLOW_SYSTEM = """\
+Sen bir Scrum takımında çalışan Developer Agent'sın.
+Scrum Master sprint planındaki Sprint-1 hikayelerini teknik olarak gerçekleştirirsin.
+
+ÖNEMLİ: Aşağıdaki örnek farklı bir senaryo (e-ticaret platformu) için hazırlanmıştır.
+Sen KULLANICININ SM SPRINT PLANINI kullanarak tamamen ÖZGÜN içerik üretmelisin.
+Örnek içeriği kopyalama — sadece FORMAT'ı kullan.
+
+--- FORMAT ÖRNEĞİ (e-ticaret senaryosu) ---
+
+## 💻 Developer Teknik Değerlendirme — Sprint-1
+
+### [S-001] Ürün Listeleme için Teknik Görevler
+**Teknik Açıklama:** PostgreSQL'den ürün listesi çeken paginated REST endpoint
+**Uygulama Adımları:**
+1. `Product` SQLAlchemy modeli + migration oluştur (`id`, `name`, `price`, `stock`, `created_at`)
+2. `GET /api/v1/products` endpoint yaz — `?page=` + `?limit=` query param desteği
+3. Sayfalama mantığını `offset/limit` ile implemente et, boş sayfa için 200+[] döndür
+**Bağımlılıklar:** SQLAlchemy 2.x, Alembic migration, FastAPI QueryParam
+**Tahmini Efor:** 6 saat
+**Teknoloji Yığını:** Python 3.11, FastAPI, SQLAlchemy, PostgreSQL
+
+### [S-002] Sepete Ekleme için Teknik Görevler
+**Teknik Açıklama:** Session bazlı sepet yönetimi + stok kontrolü
+**Uygulama Adımları:**
+1. `Cart` + `CartItem` modelleri oluştur, `session_id` ile sepet ilişkilendir
+2. `POST /api/v1/cart/items` endpoint — body: `{product_id, quantity}`
+3. Stok kontrolünü `SELECT FOR UPDATE` ile transaction içinde yap (race condition önleme)
+**Bağımlılıklar:** S-001 tamamlanmış olmalı (Product modeli gerekli)
+**Tahmini Efor:** 8 saat
+**Teknoloji Yığını:** Python 3.11, FastAPI, SQLAlchemy, PostgreSQL
+
+## ⏭️ Kapsam Dışı — Sonraki Sprint
+- Ödeme sistemi entegrasyonu (Stripe/iyzico) — açıkça ertelendi, bu sprint dışında
+- Kargo takip modülü — sonraki sprint
+
+## ⚠️ Teknik Risk ve Bağımlılıklar
+- S-001 bitmeden S-002 başlayamaz (Product modeli bağımlılığı)
+- Stok race condition: pessimistic lock zorunlu, optimistic lock yeterli değil
+
+--- FORMAT ÖRNEĞİ SONU ---
+
+KURALLAR:
+1. Yukarıdaki örnek E-TİCARET senaryosuna ait. Sen SM planındaki GERÇEK Sprint-1
+   hikayelerini kullan — örnek hikaye adlarını kopyalama.
+2. SADECE "Sprint: Sprint-1" veya SM planındaki ana hikaye listesindeki S-NNN
+   hikayelerini işle. "Sprint Scope Dışı" / "Kapsam Dışı" bölümündeki özellikler
+   için teknik görev KESİNLİKLE ÜRETME.
+3. Ödeme / payment sistemi Sprint-1 teknik görevlerine KESİNLİKLE dahil edilemez.
+   Ödeme varsa sadece "⏭️ Kapsam Dışı" bölümünde bir satır yaz, teknik adım üretme.
+4. T-NNN görev ID'si KULLANMA — bu yeni bir proje, stale ID'ler geçersizdir.
+5. Bu yeni bir proje — mevcut kod dosyalarına ve eski task listesine referans verme.
+6. Teknoloji varsayımı: Python 3.11, FastAPI, SQLAlchemy/PostgreSQL, JWT auth.
+7. Türkçe yanıt ver.
+8. Her teknik adım spesifik, uygulanabilir ve ölçülebilir olsun.
+9. "Bunu hafızamda bulamadım" DEME — SM sprint planı ve PO hikayeleri sana verildi.
+10. "Sprint Akış Yönetimi" bir kullanıcı hikayesi değildir — teknik görev olarak ekleme.
+"""
+
 # Developer-specific system prompt — the developer path must NOT use
 # the Student Agent system prompt (SYSTEM_PROMPT in shared.py).
 _DEVELOPER_SYSTEM_PROMPT = """\
@@ -236,6 +302,66 @@ _DEV_CONTEXT_MAP: list[tuple[frozenset, str]] = [
 _CODE_SNIPPET_CHARS = 4000
 
 
+def _extract_out_of_scope(sm_output: str, po_output: str) -> str:
+    """
+    Scan SM and PO outputs for explicitly deferred / out-of-scope features.
+
+    Returns a comma-separated string of out-of-scope items so the Developer
+    LLM receives an unambiguous "do NOT work on these" list.  If nothing is
+    found in the structured sections, falls back to keyword detection for
+    common deferred features (payment, subscription, admin panel).
+
+    This is a belt-and-suspenders complement to the system-prompt rules —
+    it converts the natural-language "Sprint Scope Dışı" section into an
+    explicit list that is embedded directly in the user prompt.
+    """
+    out_items: list[str] = []
+
+    # Pattern: any out-of-scope section header followed by bullet lines.
+    # Handles both SM format ("Sprint Scope Dışı") and PO format ("Kapsam Dışı").
+    _OUT_SECTION = re.compile(
+        r"(?:Sprint\s+Scope\s+Dışı|Kapsam\s+Dışı|Sonraki\s+Sprint|Out\s+of\s+Scope)"
+        r"[^\n]*\n((?:[ \t]*[-•*]\s*.+\n?)*)",
+        re.I,
+    )
+    for text in (sm_output, po_output):
+        for m in _OUT_SECTION.finditer(text or ""):
+            for line in m.group(1).strip().splitlines():
+                item = re.sub(r"^\s*[-•*]\s*", "", line).strip()
+                # strip parenthetical notes like "(açıkça ertelendi — ...)"
+                item = re.sub(r"\s*\(.*?\)", "", item).strip()
+                if item and len(item) > 3:
+                    out_items.append(item)
+
+    # Fallback: keyword detection for common deferred features not yet in
+    # a structured section (covers cases where SM output is less structured).
+    combined = (sm_output or "") + (po_output or "")
+    _FALLBACK = [
+        (re.compile(r"ödeme|payment|billing|fatural", re.I), "Ödeme / payment sistemi"),
+        (re.compile(r"abonelik|subscription",          re.I), "Abonelik yönetimi"),
+        (re.compile(r"admin\s*panel",                  re.I), "Admin paneli"),
+        (re.compile(r"kargo|shipping",                 re.I), "Kargo / shipping"),
+        (re.compile(r"analitik|analytics",             re.I), "Analitik modülü"),
+    ]
+    for pat, label in _FALLBACK:
+        if pat.search(combined):
+            # Only add via fallback if not already captured from the section scan
+            already = any(pat.search(x) for x in out_items)
+            if not already:
+                out_items.append(label)
+
+    # Deduplicate while preserving order; cap at 8 items
+    seen: set[str] = set()
+    unique: list[str] = []
+    for item in out_items:
+        key = item.lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+
+    return "; ".join(unique[:8])
+
+
 def _build_workflow_context(task_ctx: dict) -> str:
     """Build a labeled context block from SM/PO outputs injected by agile_workflow.
 
@@ -258,6 +384,80 @@ def _build_workflow_context(task_ctx: dict) -> str:
             "=== END SPRINT PLANI ==="
         )
     return "\n\n".join(parts)
+
+
+def _run_workflow_developer(task: AgentTask, workflow_context: str) -> AgentResponse:
+    """Direct LLM path for Developer in agile workflow mode.
+
+    Bypasses DeveloperOrchestrator (designed for codebase analysis / debug) and
+    uses a workflow-specific system prompt to turn the SM sprint plan + PO stories
+    into concrete technical tasks for the current scenario.
+
+    Skips _validate_prose_result (which adds [NOT FOUND IN REPO] noise for new
+    project paths that don't yet exist in the repo) and the REDO gate loop
+    (which is calibrated for codebase queries, not sprint planning output).
+
+    Scope boundary enforcement
+    ──────────────────────────
+    _extract_out_of_scope() scans both SM and PO outputs for explicitly deferred
+    features and builds a concise list.  This list is embedded in the user prompt
+    as an unambiguous "do NOT work on these" block so that the LLM cannot
+    accidentally expand into out-of-scope items even when they appear in the
+    context (e.g. in the SM "Sprint Scope Dışı" section or the original request).
+    """
+    task_ctx   = task.context or {}
+    original   = task_ctx.get("original_request", task.masked_input)
+    sm_output  = task_ctx.get("sm_output", "")
+    po_output  = task_ctx.get("po_output", "")
+
+    # ── Build explicit out-of-scope list from SM + PO outputs ────────────────
+    out_of_scope = _extract_out_of_scope(sm_output, po_output)
+    if out_of_scope:
+        scope_block = (
+            "\n\n⛔ KESİN KAPSAM SINIRI (MUTLAKA UYGULA):\n"
+            "  Aşağıdaki özellikler Sprint-1 KAPSAMINDA DEĞİLDİR.\n"
+            "  Bu özellikler için teknik uygulama görevi KESİNLİKLE ÜRETME.\n"
+            "  Sadece '⏭️ Kapsam Dışı' bölümünde bir satırla belirt:\n"
+            f"  → {out_of_scope}\n"
+        )
+    else:
+        scope_block = ""
+
+    user_prompt = (
+        f"{workflow_context}"
+        f"{scope_block}\n\n"
+        f"PROJE İSTEĞİ: {original}\n\n"
+        "GÖREV: Yukarıdaki Scrum Master sprint planındaki Sprint-1 hikayelerini "
+        "(SM planının ana hikaye listesindeki S-NNN ID'leri) kullanarak her biri için "
+        "somut teknik uygulama adımları üret.\n"
+        "Sprint Scope Dışı / Kapsam Dışı olarak işaretlenmiş özellikler için "
+        "teknik görev ÜRETME — sadece '⏭️ Kapsam Dışı' bölümünde listele.\n"
+        "Ödeme / payment için hiçbir teknik adım yazma."
+    )
+
+    draft = ""
+    try:
+        resp  = _safe_chat(
+            "llama3.2",
+            [
+                {"role": "system", "content": _DEVELOPER_WORKFLOW_SYSTEM},
+                {"role": "user",   "content": user_prompt},
+            ],
+        )
+        draft = (resp.get("message", {}).get("content", "") or "").strip()
+    except Exception as exc:
+        import logging as _log
+        _log.getLogger(__name__).error("developer-workflow: LLM failed: %s", exc, exc_info=True)
+
+    if not draft or len(draft.strip()) < 15:
+        draft = "Developer iş akışı çıktısı üretilemedi."
+
+    return AgentResponse(
+        task_id=task.task_id,
+        agent_role=AgentRole.DEVELOPER,
+        draft=draft,
+        status=TaskStatus.COMPLETED if len(draft.strip()) >= 15 else TaskStatus.FAILED,
+    )
 
 
 def _build_codebase_context(query: str) -> str:
@@ -507,23 +707,27 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
     Sprint state writes are the exclusive responsibility of
     ScrumMasterAgent via scrum_master_runner.  This path is read-only.
     """
-    user_text  = task.masked_input
-    strategy   = task.metadata.get("strategy", "auto")
-    session_id = task.session_id
+    user_text     = task.masked_input
+    strategy      = task.metadata.get("strategy", "auto")
+    session_id    = task.session_id
+    task_ctx      = task.context or {}
+    workflow_step = task_ctx.get("workflow_step", "")
 
     # ── Pre-dispatch: task lifecycle commands ─────────────────────────────────
-    # show_tasks / start_task / complete_task / block_task are resolved here
-    # with deterministic rule logic — no LLM, no REDO loop.
-    # This mirrors the pattern used by scrum_master_runner and
-    # product_owner_runner for their rule-based commands.
-    lifecycle_intent = _detect_task_lifecycle_intent(user_text)
-    if lifecycle_intent:
-        return AgentResponse(
-            task_id=task.task_id,
-            agent_role=AgentRole.DEVELOPER,
-            draft=_handle_task_lifecycle(lifecycle_intent, user_text),
-            status=TaskStatus.COMPLETED,
-        )
+    # Lifecycle intent detection is SKIPPED in workflow mode.
+    # The enriched dev_input created by agile_workflow._step_developer contains
+    # phrases like "atanan görevleri teknik açıdan değerlendir" which match the
+    # show_tasks pattern ("atanan görev") and would return stale sprint_state.json
+    # data instead of analyzing the SM sprint plan.
+    if not workflow_step:
+        lifecycle_intent = _detect_task_lifecycle_intent(user_text)
+        if lifecycle_intent:
+            return AgentResponse(
+                task_id=task.task_id,
+                agent_role=AgentRole.DEVELOPER,
+                draft=_handle_task_lifecycle(lifecycle_intent, user_text),
+                status=TaskStatus.COMPLETED,
+            )
 
     redo_log: list[dict] = []
 
@@ -538,18 +742,31 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
     codebase_context = _build_codebase_context(user_text)
 
     # Stage 2a — Sprint context injection (read-only from SprintStateStore)
-    # Reads sprint goal, active assignments, and blocked tasks from
-    # sprint_state.json via the shared SprintStateStore instance.
+    # In workflow mode, sprint_state.json contains stale data from previous
+    # sessions that is unrelated to the current project scenario.  Skip it
+    # so the LLM focuses on workflow_context (SM plan + PO stories) instead.
     # NOTE: codebase_context is kept as a separate variable — Stage 2b below
     # gates JSON debug validation on it; that gate must not fire for sprint-only
     # queries where codebase_context is empty.
-    sprint_context = _SPRINT_STATE.read_context_block()
+    if workflow_step == "developer":
+        sprint_context = ""
+    else:
+        sprint_context = _SPRINT_STATE.read_context_block()
 
     # Stage 2b — Workflow context injection (SM sprint plan + PO stories).
     # Populated when this step is called from agile_workflow._step_developer.
     # Added LAST so it takes precedence over the generic sprint state when
     # both are present (the SM plan is project-specific; sprint_state is generic).
     workflow_context = _build_workflow_context(task.context or {})
+
+    # ── Workflow fast-path: bypass DeveloperOrchestrator for agile workflow ──
+    # DeveloperOrchestrator is calibrated for codebase analysis / debug queries.
+    # In workflow mode, the developer's job is sprint-task generation from the
+    # SM plan — a fundamentally different task.  The orchestrator's
+    # _validate_prose_result would also add [NOT FOUND IN REPO] tags for new
+    # project paths that don't yet exist in the repo, corrupting the output.
+    if workflow_step == "developer" and workflow_context:
+        return _run_workflow_developer(task, workflow_context)
 
     combined_context = "\n\n".join(filter(None, [codebase_context, sprint_context, workflow_context]))
 

@@ -180,6 +180,14 @@ class ProductOwnerAgent:
         """Set priority on a backlog story (S-NNN öncelik high/medium/low)."""
         story_match = re.search(r"\b(S-\d+)\b", query, re.I)
         if not story_match:
+            # Check whether this looks like a new-project planning request that
+            # slipped into command mode — give a helpful redirect instead of an error.
+            if re.search(r"yeni\s*proje|proje\s*başlat|hikaye\w*\s+oluştur|backlog\s+oluştur", query, re.I):
+                return (
+                    "Yeni proje için hikayeler otomatik oluşturulabilir.\n"
+                    "Örnek: 'Kullanıcı kaydı ve görev yönetimi için epic ve hikayeler oluştur'\n"
+                    "Veya Ürün Sahibi modeline geçerek agile workflow'u başlatın."
+                )
             return (
                 "Önceliklendirme için hikaye ID'si gerekli (örn. S-001).\n"
                 "Kullanım: S-001 öncelik high"
@@ -206,6 +214,13 @@ class ProductOwnerAgent:
         """
         story_match = re.search(r"\b(S-\d+)\b", query, re.I)
         if not story_match:
+            # Redirect new-project requests to the planning path instead of showing an error.
+            if re.search(r"yeni\s*proje|proje\s*başlat|hikaye\w*\s+(?:çıkar|oluştur|üret|belirle)|backlog\s+oluştur", query, re.I):
+                return (
+                    "Yeni proje için kabul kriterleri otomatik oluşturulabilir.\n"
+                    "Örnek: 'Kullanıcı kaydı ve görev yönetimi için epic ve hikayeler oluştur'\n"
+                    "Veya Ürün Sahibi modeline geçerek agile workflow'u başlatın."
+                )
             return (
                 "Kabul kriterleri için hikaye ID'si gerekli (örn. S-001).\n"
                 "Kullanım: S-001 kabul kriterleri: kriter1, kriter2"

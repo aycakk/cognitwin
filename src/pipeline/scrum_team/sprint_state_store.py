@@ -57,7 +57,13 @@ DEFAULT_SPRINT_STATE: dict[str, Any] = {
     "tasks": [],
     "backlog": [],
     "team": [
-        {"id": "developer-default", "role": "Developer", "capacity": 8},
+        # Role IDs are scenario-specific. "developer-default" is a placeholder
+        # and must NEVER appear in SM or Developer output. The SM LLM assigns
+        # meaningful roles (backend-developer, frontend-developer, fullstack-developer)
+        # based on the PO stories. This team entry is only used for capacity tracking.
+        {"id": "backend-developer",    "role": "Backend Developer",    "capacity": 8},
+        {"id": "frontend-developer",   "role": "Frontend Developer",   "capacity": 8},
+        {"id": "fullstack-developer",  "role": "Fullstack Developer",  "capacity": 8},
     ],
 }
 
@@ -495,6 +501,25 @@ class SprintStateStore:
                     self.save(state)
                     return True
         return False
+
+    def reset_for_workflow(self) -> None:
+        """Clear stale tasks and backlog before a fresh agile workflow run.
+
+        Called by scrum_master_runner at the start of each workflow-mode sprint
+        planning step so that T-NNN tasks and S-NNN backlog items from previous
+        unrelated sessions do not contaminate the new project's sprint plan.
+
+        Sprint metadata (id, start, end, velocity) and team capacity are
+        preserved — only tasks and backlog are cleared.
+        """
+        with self.state_lock():
+            state = self.load()
+            state["tasks"]   = []
+            state["backlog"] = []
+            if "sprint" in state:
+                state["sprint"]["goal"] = "Sprint hedefi henüz tanımlanmamış."
+            self.save(state)
+        logger.info("sprint-state: cleared for new workflow run")
 
     def set_sprint_goal(self, goal: str) -> None:
         """Update the sprint goal text.

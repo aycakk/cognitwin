@@ -86,15 +86,23 @@ _PLANNING_RE = re.compile(
     # _COMMAND_RE runs FIRST in _is_planning_request(), so
     # "hikaye oluştur: <title>" (colon present) stays on the rule path
     # even though "hikaye oluştur" (no colon) correctly matches here.
-    r"|(?:epic|epik)\w*\s+(?:oluştur|yaz|yarat|üret|hazırla)\b"
-    r"|backlog\s+(?:oluştur|yaz|yarat|üret|hazırla)\b"
-    r"|hikaye\w*\s+(?:oluştur|yaz|yarat|üret|hazırla)\b"
-    r"|kullanıcı\s+hikaye\w*\s+(?:oluştur|yaz|yarat|üret|hazırla)\b"
-    r"|kabul\s+kriter\w*\s+(?:oluştur|yaz|yarat|üret|hazırla)\b"
-    r"|kriter\w*\s+(?:oluştur|yaz|yarat|üret|hazırla)\b"
-    r"|gereksinim\w*\s+(?:oluştur|yaz|yarat|üret|hazırla)\b"
+    #
+    # Extended verb list — added çıkar, türet, belirle, tanımla, listele, analiz
+    # so that "kabul kriterlerini çıkar" and "hikayeleri belirle" route to
+    # the LLM planning path instead of the command path that emits "hikaye ID gerekli".
+    r"|(?:epic|epik)\w*\s+(?:oluştur|yaz|yarat|üret|hazırla|çıkar|türet|belirle|tanımla)\b"
+    r"|backlog\s+(?:oluştur|yaz|yarat|üret|hazırla|çıkar|türet|oluşturalım)\b"
+    r"|hikaye\w*\s+(?:oluştur|yaz|yarat|üret|hazırla|çıkar|türet|belirle|tanımla|listele)\b"
+    r"|kullanıcı\s+hikaye\w*\s+(?:oluştur|yaz|yarat|üret|hazırla|çıkar|türet|belirle|tanımla)\b"
+    r"|kabul\s+kriter\w*\s+(?:oluştur|yaz|yarat|üret|hazırla|çıkar|türet|belirle|tanımla)\b"
+    r"|kriter\w*\s+(?:oluştur|yaz|yarat|üret|hazırla|çıkar|türet|belirle|tanımla)\b"
+    r"|gereksinim\w*\s+(?:oluştur|yaz|yarat|üret|hazırla|çıkar|türet|belirle|tanımla)\b"
     # "X için:" pattern with a goal description after the colon
-    r"|(?:için|for)\s*:\s*\w",
+    r"|(?:için|for)\s*:\s*\w"
+    # New project trigger — "yeni proje" always routes to planning, never command
+    r"|yeni\s+proje\b"
+    r"|proje\s+başlat\b"
+    r"|proje\s+senaryosu\b",
     re.I,
 )
 

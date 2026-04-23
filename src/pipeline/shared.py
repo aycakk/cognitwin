@@ -156,7 +156,7 @@ def _safe_chat(model: str, messages: list) -> dict:
     resp = chat(
         model=model,
         messages=messages,
-        options={"temperature": 0.15, "top_p": 0.9},
+        options={"temperature": 0.15, "top_p": 0.9, "num_predict": 1024},
     )
     if hasattr(resp, "message"):
         return {"message": {"content": resp.message.content}}

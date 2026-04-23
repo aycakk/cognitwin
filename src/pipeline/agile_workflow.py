@@ -177,6 +177,200 @@ def _composer_gate(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  PO workflow system prompt
+#  Used ONLY in agile_workflow mode — bypasses generic POLLMAgent prompts so
+#  the PO produces scenario-specific, structured stories with sprint scope.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_PO_WORKFLOW_SYSTEM = """\
+Sen deneyimli bir Ürün Sahibi (Product Owner) AI ajanısın.
+Kullanıcının proje senaryosunu okuyarak yapılandırılmış kullanıcı hikayeleri üretirsin.
+
+ÖNEMLİ: Aşağıdaki örnek farklı bir senaryo (blog platformu) için hazırlanmıştır.
+Sen kullanıcının GERÇEK senaryosunu kullanarak tamamen ÖZGÜN içerik üretmelisin.
+Örnek içeriği kopyalama — sadece FORMAT'ı kullan.
+
+--- FORMAT ÖRNEĞİ (blog platformu senaryosu) ---
+
+## Proje Hedefi
+Yazarların makale yayınlayabildiği, okuyucuların yorum yapabildiği minimal bir blog platformu geliştirmek.
+
+## Kapsam
+**İlk Sprint (Sprint-1):**
+- Yazar kaydı ve girişi
+- Makale oluşturma ve listeleme
+
+**Kapsam Dışı / Sonraki Sprint:**
+- Reklam ve para kazanma sistemi (açıkça ertelendi — sonraki sprint)
+- E-posta bildirim servisi
+
+## Epikler ve Kullanıcı Hikayeleri
+
+### Epic 1: Yazar Yönetimi
+**[S-001] Yazar Kaydı** | Öncelik: HIGH | Sprint: Sprint-1
+> Kullanıcı olarak e-posta ve şifre ile yazar hesabı açmak istiyorum, çünkü makale yayınlayabilmek istiyorum.
+Kabul Kriterleri:
+- [ ] E-posta ve şifre ile kayıt formu çalışır
+- [ ] Aynı e-posta ile ikinci kayıt reddedilir
+- [ ] Kayıt başarılıysa JWT token döner
+
+**[S-002] Yazar Girişi** | Öncelik: HIGH | Sprint: Sprint-1
+> Kullanıcı olarak hesabıma giriş yapmak istiyorum, çünkü makalelerimi yönetmek istiyorum.
+Kabul Kriterleri:
+- [ ] Doğru kimlik bilgileriyle giriş yapılır
+- [ ] Hatalı şifrede 401 hatası döner
+- [ ] Başarılı girişte JWT access token döner
+
+### Epic 2: İçerik Yönetimi
+**[S-003] Makale Oluşturma** | Öncelik: HIGH | Sprint: Sprint-1
+> Kullanıcı olarak başlık ve içerikle yeni makale yayınlamak istiyorum, çünkü fikirlerimi paylaşmak istiyorum.
+Kabul Kriterleri:
+- [ ] Başlık zorunlu (maks. 120 karakter)
+- [ ] Makale kaydedildiğinde zaman damgası oluşturulur
+- [ ] Sadece giriş yapmış yazarlar makale ekleyebilir
+
+**[S-004] Makale Listeleme** | Öncelik: MEDIUM | Sprint: Sprint-1
+> Kullanıcı olarak tüm makaleleri listelemek istiyorum, çünkü son içeriklere göz atmak istiyorum.
+Kabul Kriterleri:
+- [ ] Makaleler tarihe göre azalan sırada listelenir
+- [ ] Her makalede başlık, yazar ve tarih gösterilir
+- [ ] Sayfalama (10 makale/sayfa) desteklenir
+
+--- FORMAT ÖRNEĞİ SONU ---
+
+KURALLAR:
+1. Yukarıdaki örnek BLOG PLATFORMU içindir. Sen kullanıcının senaryosuna göre tamamen yeni içerik yaz.
+2. Kapsam ipuçlarındaki "Sprint-1'de olacaklar" listesine kesinlikle uy — sadece bu özellikler için hikaye üret.
+3. "Kapsam Dışı" listesindeki özellikler için Sprint: İleride yaz ve Kapsam Dışı bölümüne ekle.
+4. Her hikayeye S-001, S-002, ... şeklinde benzersiz ID ver — kullanıcıdan ID isteme.
+5. 4-8 arası hikaye üret; her biri 3-5 kabul kriteri içersin.
+6. Türkçe yanıt ver.
+7. Sadece Proje Hedefi, Kapsam ve Epikler/Hikayeler bölümlerini yaz — ek açıklama ekleme.
+8. KESİNLİKLE YASAK: "hikaye ID gerekli", "hangi hikayenin kabul kriterlerini", "ID girin" gibi
+   ifadeler KULLANMA — ID'leri sen üretirsin, kullanıcıdan ID isteme.
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Scope hint extractor — pre-parses the user query so the PO LLM gets explicit
+#  in/out-of-scope signals instead of having to infer them from natural language.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SCOPE_IN_PATTERNS = [
+    (re.compile(r"kay[ıi]t|register|sign.?up",        re.I), "Kullanıcı kaydı"),
+    (re.compile(r"giri[sş]|login|sign.?in|oturum",    re.I), "Kullanıcı girişi / oturum açma"),
+    (re.compile(r"görev|task(?!.*payment)|to.?do",     re.I), "Görev yönetimi"),
+    # NOTE: "sprint akışı" is an agile process concern, NOT a user story.
+    # Removed from in-scope to prevent it from appearing as Sprint-1 item.
+    (re.compile(r"profil|profile",                     re.I), "Kullanıcı profili"),
+    (re.compile(r"bildirim|notif",                     re.I), "Bildirim sistemi"),
+    (re.compile(r"dashboard|kontrol\s*panel",          re.I), "Dashboard / kontrol paneli"),
+    (re.compile(r"arama|search",                       re.I), "Arama işlevi"),
+]
+
+_SCOPE_OUT_PATTERNS = [
+    (re.compile(r"öde(me|n)|payment|billing|fatural", re.I), "Ödeme sistemi"),
+    (re.compile(r"abonelik|subscription",             re.I), "Abonelik yönetimi"),
+    (re.compile(r"raporla|report(?!.*task)",          re.I), "Raporlama modülü"),
+    (re.compile(r"analitik|analytics",                re.I), "Analitik / istatistik"),
+    (re.compile(r"mobil\s*uygulama|mobile\s*app",     re.I), "Mobil uygulama"),
+    (re.compile(r"admin\s*panel",                     re.I), "Admin paneli"),
+]
+
+_DEFER_SIGNAL_RE = re.compile(
+    r"sonraki\s*sprint|ileride|kals[ıi]n|ertelensin|next\s*sprint|later|defer",
+    re.I,
+)
+
+
+def _extract_scope_hints(query: str) -> str:
+    """Return an explicit scope block to prepend to po_input.
+
+    Scans the original query for feature keywords and deferral signals,
+    then builds a concise Turkish hint block so the PO LLM doesn't have
+    to infer sprint scope from ambiguous natural language.
+    """
+    in_scope: list[str]  = []
+    out_scope: list[str] = []
+
+    for _pat, label in _SCOPE_OUT_PATTERNS:
+        if _pat.search(query):
+            out_scope.append(label)
+
+    for _pat, label in _SCOPE_IN_PATTERNS:
+        if _pat.search(query):
+            in_scope.append(label)
+
+    if not in_scope and not out_scope:
+        return ""
+
+    lines = ["[KAPSAM İPUÇLARI — LLM tarafından çıkarıldı, kesinlikle uy]"]
+    if in_scope:
+        lines.append("Sprint-1 kapsamında OLMASI GEREKEN özellikler:")
+        for f in in_scope:
+            lines.append(f"  - {f}")
+    if out_scope:
+        lines.append("Kapsam DIŞI / Sonraki Sprint'e ertelenen özellikler:")
+        for f in out_scope:
+            lines.append(f"  - {f} (Sprint: İleride — Kapsam Dışı bölümüne yaz)")
+    lines.append("")
+    return "\n".join(lines)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  PO template fallback — used only when ALL LLM attempts fail.
+#  Builds a minimal but SM-usable structured output directly from scope hints
+#  so the Scrum Master never receives blank/English/command-mode output.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_po_template_fallback(original: str, scope_hints: str) -> str:
+    """Return a minimal Türkçe structured PO output when the LLM is unavailable.
+
+    Derives in-scope features from _SCOPE_IN_PATTERNS and out-of-scope
+    features from _SCOPE_OUT_PATTERNS so the content is always tied to the
+    actual user query rather than being a generic template.
+    """
+    in_feats  = [label for pat, label in _SCOPE_IN_PATTERNS  if pat.search(original)]
+    out_feats = [label for pat, label in _SCOPE_OUT_PATTERNS if pat.search(original)]
+
+    # If no features detected at all, use a minimal single-epic output
+    if not in_feats:
+        in_feats = ["Temel uygulama işlevleri"]
+
+    # Build sprint-1 scope block
+    scope_lines = "\n".join(f"- {f}" for f in in_feats)
+    out_lines   = (
+        "\n".join(f"- {f} (sonraki sprint'e ertelendi)" for f in out_feats)
+        if out_feats else "- (Henüz belirlenmedi)"
+    )
+
+    # Build one story per detected in-scope feature
+    stories: list[str] = []
+    for i, feat in enumerate(in_feats, start=1):
+        sid = f"S-{i:03d}"
+        stories.append(
+            f"**[{sid}] {feat}** | Öncelik: HIGH | Sprint: Sprint-1\n"
+            f"> Kullanıcı olarak {feat.lower()} özelliğini kullanmak istiyorum, "
+            f"çünkü projenin temel işlevine ihtiyacım var.\n"
+            f"Kabul Kriterleri:\n"
+            f"- [ ] Özellik başarıyla çalışır\n"
+            f"- [ ] Hata durumunda anlaşılır mesaj gösterilir\n"
+            f"- [ ] Kimlik doğrulama gerektiren işlemler korunur\n"
+        )
+
+    return (
+        f"## Proje Hedefi\n"
+        f"{original[:200].strip()}\n\n"
+        f"## Kapsam\n"
+        f"**İlk Sprint (Sprint-1):**\n{scope_lines}\n\n"
+        f"**Kapsam Dışı / Sonraki Sprint:**\n{out_lines}\n\n"
+        f"## Epikler ve Kullanıcı Hikayeleri\n\n"
+        f"### Epic 1: Temel Özellikler\n"
+        + "\n".join(stories)
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  Step 1 — Product Owner
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -184,18 +378,26 @@ def _step_product_owner(
     parent: AgentTask,
     parent_session: str,
 ) -> tuple[AgentResponse, str, str]:
-    """Convert the raw project request into structured user stories."""
-    original = parent.masked_input
-    po_sid   = _agent_session_id(parent_session, "po")
+    """Convert the raw project request into structured user stories.
 
-    if re.search(r"hikaye|story|backlog", original, re.I):
-        po_input = original
-    else:
-        po_input = (
-            f"Aşağıdaki proje isteği için kullanıcı hikayeleri oluştur "
-            f"ve her hikaye için kabul kriterlerini ve öncelik sırasını belirle:\n\n"
-            f"{original}"
-        )
+    Workflow mode uses a dedicated PO system prompt (_PO_WORKFLOW_SYSTEM) via
+    a direct LLM call instead of run_product_owner_pipeline.  The standard
+    pipeline's generic POLLMAgent prompts do not carry sprint scope constraints
+    (in_scope / out_of_scope / sprint assignment), so they produce generic output
+    that causes the SM and Developer to drift into template-like behavior.
+
+    Falls back to run_product_owner_pipeline if the direct LLM call fails.
+    """
+    original    = parent.masked_input
+    po_sid      = _agent_session_id(parent_session, "po")
+    scope_hints = _extract_scope_hints(original)
+
+    po_input = (
+        f"Proje Senaryosu:\n\n{original}\n\n"
+        + (f"{scope_hints}\n" if scope_hints else "")
+        + "Yukarıdaki senaryoyu ve kapsam ipuçlarını dikkate alarak "
+        + "yapılandırılmış kullanıcı hikayeleri ve kabul kriterleri oluştur."
+    )
 
     SESSION_STORE.create_session(
         session_id=po_sid,
@@ -209,8 +411,74 @@ def _step_product_owner(
         parent, AgentRole.PRODUCT_OWNER, po_input, po_sid,
         extra_context={"workflow_step": "product_owner", "original_request": original},
     )
-    response = run_product_owner_pipeline(task)
-    draft    = _extract_draft(response)
+
+    # Workflow PO: direct LLM call with scenario-specific system prompt.
+    # This bypasses run_product_owner_pipeline's generic POLLMAgent so the
+    # output explicitly includes sprint scope, story IDs, and out_of_scope marks.
+    draft = ""
+    try:
+        from src.pipeline.shared import _safe_chat  # lazy — avoids ollama at module load
+        resp  = _safe_chat(
+            "llama3.2",
+            [
+                {"role": "system", "content": _PO_WORKFLOW_SYSTEM},
+                {"role": "user",   "content": po_input},
+            ],
+        )
+        draft = (resp.get("message", {}).get("content", "") or "").strip()
+        logger.info(
+            "agile-workflow: PO workflow LLM OK  session=%s  (%d chars)",
+            po_sid, len(draft),
+        )
+    except Exception as exc:
+        logger.error(
+            "agile-workflow: PO workflow LLM failed: %s — retrying with minimal prompt", exc,
+            exc_info=True,
+        )
+
+    # Attempt 2: simpler prompt if primary call failed or returned empty.
+    # Avoids falling to the generic English POLLMAgent pipeline.
+    if not _usable(draft):
+        try:
+            from src.pipeline.shared import _safe_chat  # noqa: re-import inside guard is fine
+            in_feats_str = ", ".join(
+                label for pat, label in _SCOPE_IN_PATTERNS if pat.search(original)
+            )
+            simple_user = (
+                f"Proje: {original}\n\n"
+                + (f"Sprint-1 kapsamı: {in_feats_str}\n" if in_feats_str else "")
+                + "Bu proje için Proje Hedefi, Kapsam ve Epikler/Hikayeler bölümlerini üret."
+            )
+            resp2 = _safe_chat(
+                "llama3.2",
+                [
+                    {"role": "system", "content": _PO_WORKFLOW_SYSTEM},
+                    {"role": "user",   "content": simple_user},
+                ],
+            )
+            draft = (resp2.get("message", {}).get("content", "") or "").strip()
+            if _usable(draft):
+                logger.info(
+                    "agile-workflow: PO retry LLM OK  session=%s  (%d chars)",
+                    po_sid, len(draft),
+                )
+        except Exception as exc2:
+            logger.error(
+                "agile-workflow: PO retry LLM also failed: %s — using template fallback", exc2,
+            )
+
+    # Last resort: structured template built from scope hints so SM still gets
+    # usable input instead of generic English POLLMAgent output.
+    if not _usable(draft):
+        logger.warning("agile-workflow: PO using template fallback  session=%s", po_sid)
+        draft = _build_po_template_fallback(original, scope_hints)
+
+    response = AgentResponse(
+        task_id=task.task_id,
+        agent_role=AgentRole.PRODUCT_OWNER,
+        draft=draft,
+        status=TaskStatus.COMPLETED if _usable(draft) else TaskStatus.FAILED,
+    )
 
     SESSION_STORE.record_output(
         session_id=po_sid,
@@ -230,17 +498,20 @@ def _step_scrum_master(
     po_output: str,
     parent_session: str,
 ) -> tuple[AgentResponse, str, str]:
-    """Plan the sprint and assign tasks based on PO output."""
+    """Plan the sprint and assign tasks based on PO output.
+
+    PO stories are passed via task.context["po_output"] → po_section (first in
+    the SM user message).  sm_input is intentionally lean — it carries only the
+    original request and the sprint-planning directive so the PO output is not
+    duplicated inside the user message, which would waste context window on
+    small LLMs like llama3.2.
+    """
     original = parent.masked_input
     sm_sid   = _agent_session_id(parent_session, "sm")
     sm_input = (
         f"Proje isteği: {original}\n\n"
-        f"Ürün Sahibi (PO) tarafından oluşturulan hikayeler ve iş kalemleri:\n"
-        f"{po_output}\n\n"
-        f"Yukarıdaki proje gereksinimlerini analiz et ve değerlendir: "
-        f"mevcut sprint kapasitesine göre hangi görevler önceliklendirilmeli, "
-        f"riskler neler, atamalar nasıl yapılmalı? "
-        f"Sprint sağlığını değerlendir ve somut öneriler sun."
+        f"Yukarıdaki PO hikayeleri doğrultusunda Sprint-1 için sprint planı oluştur: "
+        f"görev atamaları, story point tahminleri, risk ve engelleri belirt."
     )
 
     SESSION_STORE.create_session(
@@ -281,15 +552,27 @@ def _step_developer(
     po_output: str,
     parent_session: str,
 ) -> tuple[AgentResponse, str, str]:
-    """Execute assigned tasks based on the SM sprint plan."""
+    """Execute assigned tasks based on the SM sprint plan.
+
+    The dev_input carries an explicit sprint-scope boundary so the Developer
+    LLM cannot drift into out-of-scope features (e.g. payment) that appear
+    in the SM "Sprint Scope Dışı" or PO "Kapsam Dışı" sections.
+    The detailed scope enforcement is also repeated inside developer_runner.py
+    (_extract_out_of_scope + _DEVELOPER_WORKFLOW_SYSTEM rules) for redundancy.
+    """
     original  = parent.masked_input
     dev_sid   = _agent_session_id(parent_session, "dev")
     dev_input = (
         f"Proje isteği: {original}\n\n"
         f"Scrum Master sprint planı ve görev atamaları:\n{sm_output}\n\n"
         f"Referans — Ürün Sahibi hikayeleri:\n{po_output}\n\n"
-        f"Yukarıdaki sprint planına göre atanan görevleri teknik açıdan "
-        f"değerlendir ve uygulama adımlarını belirt."
+        "GÖREV: Yukarıdaki sprint planındaki SADECE Sprint-1 kapsamındaki "
+        "S-NNN hikayelerini işle. Her hikaye için somut teknik uygulama adımları, "
+        "bağımlılıklar ve efor tahmini üret.\n"
+        "KESİNLİKLE YASAK: 'Sprint Scope Dışı' veya 'Kapsam Dışı / Sonraki Sprint' "
+        "olarak işaretlenmiş özellikler (ödeme/payment dahil) için teknik görev üretme. "
+        "Bu özellikler sadece 'Kapsam Dışı' bölümünde listelenebilir.\n"
+        "T-NNN eski görev ID'si kullanma — bu tamamen yeni bir proje sprint'idir."
     )
 
     SESSION_STORE.create_session(
@@ -321,6 +604,36 @@ def _step_developer(
         metadata={"task_id": task.task_id},
     )
     return response, draft, dev_sid
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Team-output builder for PO final review
+#  Preserves newlines so the PO review LLM receives properly formatted Markdown.
+#  ComposerAgent.compose() collapses whitespace (_clean_text) which destroys
+#  Markdown structure — this function is used instead for the PO review input.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_team_raw_context(po_text: str, sm_text: str, dev_text: str) -> str:
+    """Concatenate agent outputs with section labels, preserving newlines.
+
+    Intended ONLY for the PO final review LLM prompt — gives the model a
+    readable, structure-preserving view of all three agent outputs rather
+    than the whitespace-collapsed text produced by ComposerAgent.compose().
+    """
+    parts: list[str] = []
+    if _usable(po_text):
+        parts.append(
+            f"=== ÜRÜN SAHİBİ HİKAYELERİ ===\n{po_text}\n=== END PO ==="
+        )
+    if _usable(sm_text):
+        parts.append(
+            f"=== SCRUM MASTER SPRINT PLANI ===\n{sm_text}\n=== END SM ==="
+        )
+    if _usable(dev_text):
+        parts.append(
+            f"=== DEVELOPER TEKNİK DEĞERLENDİRME ===\n{dev_text}\n=== END DEV ==="
+        )
+    return "\n\n".join(parts)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -517,7 +830,9 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
     )
     if not gate1.ok:
         warnings.append(gate1.reason)
-    sm_context = gate1.payload if gate1.ok else f"Proje isteği: {task.masked_input}"
+    # Use po_text directly — gate1.payload runs _clean_text which collapses newlines,
+    # destroying the Markdown structure the SM LLM needs to parse S-NNN story IDs.
+    sm_context = po_text if gate1.ok else f"Proje isteği: {task.masked_input}"
 
     # ── Step 2: Scrum Master ──────────────────────────────────────────────────
     sm_text = ""
@@ -542,7 +857,8 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
     )
     if not gate2.ok:
         warnings.append(gate2.reason)
-    dev_context = gate2.payload if gate2.ok else sm_context
+    # Use sm_text directly — same whitespace-preservation reason as gate1 above.
+    dev_context = sm_text if gate2.ok else sm_context
 
     # ── Step 3: Developer ─────────────────────────────────────────────────────
     dev_text = ""
@@ -604,8 +920,17 @@ def run_agile_workflow(task: AgentTask) -> AgentResponse:
             },
         )
 
-    composed     = composer.compose(collected)
-    team_summary = composed["response_text"]
+    composed = composer.compose(collected)  # used for metadata (useful_count etc.) only
+
+    # Build the PO review input as a structured, newline-preserving concatenation
+    # of raw agent outputs instead of using composed["response_text"].
+    # ComposerAgent._clean_text collapses all whitespace (including newlines) which
+    # destroys the Markdown structure and makes the PO review LLM unable to
+    # produce a coherent summary.  Raw text preserves headers, bullets, story IDs.
+    team_summary = _build_team_raw_context(po_text, sm_text, dev_text)
+    if not _usable(team_summary):
+        # Last-resort fallback when all three agent outputs are empty
+        team_summary = composed["response_text"]
 
     # ── Step 4: PO Final Review ───────────────────────────────────────────────
     po_review_text = ""

@@ -168,19 +168,100 @@ SECTION 1 ▸ RESPONSE PROTOCOL
 ══════════════════════════════════════════════════════════
 • Sprint planlama  → PO hikayelerindeki her story için sprint görevi oluştur.
                      Öncelik sırasını PO'nun belirlediği önceliğe göre yap.
-                     Her göreve developer-default atama yap ve story point tahmin et.
+                     Her hikayeye Fibonacci story point tahmini yap (1,2,3,5,8).
+                     Göreve anlamlı bir rol ata (backend-developer, frontend-developer,
+                     fullstack-developer) — "developer-default" KULLANMA.
 • Risk analizi     → Ontoloji'deki RiskSignal bireylerini ve severityLevel
                      değerlerini kullanarak önceliklendir.
 • Sprint sağlığı   → SprintHealthStatus (healthy / at_risk / critical)
                      ile mevcut sprint durumunu karşılaştır.
 • Engel analizi    → ImpedimentCategory tiplerinden en uygununu öner.
 • Öneri            → RemediationAction'dan somut aksiyon seç ve açıkla.
-• Tüm öneriler spesifik ve uygulanabilir olmalı
-  (örn. "T-003'ü developer-02'ye devret", "bugün standup'ta T-001 öncelikli").
+• Tüm öneriler spesifik ve uygulanabilir olmalı.
 • Türkçe yanıt ver.
 • Kanıtsız tahmin YAPMA.
   Mevcut veride bilgi yoksa "bu bilgi mevcut veride yok" de.
 ████████████████████████████████████████████████████████████████████████████
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SM workflow-mode system prompt
+#  Used ONLY when workflow_step == "scrum_master" (agile_workflow chain).
+#  Has a concrete filled-in example from a DIFFERENT domain (e-ticaret) so
+#  llama3.2 generalises the format rather than copying example content.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SM_WORKFLOW_SYSTEM_PROMPT = """\
+Sen deneyimli bir Scrum Master AI ajanısın.
+Sana verilen Ürün Sahibi (PO) hikayelerini kullanarak Sprint-1 için somut bir sprint planı üretirsin.
+
+ÖNEMLİ: Aşağıdaki örnek farklı bir senaryo (e-ticaret platformu) için hazırlanmıştır.
+Sen KULLANICININ PO HİKAYELERİNİ kullanarak tamamen ÖZGÜN içerik üretmelisin.
+Örnek içeriği kopyalama — sadece FORMAT'ı kullan.
+
+--- FORMAT ÖRNEĞİ (e-ticaret senaryosu) ---
+
+## Sprint-1 Planı
+
+**Sprint Hedefi:** Kullanıcıların ürün arayıp sepete ekleyebildiği temel alışveriş akışını tamamla.
+**Sprint Süresi:** 2 hafta | **Toplam Tahmini:** 16 Story Point
+
+### Hikaye Bazlı Görevler
+
+**[S-001] Ürün Listeleme** → 5 SP | Backend Developer
+Teknik görevler:
+- GET /api/products endpoint yazılır (kategori + fiyat filtresi)
+- PostgreSQL products tablosu oluşturulur, sayfalama (offset/limit) eklenir
+Kabul kriterleri: 20 ürün/sayfa, yanıt <200ms, boş liste için 200 döner
+
+**[S-002] Ürün Arama** → 3 SP | Backend Developer
+Teknik görevler:
+- ?q= sorgu parametresi eklenir, ILIKE ile başlık + açıklamada arama
+- Minimum 3 karakter kontrolü eklenir
+Kabul kriterleri: Boş sorgu tüm ürünleri döner, 3 karakterden kısa sorgu görmezden gelinir
+
+**[S-003] Sepete Ekleme** → 8 SP | Fullstack Developer
+Teknik görevler:
+- POST /api/cart/items endpoint yazılır, session_id ile sepet ilişkilendirilir
+- Stok kontrolü DB transaction içinde yapılır
+Kabul kriterleri: Stoksuz ürün eklenemez (409), aynı ürün miktarı artırılır
+
+### Sprint Scope Dışı (Sonraki Sprint)
+- Ödeme sistemi entegrasyonu (açıkça ertelendi — bu sprint dışında)
+- Kargo takip modülü
+
+### Risk ve Engeller
+
+| Risk | Önem | Önlem |
+|------|------|-------|
+| PostgreSQL şema belirsizliği | ORTA | Sprint başında şema kararlaştırılsın, migration eklensin |
+| Stok kontrolü race condition | YÜKSEK | Pessimistic lock veya SELECT FOR UPDATE kullanılsın |
+| S-001 bitmeden S-002 başlayamaz | DÜŞÜK | S-001 önce teslim edilsin, paralel çalışmaya gerek yok |
+
+### Sprint Sağlığı
+**Durum:** Sağlıklı başlangıç — tüm hikayeler Sprint-1 kapsamında, bağımlılıklar açık.
+**Öncelik Sırası:** S-001 → S-002 → S-003 (bağımlılık sırasıyla)
+**Kapasite Notu:** 16 SP, 2 geliştirici için 2 haftalık makul yük.
+
+--- FORMAT ÖRNEĞİ SONU ---
+
+KURALLAR:
+1. Yukarıdaki örnek E-TİCARET senaryosuna ait. Sen PO hikayelerindeki GERÇEK içeriği kullan.
+2. Sadece Sprint-1 kapsamındaki (Sprint: Sprint-1) hikayeleri planla.
+3. PO çıktısında "Kapsam Dışı / Sonraki Sprint" olarak işaretlenen tüm özellikler MUTLAKA
+   Sprint Scope Dışı bölümüne yazılmalıdır — özellikle ödeme/payment sistemi.
+4. developer-default KESİNLİKLE KULLANMA — backend-developer, frontend-developer veya
+   fullstack-developer gibi anlamlı roller kullan.
+5. Riskler PO hikayelerine göre senaryo-özgün olmalı — "None risk", "genel risk", "N/A"
+   veya boş risk açıklamaları YAZMA. Her risk için somut bir önlem yaz.
+6. Her hikaye için Fibonacci story point ver (1, 2, 3, 5, 8).
+7. Türkçe yanıt ver.
+8. Sadece Sprint Planı, Sprint Scope Dışı, Risk/Engeller ve Sprint Sağlığı bölümlerini yaz.
+9. "Sprint Akış Yönetimi" bir kullanıcı hikayesi DEĞİLDİR — Sprint-1'e ekleme.
+   Bu, proje kurulum süreci olup ayrı bir epic gerektirir veya tamamen dışarıda bırakılır.
+10. Ödeme/payment özelliği varsa MUTLAKA Sprint Scope Dışı bölümüne yaz ve
+    "(açıkça ertelendi — ileride)" açıklamasını ekle.
 """
 
 
@@ -270,7 +351,7 @@ def _sm_chat(messages: list[dict]) -> str:
     resp = _ollama_chat(
         model="llama3.2",
         messages=messages,
-        options={"temperature": 0.15, "top_p": 0.9},
+        options={"temperature": 0.15, "top_p": 0.9, "num_predict": 1024},
     )
     if hasattr(resp, "message"):
         return resp.message.content.strip()
@@ -339,11 +420,25 @@ def _run_llm_augmented(task: AgentTask, query: str, intent: str) -> AgentRespons
         )
 
     # 2. Backlog context — shows stories PO just added (not yet in tasks array)
-    backlog_raw = _SPRINT_STATE.read_backlog_context_block()
-    backlog_context = backlog_raw if "(none)" not in backlog_raw else ""
+    # In workflow mode, the PO step uses a direct LLM call (not run_product_owner_pipeline)
+    # so stories are NOT persisted to sprint_state.json.  The backlog therefore
+    # contains only stale items from prior sessions — clear it so these don't
+    # override the fresh PO stories already present in po_section.
+    if wf_step == "scrum_master" and po_section:
+        backlog_context = ""
+    else:
+        backlog_raw = _SPRINT_STATE.read_backlog_context_block()
+        backlog_context = backlog_raw if "(none)" not in backlog_raw else ""
 
     # 3. Sprint state context (tasks, assignments, blockers)
-    sprint_context = _SPRINT_STATE.read_context_block()
+    # In workflow planning mode with PO stories, sprint_state.json may contain
+    # stale tasks from previous unrelated sessions.  These compete with the new
+    # PO stories and cause the LLM to produce generic or incorrect sprint plans.
+    # Clear sprint_context so the SM treats PO stories as the sole planning input.
+    if wf_step == "scrum_master" and po_section:
+        sprint_context = ""
+    else:
+        sprint_context = _SPRINT_STATE.read_context_block()
 
     # 4. Ontology context (SPARQL over agile.ttl + scrum_master.ttl)
     ontology_context = build_scrum_master_ontology_context()
@@ -357,16 +452,28 @@ def _run_llm_augmented(task: AgentTask, query: str, intent: str) -> AgentRespons
     # 6. Build instruction — sprint_planning gets a concrete task-generation goal
     if intent == "sprint_planning" or wf_step == "scrum_master":
         instruction = (
-            "GÖREV: Yukarıdaki PO hikayelerini ve backlog içeriğini kullanarak "
-            "somut bir sprint planı üret. Her hikaye için:\n"
-            "  1. Görev başlığı ve kısa açıklama yaz\n"
-            "  2. Story point tahmini yap (1-8 arası)\n"
-            "  3. developer-default'a atama yap\n"
+            "GÖREV: Yukarıdaki ÜRÜN SAHİBİ HİKAYELERİ bölümündeki 'Sprint: Sprint-1' "
+            "olarak işaretli kullanıcı hikayelerini AYNEN kullanarak Sprint-1 için "
+            "somut bir sprint planı üret. Her S-NNN hikayesi için:\n"
+            "  1. Görev başlığı ve kısa teknik açıklama yaz\n"
+            "  2. Story point tahmini yap (Fibonacci: 1, 2, 3, 5, 8)\n"
+            "  3. Anlamlı bir rol ata: backend-developer, frontend-developer veya fullstack-developer\n"
             "  4. Kabul kriterlerini listele\n"
-            "  5. Potansiyel risk veya engelleri belirt\n"
-            "Backlog boşsa veya PO hikayeleri yoksa kullanıcı isteğinden "
-            "çıkarım yaparak temsili bir sprint planı oluştur. "
-            "Türkçe yanıt ver. 'Görev ID gerekli' deme — bu yeni bir proje planlamasıdır."
+            "  5. Senaryo-özgün riskleri ve engelleri somut olarak belirt (teknik bağımlılık, "
+            "sıralama gereksinimleri, kapasite notları)\n\n"
+            "KAPSAM YÖNETİMİ (zorunlu):\n"
+            "  - 'Kapsam Dışı / Sonraki Sprint' olarak işaretlenmiş TÜM özellikler "
+            "Sprint Scope Dışı bölümüne yazılmalıdır.\n"
+            "  - Özellikle ödeme/payment sistemi varsa MUTLAKA ertelendiğini belirt: "
+            "'(açıkça ertelendi — ileride)'.\n"
+            "  - 'Sprint Akış Yönetimi' bir kullanıcı hikayesi DEĞİLDİR — plana ekleme.\n\n"
+            "KESİNLİKLE YASAK:\n"
+            "  - 'developer-default' KULLANMA — anlamlı rol ata.\n"
+            "  - 'None risk', 'genel risk', 'N/A', 'belirsiz' gibi boş risk açıklamaları YAZMA.\n"
+            "  - 'Görev ID gerekli' DEME — bu yeni bir proje, henüz görev yok.\n"
+            "  - Sprint-1 dışında kalan (Kapsam Dışı) hikayeleri plana DAHIL ETME.\n"
+            "  - Eski/stale sprint verilerinden görev ID KULLANMA.\n\n"
+            "Türkçe yanıt ver."
         )
     else:
         instruction = (
@@ -382,15 +489,23 @@ def _run_llm_augmented(task: AgentTask, query: str, intent: str) -> AgentRespons
     user_message = "".join([
         po_section,
         f"{backlog_context}\n\n" if backlog_context else "",
-        f"{sprint_context}\n\n",
+        f"{sprint_context}\n\n" if sprint_context else "",
         f"{ontology_context}\n\n",
         rule_block,
         f"KULLANICI İSTEĞİ: {query}\n\n",
         instruction,
     ])
 
+    # Workflow mode uses a dedicated system prompt with a concrete sprint-plan
+    # example (e-ticaret domain) so llama3.2 has a format anchor.
+    # Non-workflow mode keeps the analytical SM prompt.
+    system_prompt = (
+        _SM_WORKFLOW_SYSTEM_PROMPT if wf_step == "scrum_master"
+        else _SM_LLM_SYSTEM_PROMPT
+    )
+
     base_messages = [
-        {"role": "system", "content": _SM_LLM_SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user",   "content": user_message},
     ]
 
@@ -399,7 +514,14 @@ def _run_llm_augmented(task: AgentTask, query: str, intent: str) -> AgentRespons
     # 7. LLM call
     draft = _sm_chat(base_messages)
 
-    # 8. Safety gates (C1 + C4) — same as deterministic path
+    # 8. Belt-and-suspenders: strip any leaked developer-default role labels.
+    # llama3.2 may ignore the prohibition in the system prompt — we catch it here
+    # regardless of what the model produces.  Only applied in workflow mode where
+    # role labels must be specific (backend/frontend/fullstack-developer).
+    if wf_step == "scrum_master":
+        draft = re.sub(r"\bdeveloper[-\s]default\b", "fullstack-developer", draft, flags=re.I)
+
+    # 9. Safety gates (C1 + C4) — same as deterministic path
     return _apply_safety_gates(task, draft)
 
 
@@ -428,6 +550,10 @@ def run_scrum_master_pipeline(task: AgentTask) -> AgentResponse:
 
     # ── Workflow fast-path: always plan the sprint when called from agile_workflow
     if workflow_step == "scrum_master":
+        # Clear stale tasks and backlog from previous sessions before planning.
+        # sprint_state.json may contain unrelated T-001/T-002 tasks from prior
+        # runs — these must not pollute the new project's sprint plan.
+        _SPRINT_STATE.reset_for_workflow()
         return _run_llm_augmented(task, query, "sprint_planning")
 
     intent = _agent.detect_intent(query)
