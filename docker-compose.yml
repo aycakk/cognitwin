@@ -128,6 +128,11 @@ services:
       # librechat.student.yaml içindeki ${COGNITWIN_STUDENT_KEY:-cognitwin-student}
       # bu değişkeni okur.  Default "cognitwin-student" yerel geliştirme için yeterli.
       COGNITWIN_STUDENT_KEY: "${COGNITWIN_STUDENT_KEY:-cognitwin-student}"
+      # Sadece custom endpoint'i etkinleştir — LibreChat v0.8.x'in ResumableAgentController
+      # (Agents feature) otomatik başlatmasını engeller.  Bu olmazsa LibreChat "CogniTwin Student"
+      # key'ini OpenAI key olarak kabul etmeye çalışır ve her mesajda
+      # "agent_id is required in request body" hatası döner.
+      ENDPOINTS: "custom"
     volumes:
       - ./infra/librechat/librechat.student.yaml:/app/librechat.yaml:ro
       - librechat_images:/app/client/public/images
@@ -187,6 +192,11 @@ services:
       # librechat.agile.yaml içindeki ${COGNITWIN_AGILE_KEY:-cognitwin-agile}
       # bu değişkeni okur.  Default "cognitwin-agile" yerel geliştirme için yeterli.
       COGNITWIN_AGILE_KEY: "${COGNITWIN_AGILE_KEY:-cognitwin-agile}"
+      # Sadece custom endpoint'i etkinleştir — LibreChat v0.8.x'in ResumableAgentController
+      # (Agents feature) otomatik başlatmasını engeller.  Bu olmazsa LibreChat "CogniTwin Agile"
+      # key'ini OpenAI key olarak kabul etmeye çalışır ve her mesajda
+      # "agent_id is required in request body" hatası döner.
+      ENDPOINTS: "custom"
     volumes:
       - ./infra/librechat/librechat.agile.yaml:/app/librechat.yaml:ro
       - librechat_agile_images:/app/client/public/images
