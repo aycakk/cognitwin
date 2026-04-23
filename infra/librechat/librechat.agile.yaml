@@ -1,0 +1,48 @@
+version: "1.3.6"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CogniTwin — Agile LibreChat endpoint yapılandırması (port 3901)
+#
+# Bu dosya SADECE agile/proje kullanıcısı LibreChat instance'ı tarafından kullanılır.
+# Öğrenci modeli (cognitwin-student-llm) bu dosyada YOK.
+# Proje kullanıcıları yalnızca dört agile agent görür.
+#
+# apiKey notu:
+#   ${COGNITWIN_AGILE_KEY} — basit substitution kullanılıyor.
+#   Bash-style ${VAR:-default} LibreChat'in kendi YAML parser'ı tarafından
+#   desteklenmiyor; ":-default" ifadesi env var adının parçası olarak
+#   okunuyor → env var bulunamıyor → boş string → "Missing API Key" hatası.
+#   docker-compose.yml COGNITWIN_AGILE_KEY'i her zaman container'a geçirir.
+#
+# Erişim denetimi iki katmanlı:
+#   UI katmanı:      Sadece "CogniTwin Agile" endpoint ve dört model görünür.
+#   Backend katmanı: cognitwin-api, öğrenci modellerine gelen her isteği HTTP 403
+#                    ile reddeder — kullanıcı model adını manuel yazmış olsa bile.
+#
+# Model seçimi:
+#   • cognitwin-composer      → Tam PO → SM → Developer pipeline'ını başlatır
+#   • cognitwin-product-owner → Sadece PO aşamasını çalıştırır
+#   • cognitwin-scrum         → Sadece SM aşamasını çalıştırır
+#   • cognitwin-developer     → Sadece Developer aşamasını çalıştırır
+#
+# NOT — agents: disableBuilder: true bu LibreChat sürümünde (v0.8.4 / config
+#   schema v1.3.x) Zod tarafından tanınmıyor ve container crash'e yol açıyor.
+#   ResumableAgentController, ENDPOINTS=custom ortam değişkeni ile sınırlandırılıyor;
+#   apiKey boş olmadığı sürece chat akışını engellemez.
+# ──────────────────────────────────────────────────────────────────────────────
+
+endpoints:
+  custom:
+    - name: "CogniTwin Agile"
+      apiKey: "${COGNITWIN_AGILE_KEY}"
+      baseURL: "http://cognitwin-api:8011/v1/"
+      models:
+        default:
+          - "cognitwin-composer"
+          - "cognitwin-product-owner"
+          - "cognitwin-scrum"
+          - "cognitwin-developer"
+        fetch: false
+      modelDisplayLabel: "CogniTwin Agile"
+      titleConvo: true
+      titleModel: "cognitwin-composer"

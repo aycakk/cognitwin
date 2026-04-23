@@ -1,0 +1,39 @@
+version: "1.3.6"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CogniTwin — Öğrenci LibreChat endpoint yapılandırması (port 3900)
+#
+# Bu dosya SADECE öğrenci LibreChat instance'ı tarafından kullanılır.
+# Agile agent'lar (PO, SM, Developer, Composer) bu dosyada YOK.
+# Öğrenciler model picker'da HİÇBİR zaman agile agent görmez.
+#
+# apiKey notu:
+#   ${COGNITWIN_STUDENT_KEY} — basit substitution kullanılıyor.
+#   Bash-style ${VAR:-default} LibreChat'in kendi YAML parser'ı tarafından
+#   desteklenmiyor; ":-default" ifadesi env var adının parçası olarak
+#   okunuyor → env var bulunamıyor → boş string → "Missing API Key" hatası.
+#   docker-compose.yml COGNITWIN_STUDENT_KEY'i her zaman container'a geçirir.
+#
+# Erişim denetimi iki katmanlı:
+#   UI katmanı:      Sadece "CogniTwin Student" endpoint görünür.
+#   Backend katmanı: cognitwin-api, agile model'lara gelen her isteği HTTP 403
+#                    ile reddeder — kullanıcı model adını manuel yazmış olsa bile.
+#
+# NOT — agents: disableBuilder: true bu LibreChat sürümünde (v0.8.4 / config
+#   schema v1.3.x) Zod tarafından tanınmıyor ve container crash'e yol açıyor.
+#   ResumableAgentController, ENDPOINTS=custom ortam değişkeni ile sınırlandırılıyor;
+#   apiKey boş olmadığı sürece chat akışını engellemez.
+# ──────────────────────────────────────────────────────────────────────────────
+
+endpoints:
+  custom:
+    - name: "CogniTwin Student"
+      apiKey: "${COGNITWIN_STUDENT_KEY}"
+      baseURL: "http://cognitwin-api:8011/v1/"
+      models:
+        default:
+          - "cognitwin-student-llm"
+        fetch: false
+      modelDisplayLabel: "CogniTwin Student"
+      titleConvo: true
+      titleModel: "cognitwin-student-llm"
