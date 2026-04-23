@@ -70,6 +70,33 @@ services:
     networks:
       - cognitwin-net
 
+  # ── CogniTwin Portal — Workspace seçim sayfası (port 8080) ─────────────
+  #
+  # Kullanıcıların ilk açtığı giriş noktası.
+  # İki seçenek sunar:
+  #   Öğrenci          → http://<host>:3900  (librechat-student)
+  #   Proje / Agile    → http://<host>:3901  (librechat-agile)
+  #
+  # nginx:alpine üzerinde tek bir index.html — bağımlılık yok, anında başlar.
+  # Hedef URL'ler JavaScript ile hostname'den türetilir; ekstra yapılandırma gerekmez.
+  portal:
+    image: nginx:alpine
+    container_name: cognitwin-portal
+    restart: unless-stopped
+    ports:
+      - "${PORTAL_PORT:-8080}:80"
+    volumes:
+      - ./infra/portal/index.html:/usr/share/nginx/html/index.html:ro
+      - ./infra/portal/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - cognitwin-net
+
   # ── LibreChat — Student UI (port 3900) ──────────────────────────────────
   #
   # Visible to academic / student users only.

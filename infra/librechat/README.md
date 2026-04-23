@@ -5,6 +5,19 @@ yapılandırma dosyalarını içerir.
 
 ---
 
+## Giriş Noktası — CogniTwin Portal
+
+Kullanıcılar önce **`http://<sunucu>:8080`** adresini açar.
+
+Burada iki seçenek görünür:
+- **Öğrenci Workspace** → `http://<sunucu>:3900`
+- **Proje / Agile Workspace** → `http://<sunucu>:3901`
+
+Seçim yapıldığında doğru LibreChat instance'ına otomatik yönlendirilir.
+Yönlendirme JavaScript ile hostname'den türetilir; ekstra yapılandırma gerekmez.
+
+---
+
 ## İki Ayrı LibreChat Instance
 
 CogniTwin iki farklı LibreChat instance çalıştırır.  Her instance yalnızca kendi

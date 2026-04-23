@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CogniTwin — Workspace Seçimi</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    /* ── Header ──────────────────────────────────────────────── */
+    header { text-align: center; margin-bottom: 3rem; }
+
+    .brand {
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: #a78bfa;
+      letter-spacing: -0.5px;
+    }
+
+    .tagline {
+      margin-top: 0.5rem;
+      color: #64748b;
+      font-size: 1rem;
+    }
+
+    /* ── Cards ───────────────────────────────────────────────── */
+    .cards {
+      display: flex;
+      gap: 1.75rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.9rem;
+      background: #1e2130;
+      border: 1.5px solid #2d3148;
+      border-radius: 20px;
+      padding: 2.5rem 2rem 2rem;
+      width: 300px;
+      text-decoration: none;
+      color: inherit;
+      cursor: pointer;
+      transition:
+        transform     0.18s ease,
+        border-color  0.18s ease,
+        box-shadow    0.18s ease;
+    }
+
+    .card:hover { transform: translateY(-6px); }
+
+    .card.student:hover {
+      border-color: #4ade80;
+      box-shadow: 0 16px 48px rgba(74, 222, 128, 0.12);
+    }
+
+    .card.agile:hover {
+      border-color: #60a5fa;
+      box-shadow: 0 16px 48px rgba(96, 165, 250, 0.12);
+    }
+
+    /* ── Card internals ──────────────────────────────────────── */
+    .icon  { font-size: 3.5rem; line-height: 1; }
+
+    .badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.22rem 0.7rem;
+      border-radius: 99px;
+    }
+
+    .card.student .badge { background: #14532d; color: #4ade80; }
+    .card.agile   .badge { background: #1e3a5f; color: #60a5fa; }
+
+    .card-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .desc {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      line-height: 1.65;
+      text-align: center;
+    }
+
+    .model-list {
+      color: #64748b;
+      font-size: 0.78rem;
+      text-align: center;
+      line-height: 1.8;
+      margin-top: 0.25rem;
+    }
+
+    .model-list strong { color: #94a3b8; }
+
+    .cta {
+      margin-top: 0.75rem;
+      padding: 0.6rem 1.75rem;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      color: #0f1117;
+      text-decoration: none;
+      transition: opacity 0.15s;
+      display: inline-block;
+    }
+
+    .cta:hover { opacity: 0.88; }
+    .card.student .cta { background: #4ade80; }
+    .card.agile   .cta { background: #60a5fa; }
+
+    /* ── Divider label between cards ─────────────────────────── */
+    .or {
+      display: flex;
+      align-items: center;
+      color: #374151;
+      font-size: 0.8rem;
+      font-weight: 600;
+      align-self: center;
+    }
+
+    /* ── Footer ──────────────────────────────────────────────── */
+    footer {
+      margin-top: 3.5rem;
+      color: #374151;
+      font-size: 0.78rem;
+      text-align: center;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">🧠 CogniTwin</div>
+    <div class="tagline">Devam etmek istediğiniz workspace'i seçin</div>
+  </header>
+
+  <div class="cards">
+
+    <!-- ── Student Workspace ─────────────────────────── -->
+    <a class="card student" id="student-card" href="#">
+      <span class="icon">🎓</span>
+      <span class="badge">Öğrenci</span>
+      <span class="card-title">Student Workspace</span>
+
+      <p class="desc">
+        Akademik soru-cevap, araştırma ve<br />
+        bilgi edinme ortamı.
+      </p>
+
+      <p class="model-list">
+        Erişilen model:<br />
+        <strong>CogniTwin Student LLM</strong>
+      </p>
+
+      <span class="cta">Öğrenci Workspace'e Gir →</span>
+    </a>
+
+    <span class="or">ya da</span>
+
+    <!-- ── Agile Workspace ───────────────────────────── -->
+    <a class="card agile" id="agile-card" href="#">
+      <span class="icon">🚀</span>
+      <span class="badge">Proje / Agile</span>
+      <span class="card-title">Project / Agile Workspace</span>
+
+      <p class="desc">
+        Proje planlama, sprint yönetimi ve<br />
+        agile workflow ortamı.
+      </p>
+
+      <p class="model-list">
+        Erişilen agent'lar:<br />
+        <strong>Composer · Product Owner</strong><br />
+        <strong>Scrum Master · Developer</strong>
+      </p>
+
+      <span class="cta">Agile Workspace'e Gir →</span>
+    </a>
+
+  </div>
+
+  <footer>
+    Seçiminiz sizi yalnızca o role ait modellerin görüneceği LibreChat instance'ına yönlendirir.<br />
+    Yanlış workspace'te erişim denemesi backend tarafından engellenir.
+  </footer>
+
+  <!--
+    Hostname dinamik okunuyor: localhost'ta da, sunucuda da ekstra yapılandırma olmadan çalışır.
+    Portları değiştirmek için docker-compose.yml içindeki PORTAL_PORT / LIBRECHAT_PORT / AGILE_PORT
+    değişkenlerini güncelleyin.
+  -->
+  <script>
+    (function () {
+      var host = window.location.hostname;
+      document.getElementById('student-card').href = 'http://' + host + ':3900';
+      document.getElementById('agile-card').href   = 'http://' + host + ':3901';
+    })();
+  </script>
+
+</body>
+</html>
