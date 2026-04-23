@@ -70,16 +70,21 @@ services:
     networks:
       - cognitwin-net
 
-  # ── LibreChat (UI) ───────────────────────────────────────────────────────
+  # ── LibreChat — Student UI (port 3900) ──────────────────────────────────
+  #
+  # Visible to academic / student users only.
+  # Mounts librechat.student.yaml → only "CogniTwin Student" endpoint appears
+  # in the model picker.  Agile agents are absent from the UI entirely.
+  # Backend RBAC (cognitwin-api) provides a second enforcement layer.
   librechat:
     image: ghcr.io/danny-avila/librechat:latest
-    container_name: librechat-api
+    container_name: librechat-student
     restart: unless-stopped
     ports:
-      - "${LIBRECHAT_PORT:-3900}:${LIBRECHAT_PORT:-3900}"
+      - "${LIBRECHAT_PORT:-3900}:3900"
     environment:
       HOST: "0.0.0.0"
-      PORT: "${LIBRECHAT_PORT:-3900}"
+      PORT: "3900"
       DOMAIN_CLIENT: "${DOMAIN_CLIENT:-http://localhost:3900}"
       DOMAIN_SERVER: "${DOMAIN_SERVER:-http://localhost:3900}"
       MONGO_URI: "${MONGO_URI:-mongodb://mongodb:27017/LibreChat}"
@@ -93,7 +98,7 @@ services:
       JWT_SECRET: "${JWT_SECRET:-change-this-jwt-secret}"
       JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:-change-this-jwt-refresh-secret}"
     volumes:
-      - ./infra/librechat/librechat.yaml:/app/librechat.yaml:ro
+      - ./infra/librechat/librechat.student.yaml:/app/librechat.yaml:ro
       - librechat_images:/app/client/public/images
       - librechat_logs:/app/api/logs
     depends_on:
@@ -109,6 +114,57 @@ services:
       # "localhost" → ::1 (IPv6) but Node.js only binds on 0.0.0.0 (IPv4),
       # so the IPv6 attempt always gets "Connection refused".
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3900/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - cognitwin-net
+
+  # ── LibreChat — Agile UI (port 3901) ─────────────────────────────────────
+  #
+  # Visible to project-track / agile users only.
+  # Mounts librechat.agile.yaml → only agile agents (Composer, PO, SM, Dev)
+  # appear in the model picker.  Student models are absent from the UI entirely.
+  # Uses a separate MongoDB database (LibreChat_Agile) so student and agile
+  # user accounts, conversations, and settings are fully isolated.
+  #
+  # Direct students to http://<host>:3900
+  # Direct project users to http://<host>:3901
+  librechat-agile:
+    image: ghcr.io/danny-avila/librechat:latest
+    container_name: librechat-agile
+    restart: unless-stopped
+    ports:
+      - "${AGILE_PORT:-3901}:3901"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3901"
+      DOMAIN_CLIENT: "${AGILE_DOMAIN_CLIENT:-http://localhost:3901}"
+      DOMAIN_SERVER: "${AGILE_DOMAIN_SERVER:-http://localhost:3901}"
+      MONGO_URI: "${AGILE_MONGO_URI:-mongodb://mongodb:27017/LibreChat_Agile}"
+      MEILI_HOST: "http://meilisearch:7700"
+      MEILI_MASTER_KEY: "${MEILI_MASTER_KEY:-change-me}"
+      DEBUG_LOGGING: "${DEBUG_LOGGING:-true}"
+      DEBUG_CONSOLE: "${DEBUG_CONSOLE:-false}"
+      ALLOW_REGISTRATION: "${ALLOW_REGISTRATION:-true}"
+      NO_INDEX: "${NO_INDEX:-true}"
+      TRUST_PROXY: "${TRUST_PROXY:-1}"
+      JWT_SECRET: "${JWT_SECRET:-change-this-jwt-secret}"
+      JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:-change-this-jwt-refresh-secret}"
+    volumes:
+      - ./infra/librechat/librechat.agile.yaml:/app/librechat.yaml:ro
+      - librechat_agile_images:/app/client/public/images
+      - librechat_agile_logs:/app/api/logs
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      cognitwin-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3901/"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -164,3 +220,5 @@ volumes:
   librechat_meilisearch:
   librechat_images:
   librechat_logs:
+  librechat_agile_images:
+  librechat_agile_logs:

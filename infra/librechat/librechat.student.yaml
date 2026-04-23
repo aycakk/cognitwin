@@ -1,0 +1,32 @@
+version: "1.3.4"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CogniTwin — Student LibreChat endpoint configuration
+#
+# This file is mounted ONLY by the student-facing LibreChat instance (port 3900).
+# Agile agents (PO, SM, Developer, Composer) are completely absent from this
+# config — students never see them in the model picker.
+#
+# Role enforcement is two-layer:
+#   UI layer:      only "CogniTwin Student" endpoint appears in LibreChat.
+#   Backend layer: cognitwin-api returns HTTP 403 for any agile model, even if
+#                  a student manually crafts a request with a guessed model name.
+# ──────────────────────────────────────────────────────────────────────────────
+
+endpoints:
+  custom:
+
+    # ── Student / academic path ─────────────────────────────────────────────
+    # Only endpoint visible to students.
+    # The apiKey encodes the "student" role — the backend filters the model list
+    # and rejects any attempt to reach agile models via HTTP 403.
+    - name: "CogniTwin Student"
+      apiKey: "${COGNITWIN_STUDENT_KEY:-cognitwin-student}"
+      baseURL: "http://cognitwin-api:8011/v1/"
+      models:
+        default:
+          - "cognitwin-student-llm"
+        fetch: false
+      modelDisplayLabel: "CogniTwin Student"
+      titleConvo: true
+      titleModel: "cognitwin-student-llm"
