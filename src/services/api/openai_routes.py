@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from fastapi.responses import Response, StreamingResponse
@@ -9,6 +9,7 @@ import logging
 import time
 
 from src.services.api.pipeline import process_user_message
+from src.services.api.model_access import get_role, get_models_for_role, is_model_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -75,23 +76,37 @@ def _make_chunk(chat_id: str, now: int, model: str, delta: dict, finish_reason=N
 
 
 @openai_router.get("/v1/models")
-async def list_models():
+async def list_models(request: Request):
+    """Return only the models the caller is authorised to see.
+
+    Role is derived from the Authorization: Bearer <api_key> header.
+    The api_key comes from librechat.yaml endpoint → apiKey field.
+
+    student role  → cognitwin-student-llm, llama3.2
+    agile role    → cognitwin-product-owner, cognitwin-scrum,
+                    cognitwin-developer, cognitwin-composer
+    admin role    → all of the above
+    unknown key   → treated as student (most restrictive fallback)
+    """
+    role = get_role(request)
+    visible = get_models_for_role(role)
     now = int(time.time())
-    model_ids = [
-        "llama3.2",
-        "cognitwin-student-llm",
-        "cognitwin-developer",
-        "cognitwin-scrum",
-        "cognitwin-product-owner",
-        "cognitwin-composer",
-    ]
     payload = {
         "object": "list",
         "data": [
-            {"id": mid, "object": "model", "created": now, "owned_by": "cognitwin"}
-            for mid in model_ids
+            {
+                "id":       m["id"],
+                "object":   "model",
+                "created":  now,
+                "owned_by": "cognitwin",
+            }
+            for m in visible
         ],
     }
+    logger.info(
+        "openai-routes: GET /v1/models  role=%s  count=%d",
+        role, len(visible),
+    )
     return Response(
         content=json.dumps(payload, ensure_ascii=False),
         media_type="application/json; charset=utf-8",
@@ -99,7 +114,32 @@ async def list_models():
 
 
 @openai_router.post("/v1/chat/completions")
-async def chat_completions(req: ChatCompletionRequest):
+async def chat_completions(req: ChatCompletionRequest, request: Request):
+    # 0) Role-based access control — enforced before any pipeline work.
+    #    Rejects requests where the model name does not match the caller's role,
+    #    even if the model name was guessed manually (e.g. a student typing
+    #    "cognitwin-product-owner" into the LibreChat model field).
+    role  = get_role(request)
+    model = req.model or "llama3.2"
+
+    if not is_model_allowed(role, model):
+        logger.warning(
+            "openai-routes: access denied  role=%s  model=%r",
+            role, model,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Model '{model}' is not accessible for your role ('{role}'). "
+                "Contact your administrator if you believe this is an error."
+            ),
+        )
+
+    logger.info(
+        "openai-routes: POST /v1/chat/completions  role=%s  model=%r",
+        role, model,
+    )
+
     # 1) Extract the most recent user message
     user_text = ""
     for m in reversed(req.messages or []):
@@ -108,7 +148,6 @@ async def chat_completions(req: ChatCompletionRequest):
             break
 
     session_id = _derive_session_id(req)
-    model      = req.model or "llama3.2"
 
     def _run_pipeline() -> dict:
         """Synchronous pipeline wrapper — runs in a thread executor."""

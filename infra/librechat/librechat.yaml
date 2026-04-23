@@ -1,48 +1,55 @@
 version: "1.3.4"
 
+# ──────────────────────────────────────────────────────────────────────────────
+# CogniTwin — LibreChat endpoint configuration
+#
+# Role-based model visibility is enforced by the CogniTwin backend.
+# The apiKey for each endpoint group determines which models are accessible.
+#
+# How it works:
+#   1. LibreChat sends the apiKey as  Authorization: Bearer <apiKey>  on every
+#      request to the CogniTwin backend.
+#   2. The backend maps the key to a role (student / agile / admin).
+#   3. GET /v1/models returns only role-appropriate models.
+#   4. POST /v1/chat/completions rejects models outside the caller's role
+#      with HTTP 403 — even if the model name is typed manually.
+#
+# API key configuration:
+#   Set COGNITWIN_STUDENT_KEY and COGNITWIN_AGILE_KEY in your .env file.
+#   Defaults: cognitwin-student / cognitwin-agile
+#   The legacy key "cognitwin" still works and maps to the student role.
+# ──────────────────────────────────────────────────────────────────────────────
+
 endpoints:
   custom:
-    - name: "CogniTwin"
-      apiKey: "cognitwin"
+
+    # ── Student / academic path ─────────────────────────────────────────────
+    # Accessible to all registered users.
+    # Shows only the student LLM — agile agents are invisible and blocked.
+    - name: "CogniTwin Student"
+      apiKey: "${COGNITWIN_STUDENT_KEY:-cognitwin-student}"
       baseURL: "http://cognitwin-api:8011/v1/"
       models:
         default:
           - "cognitwin-student-llm"
         fetch: false
       modelDisplayLabel: "CogniTwin Student"
+      titleConvo: true
+      titleModel: "cognitwin-student-llm"
 
-    - name: "CogniTwin Developer"
-      apiKey: "cognitwin"
-      baseURL: "http://cognitwin-api:8011/v1/"
-      models:
-        default:
-          - "cognitwin-developer"
-        fetch: false
-      modelDisplayLabel: "CogniTwin Developer"
-
-    - name: "CogniTwin Scrum"
-      apiKey: "cognitwin"
-      baseURL: "http://cognitwin-api:8011/v1/"
-      models:
-        default:
-          - "cognitwin-scrum"
-        fetch: false
-      modelDisplayLabel: "CogniTwin Scrum Master"
-
-    - name: "CogniTwin Product Owner"
-      apiKey: "cognitwin"
+    # ── Agile / project-workflow path ───────────────────────────────────────
+    # Accessible only to users with the agile API key.
+    # The backend returns HTTP 403 if the student key is used here.
+    - name: "CogniTwin Agile"
+      apiKey: "${COGNITWIN_AGILE_KEY:-cognitwin-agile}"
       baseURL: "http://cognitwin-api:8011/v1/"
       models:
         default:
           - "cognitwin-product-owner"
-        fetch: false
-      modelDisplayLabel: "CogniTwin Product Owner"
-
-    - name: "CogniTwin Composer"
-      apiKey: "cognitwin"
-      baseURL: "http://cognitwin-api:8011/v1/"
-      models:
-        default:
+          - "cognitwin-scrum"
+          - "cognitwin-developer"
           - "cognitwin-composer"
         fetch: false
-      modelDisplayLabel: "CogniTwin Composer"
+      modelDisplayLabel: "CogniTwin Agile"
+      titleConvo: true
+      titleModel: "cognitwin-product-owner"
