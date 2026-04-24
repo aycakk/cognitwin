@@ -55,6 +55,11 @@ _REVISION_HINTS: dict[str, str] = {
         "Resolve all open REDO cycles before emitting the final response — ensure each "
         "REDO audit entry has a corresponding closed_at timestamp."
     ),
+    "C8": (
+        "Your output does not address all acceptance criteria for this task. "
+        "Re-read each criterion and ensure your response explicitly covers it "
+        "with relevant keywords, examples, or implementation details."
+    ),
 }
 
 _DEFAULT_HINT = "Review your response against the failing gate's evidence and revise accordingly."

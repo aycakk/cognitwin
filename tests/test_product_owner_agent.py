@@ -148,7 +148,8 @@ class TestCreateStory:
         assert len(state["backlog"]) == 1
         assert state["backlog"][0]["story_id"] == "S-001"
         assert state["backlog"][0]["title"] == "API refactoring"
-        assert state["backlog"][0]["status"] == "draft"
+        # Stories created without acceptance criteria are marked needs_refinement
+        assert state["backlog"][0]["status"] == "needs_refinement"
 
     def test_create_story_english(self, agent, tmp_store):
         result = agent.handle_query("create story: User login")

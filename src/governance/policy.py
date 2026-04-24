@@ -66,6 +66,7 @@ GATE_POLICY: dict[str, list[str]] = {
         "C3",      # ontology compliance still applies
         "C4",      # hallucination markers
         "C5",      # role-permission boundary
+        "C8",      # acceptance criteria coverage (PASS when no AC defined)
         "A1",      # REDO cycle audit
     ],
     "ScrumMasterAgent": [

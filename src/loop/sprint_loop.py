@@ -234,7 +234,26 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
     #  PHASE 2 — PLAN
     # ─────────────────────────────────────────────────────────────────
     logger.info("sprint_loop: PLAN — decomposing goal into epics")
-    epics = po_agent.decompose_goal(goal, analysis["context"])
+    # Inject retrospective actions and roadmap into the PO planning context
+    # so the next sprint actually learns from the previous one.
+    retro_actions = state_store.get_retro_actions()
+    roadmap       = state_store.get_roadmap()
+    extra_context_parts: list[str] = []
+    if analysis.get("context"):
+        extra_context_parts.append(analysis["context"])
+    if retro_actions:
+        extra_context_parts.append(
+            "Retrospective action items from previous sprint:\n- "
+            + "\n- ".join(retro_actions)
+        )
+    if roadmap:
+        roadmap_summary = "; ".join(
+            f"{e.get('package_id', '?')}→sprint {e.get('target_sprint', '?')}"
+            for e in roadmap[:5]
+        )
+        extra_context_parts.append(f"Current roadmap packages: {roadmap_summary}")
+    plan_context = "\n\n".join(extra_context_parts)
+    epics = po_agent.decompose_goal(goal, plan_context)
     step_count += 1
 
     logger.info("sprint_loop: PLAN — %d epics; generating stories", len(epics))
@@ -267,6 +286,25 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
         step_count += 1
 
     logger.info("sprint_loop: PLAN done — %d stories added to backlog (step=%d)", len(story_ids), step_count)
+
+    # Prefer pre-existing backlog items whose target_sprint matches this
+    # sprint id (roadmap-driven planning). When no such items exist,
+    # fall back to the newly-generated stories above.
+    targeted_story_ids = [
+        s.get("story_id")
+        for s in state_store.get_backlog()
+        if s.get("target_sprint") == sprint_id
+        and s.get("status") in ("draft", "ready", "needs_refinement")
+        and s.get("story_id")
+    ]
+    if targeted_story_ids:
+        logger.info(
+            "sprint_loop: PLAN — roadmap targets %d existing stories for sprint=%s",
+            len(targeted_story_ids), sprint_id,
+        )
+        # Prepend so roadmap-targeted work runs first, then any new stories
+        seen = set(targeted_story_ids)
+        story_ids = targeted_story_ids + [sid for sid in story_ids if sid not in seen]
 
     # ─────────────────────────────────────────────────────────────────
     #  PHASE 3 — EXECUTE
@@ -320,6 +358,10 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
                 role=AgentRole.DEVELOPER,
                 masked_input=dev_query,
                 metadata={"strategy": "auto"},
+                context={
+                    "acceptance_criteria": story.get("acceptance_criteria", []) if story else [],
+                    "source_story_id":     story_id,
+                },
             )
 
             response   = _process_developer_message(dev_task)
@@ -332,6 +374,7 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
                 "DeveloperAgent",
                 response.redo_log,
                 codebase_context=sprint_context,
+                acceptance_criteria=story.get("acceptance_criteria", []) if story else [],
             )
 
             conf = _avg_confidence_from_report(gate_report)
@@ -341,11 +384,51 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
             )
 
             if gate_report["conjunction"]:
-                # All gates passed
-                conf_scores.append(conf)
-                task_completed = True
-                final_result   = response.draft
-                break
+                # All gates passed — mark AC validated so complete_task allows done
+                if story and story.get("acceptance_criteria"):
+                    state_store.mark_ac_validated(task_id)
+
+                # PO review: gate-pass alone is not acceptance.
+                # The PO must confirm the task output evidences the criteria.
+                review = po_agent.review_story(
+                    story               = story or {},
+                    task_output         = response.draft,
+                    acceptance_criteria = story.get("acceptance_criteria", []) if story else [],
+                    sprint_goal         = state_store.get_sprint_goal(),
+                )
+                if review.get("accepted"):
+                    conf_scores.append(conf)
+                    task_completed = True
+                    final_result   = response.draft
+                    break
+
+                # PO rejected — route back to Developer with the rejection reason.
+                if reroute_count >= MAX_REROUTE_PER_TASK:
+                    # Budget exhausted — treat as escalation
+                    if story_id:
+                        state_store.reject_story(story_id, review.get("reason", "")[:200])
+                    state_store.block_task(task_id, f"PO rejected: {review.get('reason', '')[:150]}")
+                    blocked_stories.append({
+                        "story_id":         story_id,
+                        "task_id":          task_id,
+                        "title":            story_title,
+                        "reason":           f"PO rejected: {review.get('reason', '')}",
+                        "missing_criteria": review.get("missing_criteria", []),
+                    })
+                    break
+
+                reroute_count += 1
+                step_count    += 1
+                missing = review.get("missing_criteria") or []
+                dev_query = dev_query + (
+                    f"\n[PO REJECTED — {review.get('reason', 'AC not met')}]"
+                    + (f"\nMissing criteria: {'; '.join(missing[:3])}" if missing else "")
+                )
+                logger.info(
+                    "sprint_loop: PO rejected story=%s reroute=%d reason=%r",
+                    story_id, reroute_count, review.get("reason", ""),
+                )
+                continue
 
             # Ask orchestrator what to do with the failure
             reroute = orchestrator.reroute(story_id, gate_report, reroute_count)
@@ -387,13 +470,31 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
 
         # ── Finalise task state ───────────────────────────────────────
         if task_completed:
-            state_store.complete_task(task_id, final_result[:500])
-            completed_stories.append({
-                "story_id": story_id,
-                "task_id":  task_id,
-                "title":    story_title,
-            })
-            logger.info("sprint_loop: ✓ completed story=%s task=%s", story_id, task_id)
+            ok = state_store.complete_task(task_id, final_result[:500])
+            if not ok:
+                # AC enforcement blocked completion — treat as escalation
+                logger.warning(
+                    "sprint_loop: complete_task blocked for task=%s (AC not validated)",
+                    task_id,
+                )
+                state_store.block_task(task_id, "Acceptance criteria not validated")
+                blocked_stories.append({
+                    "story_id": story_id,
+                    "task_id":  task_id,
+                    "title":    story_title,
+                    "reason":   "Acceptance criteria not validated",
+                })
+            else:
+                # PO already accepted inside the loop — finalise increment.
+                if story_id:
+                    state_store.accept_story(story_id)
+                    state_store.add_to_increment(task_id)
+                completed_stories.append({
+                    "story_id": story_id,
+                    "task_id":  task_id,
+                    "title":    story_title,
+                })
+                logger.info("sprint_loop: ✓ completed story=%s task=%s", story_id, task_id)
 
         elif not any(b.get("story_id") == story_id for b in blocked_stories):
             # Reroute budget or step budget exhausted without an explicit ESCALATE

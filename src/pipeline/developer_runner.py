@@ -268,6 +268,87 @@ Yanıt verirken:
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  SPECIALIST BEHAVIOR PROFILES
+#  Task-aware prompt blocks injected into Developer system content at runtime.
+#  select_developer_specialist() is pure/deterministic — no LLM, no side effects.
+#  Profiles are additive: _DEVELOPER_SYSTEM_PROMPT rules always apply underneath.
+#  _REDO_SPECIALIST_BLOCK is appended to redo_rules only (not to system prompt).
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SPECIALIST_PROFILES: dict[str, str] = {
+    "default_developer": "",
+    "minimal_change_engineer": (
+        "SPECIALIST MODE — Minimal Change:\n"
+        "- Implement ONLY what the task explicitly states. Do not expand scope.\n"
+        "- If you notice something outside the task, note it as a follow-up — do not implement it.\n"
+        "- Every claim must be directly justifiable by the task requirements.\n"
+    ),
+    "senior_developer_lite": (
+        "SPECIALIST MODE — Implementation:\n"
+        "- Analyze task requirements fully before producing output.\n"
+        "- Reference the specific context source for each technical claim: "
+        "\"(from codebase context)\", \"(from sprint context)\".\n"
+        "- Produce complete, actionable steps — no deferred explanations.\n"
+    ),
+    "architect_lite": (
+        "SPECIALIST MODE — Architecture:\n"
+        "- Present at least two design options with explicit trade-offs.\n"
+        "- Name what you are giving up, not only what you are gaining.\n"
+        "- Every abstraction must justify its complexity.\n"
+    ),
+    "reality_checker_grounding": (
+        "SPECIALIST MODE — Grounding:\n"
+        "- Every file path, class name, and function name must appear in CODEBASE CONTEXT above.\n"
+        "- If not found in provided context: emit BlindSpot — do not infer from general knowledge.\n"
+        "- Default posture: uncertainty. Certainty requires explicit evidence in context.\n"
+    ),
+}
+
+_REDO_SPECIALIST_BLOCK = (
+    "Focus revision on the failing gate only:\n"
+    "🔴 C4/C2_DEV: Remove any file path, function name, or claim not found in provided context.\n"
+    "🔴 C1: Remove all unmasked PII.\n"
+    "🟡 C3/C5: Remove out-of-scope or out-of-role content.\n"
+    "Do not rewrite sections that passed gates.\n"
+)
+
+_SPECIALIST_TASK_RE: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"\b(fix|bug|düzelt|hata|patch|repair|broken|bozuk|çöz)\b", re.I),
+     "minimal_change_engineer"),
+    (re.compile(r"\b(architect|design|tasarla|mimari|structure|nasıl\s+tasarlan)\b", re.I),
+     "architect_lite"),
+    (re.compile(r"\b(implement|add|ekle|geliştir|yeni\s+özellik|feature|create|oluştur)\b", re.I),
+     "senior_developer_lite"),
+]
+
+
+def select_developer_specialist(
+    query: str,
+    codebase_context: str,
+    workflow_context: str,  # noqa: ARG001 — reserved for future routing signals
+) -> str:
+    """Return a specialist behavior block for the given task.
+
+    Pure and deterministic — no LLM call, no state writes.
+    Returns an empty string for default_developer (no addition to system prompt).
+    Codebase analysis queries only activate reality_checker_grounding when
+    codebase_context is non-empty, preventing it from firing in workflow mode.
+    """
+    if codebase_context and re.search(
+        r"\b(analiz|analyze|incele|how\s+does|where\s+is|ne\s+yapar)"
+        r"|nasıl\s+çalış|nerede\b",
+        query, re.I,
+    ):
+        return _SPECIALIST_PROFILES["reality_checker_grounding"]
+
+    for pattern, profile_key in _SPECIALIST_TASK_RE:
+        if pattern.search(query):
+            return _SPECIALIST_PROFILES[profile_key]
+
+    return _SPECIALIST_PROFILES["default_developer"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  CODEBASE CONTEXT INJECTION
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -435,12 +516,20 @@ def _run_workflow_developer(task: AgentTask, workflow_context: str) -> AgentResp
         "Ödeme / payment için hiçbir teknik adım yazma."
     )
 
+    _wf_specialist_block = select_developer_specialist(
+        original, codebase_context="", workflow_context=workflow_context
+    )
+    _wf_system_content = (
+        _DEVELOPER_WORKFLOW_SYSTEM + "\n\n" + _wf_specialist_block
+        if _wf_specialist_block else _DEVELOPER_WORKFLOW_SYSTEM
+    )
+
     draft = ""
     try:
         resp  = _safe_chat(
             "llama3.2",
             [
-                {"role": "system", "content": _DEVELOPER_WORKFLOW_SYSTEM},
+                {"role": "system", "content": _wf_system_content},
                 {"role": "user",   "content": user_prompt},
             ],
         )
@@ -712,6 +801,11 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
     session_id    = task.session_id
     task_ctx      = task.context or {}
     workflow_step = task_ctx.get("workflow_step", "")
+    # Acceptance criteria for C8: callers (e.g. sprint_loop) pass AC via
+    # task.context so the developer's internal REDO loop evaluates C8 with
+    # the real criteria. Interactive callers (main_cli) pass nothing → C8
+    # trivially PASSes via evaluator.py early-return on empty list.
+    task_ac: list[str] = list(task_ctx.get("acceptance_criteria") or [])
 
     # ── Pre-dispatch: task lifecycle commands ─────────────────────────────────
     # Lifecycle intent detection is SKIPPED in workflow mode.
@@ -806,8 +900,16 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
 
     # Stage 3 — Gate array + REDO loop
     # Uses the developer-specific system prompt (NOT the Student Agent prompt).
+    # Specialist block is appended when task type matches a known profile.
+    _specialist_block = select_developer_specialist(
+        user_text, codebase_context, workflow_context
+    )
+    _system_content = (
+        _DEVELOPER_SYSTEM_PROMPT + "\n\n" + _specialist_block
+        if _specialist_block else _DEVELOPER_SYSTEM_PROMPT
+    )
     base_messages = [
-        {"role": "system", "content": _DEVELOPER_SYSTEM_PROMPT},
+        {"role": "system", "content": _system_content},
         {"role": "user",   "content": user_text},
     ]
 
@@ -817,7 +919,8 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
         query=user_text,
         redo_rules=(
             "Answer ONLY from verified developer context. "
-            "If not found: \"Bunu hafizamda bulamadim.\""
+            "If not found: \"Bunu hafizamda bulamadim.\"\n"
+            + _REDO_SPECIALIST_BLOCK
         ),
         limit_message_template=(
             "Dogrulama basarisiz (Gate {gate}). "
@@ -829,7 +932,10 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
         chat_fn=chat,
         blindspot_fn=build_blindspot_block,
         session_id=session_id,
-        gate_kwargs={"codebase_context": combined_context},
+        gate_kwargs={
+            "codebase_context":    combined_context,
+            "acceptance_criteria": task_ac,
+        },
     )
     if limit_hit:
         return AgentResponse(

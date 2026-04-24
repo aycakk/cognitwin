@@ -50,11 +50,14 @@ STRICT RULES:
 - Output ONLY a valid JSON array. No explanation, no markdown, no commentary.
 - Each item must have ALL these fields:
   "epic": parent epic title (string)
-  "title": story title, max 80 chars (string)
-  "description": "As a user, I want to [action] so that [benefit]." (string)
-  "acceptance_criteria": list of 2–3 strings, each max 80 chars
+  "title": story title in English, max 80 chars (string)
+  "description": "As a user, I want to [action] so that [benefit]." in English (string)
+  "acceptance_criteria": list of 2–4 strings, each max 80 chars — REQUIRED, never empty
   "priority": exactly one of "high", "medium", "low"
+  "story_points": integer effort estimate 1–8 (Fibonacci: 1, 2, 3, 5, 8)
+  "deployment_package": short release package name, max 40 chars (string, can be empty "")
 - 1 to 6 items total across all epics.
+- acceptance_criteria MUST NOT be an empty list. Every story needs at least 2 criteria.
 
 EXAMPLE:
 [
@@ -62,8 +65,10 @@ EXAMPLE:
     "epic": "User Authentication",
     "title": "User can register with email",
     "description": "As a user, I want to register with my email so that I can access the platform.",
-    "acceptance_criteria": ["Registration form validates email format", "Password must be at least 8 chars", "Success confirmation shown"],
-    "priority": "high"
+    "acceptance_criteria": ["Registration form validates email format", "Password must be at least 8 chars", "Success confirmation shown after registration"],
+    "priority": "high",
+    "story_points": 3,
+    "deployment_package": "MVP Auth"
   }
 ]"""
 
@@ -212,16 +217,31 @@ class POLLMAgent:
                     priority = s.get("priority", "medium")
                     if priority not in ("high", "medium", "low"):
                         priority = "medium"
+                    ac = [
+                        str(c)[:80]
+                        for c in s.get("acceptance_criteria", [])
+                        if isinstance(c, str) and c.strip()
+                    ][:5]
+                    title_en = str(s.get("title", ""))[:80]
+                    user_story_en = str(s.get("description", ""))[:300]
+                    # story_points: clamp to 1–8, default 2
+                    sp_raw = s.get("story_points", 2)
+                    try:
+                        story_points = max(1, min(8, int(sp_raw)))
+                    except (TypeError, ValueError):
+                        story_points = 2
                     stories.append({
                         "epic":                 str(s.get("epic", ""))[:80],
-                        "title":                str(s.get("title", ""))[:80],
-                        "description":          str(s.get("description", ""))[:300],
-                        "acceptance_criteria":  [
-                            str(c)[:80]
-                            for c in s.get("acceptance_criteria", [])
-                            if isinstance(c, str) and c.strip()
-                        ][:5],
+                        "title":                title_en,
+                        "title_en":             title_en,
+                        "title_tr":             "",
+                        "description":          user_story_en,
+                        "user_story_en":        user_story_en,
+                        "user_story_tr":        "",
+                        "acceptance_criteria":  ac,
                         "priority":             priority,
+                        "story_points":         story_points,
+                        "deployment_package":   str(s.get("deployment_package", ""))[:40],
                     })
                 if stories:
                     logger.debug("po_llm: generated %d stories", len(stories))
@@ -230,18 +250,102 @@ class POLLMAgent:
         except Exception as exc:
             logger.warning("po_llm: generate_stories LLM call failed: %s", exc)
 
-        # Fallback: one minimal story per epic
+        # Fallback: one minimal story per epic (always includes AC)
         logger.warning("po_llm: using fallback story generation (%d epics)", len(epics))
+        return self._fallback_stories(epics)
+
+    def review_story(
+        self,
+        story:               dict[str, Any],
+        task_output:         str,
+        acceptance_criteria: list[str] | None = None,
+        sprint_goal:         str = "",
+    ) -> dict[str, Any]:
+        """Decide whether a completed task satisfies the Definition of Done.
+
+        Returns
+        -------
+        {
+          "accepted":          bool,
+          "reason":            str,
+          "missing_criteria":  list[str],
+        }
+
+        Deterministic implementation (no LLM):
+          - If there are no acceptance_criteria, the story is auto-accepted
+            (legacy behaviour — matches complete_task() empty-AC bypass).
+          - Otherwise, each criterion must share at least one significant
+            keyword (≥4 chars, alphanumeric) with the task output, case-
+            insensitive. Criteria that fail are listed in missing_criteria.
+          - Rejection reason is a short, human-readable summary.
+
+        A deterministic check keeps the acceptance step auditable and
+        reproducible; an LLM-backed variant can subclass and override.
+        """
+        ac = [c for c in (acceptance_criteria or story.get("acceptance_criteria") or []) if isinstance(c, str) and c.strip()]
+        if not ac:
+            return {
+                "accepted":         True,
+                "reason":           "No acceptance criteria defined (legacy auto-accept).",
+                "missing_criteria": [],
+            }
+
+        output_lc = (task_output or "").lower()
+        if not output_lc.strip():
+            return {
+                "accepted":         False,
+                "reason":           "Task output is empty.",
+                "missing_criteria": list(ac),
+            }
+
+        missing: list[str] = []
+        for criterion in ac:
+            words = [w for w in re.findall(r"[A-Za-z0-9]+", criterion.lower()) if len(w) >= 4]
+            if not words:
+                # No significant words to match — skip like C8 does
+                continue
+            if not any(w in output_lc for w in words):
+                missing.append(criterion)
+
+        if missing:
+            return {
+                "accepted":         False,
+                "reason":           f"{len(missing)} acceptance criterion(a) not evidenced in task output.",
+                "missing_criteria": missing,
+            }
+
+        return {
+            "accepted":         True,
+            "reason":           "All acceptance criteria evidenced in task output.",
+            "missing_criteria": [],
+        }
+
+    def _fallback_stories(
+        self, epics: list[dict[str, str]]
+    ) -> list[dict[str, Any]]:
+        """Deterministic fallback: one minimal story per epic with guaranteed AC."""
         return [
             {
                 "epic":                e["title"],
                 "title":               e["title"],
+                "title_en":            e["title"],
+                "title_tr":            "",
                 "description":         (
                     f"As a user, I want to {e['title'].lower()} "
                     "so that the sprint goal is achieved."
                 ),
-                "acceptance_criteria": ["Feature works as described by the epic."],
+                "user_story_en":       (
+                    f"As a user, I want to {e['title'].lower()} "
+                    "so that the sprint goal is achieved."
+                ),
+                "user_story_tr":       "",
+                "acceptance_criteria": [
+                    f"Feature described by '{e['title']}' is implemented and functional.",
+                    "No regression in existing functionality.",
+                ],
                 "priority":            "medium",
+                "story_points":        2,
+                "deployment_package":  "",
             }
             for e in epics
         ]
