@@ -45,6 +45,11 @@ class ChatCompletionRequest(BaseModel):
     session_id: Optional[str] = None
 
 
+class SprintRunRequest(BaseModel):
+    goal: str
+    reset_state: Optional[bool] = False
+
+
 def _derive_session_id(req: "ChatCompletionRequest") -> str:
     """Return a stable session ID.
 
@@ -109,6 +114,53 @@ async def list_models(request: Request):
     )
     return Response(
         content=json.dumps(payload, ensure_ascii=False),
+        media_type="application/json; charset=utf-8",
+    )
+
+
+@openai_router.post("/v1/sprint/run")
+async def sprint_run(req: SprintRunRequest, request: Request):
+    """Debug endpoint: invoke run_sprint(goal) directly, bypassing LibreChat.
+
+    Role gate: same as /v1/chat/completions for model "cognitwin-sprint"
+    (agile or admin role required).
+
+    Body:
+      {"goal": "<free-text goal>", "reset_state": false}
+
+    Returns the sprint_bridge summary dict plus the full SprintResult fields.
+    """
+    role = get_role(request)
+    if not is_model_allowed(role, "cognitwin-sprint"):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Role {role!r} cannot invoke /v1/sprint/run.",
+        )
+
+    if req.reset_state:
+        # Clear tasks + backlog for a fresh run. Sprint metadata preserved.
+        from src.pipeline.scrum_team.sprint_state_store import SprintStateStore  # noqa: PLC0415
+        SprintStateStore().reset_for_workflow()
+
+    loop = asyncio.get_running_loop()
+
+    def _invoke() -> dict:
+        from src.services.api.sprint_bridge import run_sprint_for_ui  # noqa: PLC0415
+        return run_sprint_for_ui(req.goal)
+
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, _invoke),
+            timeout=_PIPELINE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Sprint run timed out.")
+    except Exception as exc:
+        logger.error("sprint-run: failure: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Sprint run failed: {exc}")
+
+    return Response(
+        content=json.dumps(result, ensure_ascii=False),
         media_type="application/json; charset=utf-8",
     )
 

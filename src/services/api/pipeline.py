@@ -99,6 +99,13 @@ def process_user_message(
         masked = _masker.mask_data(user_text)
         mode, strategy = resolve_mode(model)
 
+        if mode == "sprint":
+            # Autonomous advisor-upgrade pipeline (run_sprint).
+            # Bypasses the AgentTask/AgentResponse contract because run_sprint
+            # is a multi-step sprint runner, not a single agent call.
+            from src.services.api.sprint_bridge import run_sprint_for_ui  # noqa: PLC0415
+            return run_sprint_for_ui(masked)
+
         if mode == "developer":
             task = AgentTask(
                 session_id=session_id,

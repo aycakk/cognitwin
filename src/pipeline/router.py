@@ -28,6 +28,9 @@ UnknownModelError = UnknownRoleError
 _ROUTING_TABLE: list[tuple[str, str, str]] = [
     # (substring_to_match, mode, strategy)
     # "product_owner" must precede "scrum" to prevent false substring matches.
+    # "sprint" is listed ahead of the others so a model name like
+    # "cognitwin-sprint" does not accidentally match "student" or anything else.
+    ("sprint",        "sprint",        "auto"),
     ("composer",      "composer",      "rule"),
     ("product_owner", "product_owner", "rule"),
     ("developer",     "developer",     "auto"),
