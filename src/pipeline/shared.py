@@ -176,49 +176,114 @@ def build_blindspot_block(query: str, memory_status: str = "BULUNAMADI") -> str:
 
 
 def build_ontology_context() -> str:
-    if _get_ontology_graph() is None:
+    graph = _get_ontology_graph()
+    if graph is None:
+        print("[ONTOLOGY_CONTEXT] graph unavailable")
         return "[ONTOLOGY: unavailable]"
+    print(f"[ONTOLOGY_CONTEXT] graph loaded triples={len(graph)}")
 
     lines = ["=== ONTOLOGY CONTEXT ==="]
+    fact_count = 0
+
+    def _safe_rows(label: str, query: str) -> list[dict]:
+        try:
+            rows = _sparql(query)
+            print(f"[ONTOLOGY_QUERY] {label} rows={len(rows)}")
+            return rows
+        except Exception as exc:
+            print(f"[ONTOLOGY_QUERY_ERROR] {label}: {exc}")
+            return []
 
     # Exam → Course relationships
-    for r in _sparql("""
+    exam_course_rows = _safe_rows(
+        "exam_course",
+        """
         PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX upper: <http://cognitwin.org/upper#>
         PREFIX coode: <http://www.co-ode.org/ontologies/ont.owl#>
         SELECT ?exam ?course WHERE {
-            ?exam rdf:type upper:Exam .
             ?exam coode:activityPartOf ?course .
-        }"""):
+        }""",
+    )
+    for r in exam_course_rows:
         exam   = r["exam"].split("/")[-1].split("#")[-1]
         course = r["course"].split("/")[-1].split("#")[-1]
         lines.append(f"  [Exam] {exam} belongs_to Course: {course}")
+        fact_count += 1
+
+    # Exam date facts (if provided in ontology).
+    for r in _safe_rows(
+        "exam_date",
+        """
+        PREFIX student: <http://cognitwin.org/student#>
+        SELECT ?exam ?date WHERE {
+            ?exam student:hasExamDate ?date .
+        }""",
+    ):
+        exam = r["exam"].split("/")[-1].split("#")[-1]
+        date = r["date"]
+        lines.append(f"  [ExamDate] {exam} hasExamDate: {date}")
+        fact_count += 1
+
+    # Course → Instructor relationships.
+    for r in _safe_rows(
+        "course_instructor",
+        """
+        PREFIX student: <http://cognitwin.org/student#>
+        SELECT ?course ?instructor WHERE {
+            ?course student:hasInstructor ?instructor .
+        }""",
+    ):
+        course = r["course"].split("/")[-1].split("#")[-1]
+        instructor = r["instructor"].split("/")[-1].split("#")[-1]
+        lines.append(f"  [Instructor] Course: {course} hasInstructor: {instructor}")
+        fact_count += 1
+
+    # Student → Course enrollments.
+    for r in _safe_rows(
+        "takes_course",
+        """
+        PREFIX student: <http://cognitwin.org/student#>
+        SELECT ?student ?course WHERE {
+            ?student student:takesCourse ?course .
+        }""",
+    ):
+        student = r["student"].split("/")[-1].split("#")[-1]
+        course = r["course"].split("/")[-1].split("#")[-1]
+        lines.append(f"  [Enrollment] {student} takesCourse: {course}")
+        fact_count += 1
 
     # Person → Agent links
-    for r in _sparql("""
+    for r in _safe_rows(
+        "person_agent",
+        """
         PREFIX upper: <http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/>
-        SELECT ?person ?agent WHERE { ?person upper:hasAgent ?agent . }"""):
+        SELECT ?person ?agent WHERE { ?person upper:hasAgent ?agent . }""",
+    ):
         person = r["person"].split("/")[-1].split("#")[-1]
         agent  = r["agent"].split("/")[-1].split("#")[-1]
         lines.append(f"  [Person] {person} hasAgent: {agent}")
+        fact_count += 1
 
-    # Agent role assignments
-    for r in _sparql("""
+    # Agent role assignments (namespace-agnostic filter by role name).
+    for r in _safe_rows(
+        "agent_roles",
+        """
         PREFIX rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX upper: <http://www.semanticweb.org/47ila/ontologies/2026/1/untitled-ontology-7/>
         SELECT ?agent ?role WHERE {
             ?agent rdf:type ?role .
-            FILTER(?role IN (
-                upper:StudentAgent, upper:InstructorAgent,
-                upper:HeadOfDepartmentAgent, upper:ResearcherAgent
-            ))
-        }"""):
+            FILTER(REGEX(STR(?role), "(StudentAgent|InstructorAgent|HeadOfDepartmentAgent|ResearcherAgent)$"))
+        }""",
+    ):
         agent = r["agent"].split("/")[-1].split("#")[-1]
         role  = r["role"].split("/")[-1].split("#")[-1]
         lines.append(f"  [Role] {agent} is a: {role}")
+        fact_count += 1
 
-    if len(lines) == 1:
+    if fact_count == 0:
         lines.append("  (No structured individuals found in ontology)")
 
     lines.append("=== END ONTOLOGY CONTEXT ===")
-    return "\n".join(lines)
+    context = "\n".join(lines)
+    print(f"[ONTOLOGY_CONTEXT_FACTS] count={fact_count}")
+    print(f"[ONTOLOGY_CONTEXT_OUTPUT]\n{context}")
+    return context

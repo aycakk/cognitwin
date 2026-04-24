@@ -557,3 +557,32 @@ class RedoLog:
 
     def full_log(self) -> list[dict]:
         return list(self._log)
+    
+ # ─────────────────────────────────────────
+# INTENT MODEL INTEGRATION (SAFE ADDITION)
+# ─────────────────────────────────────────
+
+def _test_intent_integration() -> None:
+    """Safe local smoke test for intent integration.
+
+    Kept under __main__ so production import path and agent logic stay unchanged.
+    """
+    try:
+        from src.intent_classifier import get_model_paths, predict_intent
+    except Exception as exc:
+        print(f"[INTENT TEST] import error: {exc}")
+        return
+
+    query = "Matematik sınavım ne zaman?"
+    paths = get_model_paths()
+    print(f"[INTENT TEST] model_path: {paths['model_path']} (exists={paths['model_exists']})")
+    print(
+        f"[INTENT TEST] vectorizer_path: {paths['vectorizer_path']} "
+        f"(exists={paths['vectorizer_exists']})"
+    )
+    print(f"[INTENT TEST] query: {query}")
+    print(f"[INTENT TEST] intent: {predict_intent(query)}")
+
+
+if __name__ == "__main__":
+    _test_intent_integration()

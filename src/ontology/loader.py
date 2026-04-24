@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 # Module-level cache — loaded once per process, never shared across requests.
 _ONTOLOGY_GRAPH: Optional[object] = None
 _ONTOLOGY_TRIED: bool = False
+_ONTOLOGY_DIR_USED: Optional[Path] = None
 
 # Set COGNITWIN_ONTOLOGY_REQUIRED=1 to make ontology absence a hard error.
 _ONTOLOGY_REQUIRED: bool = os.environ.get("COGNITWIN_ONTOLOGY_REQUIRED", "0") == "1"
@@ -45,24 +46,57 @@ def _get_ontology_graph():
     Raises OntologyLoadError if COGNITWIN_ONTOLOGY_REQUIRED=1 and loading fails.
     """
     global _ONTOLOGY_GRAPH, _ONTOLOGY_TRIED
-    if _ONTOLOGY_TRIED:
+    if _ONTOLOGY_TRIED and _ONTOLOGY_GRAPH is not None:
         return _ONTOLOGY_GRAPH
+    if _ONTOLOGY_TRIED and _ONTOLOGY_GRAPH is None:
+        print("[ONTOLOGY_RETRY] previous load unavailable, retrying ontology load")
     _ONTOLOGY_TRIED = True
 
-    onto_dir = Path(__file__).resolve().parents[2] / "ontologies"
+    project_root = Path(__file__).resolve().parents[2]
+    candidates = [
+        project_root / "ontologies",
+        Path.cwd() / "ontologies",
+        Path(__file__).resolve().parents[1] / "ontologies",
+    ]
+    # Keep order but remove duplicates.
+    seen: set[Path] = set()
+    onto_candidates: list[Path] = []
+    for cand in candidates:
+        rc = cand.resolve()
+        if rc not in seen:
+            seen.add(rc)
+            onto_candidates.append(cand)
+
     expected_files = ("cognitwin-upper.ttl", "student_ontology.ttl")
     missing: list[str] = []
+    global _ONTOLOGY_DIR_USED
 
     try:
         from rdflib import Graph
         g = Graph()
         loaded = False
+        loaded_files: list[str] = []
+
+        best_dir: Optional[Path] = None
+        best_count = -1
+        for cand in onto_candidates:
+            count = sum(1 for fname in expected_files if (cand / fname).exists())
+            print(f"[ONTOLOGY_PATH_CHECK] dir={cand} present={count}/{len(expected_files)}")
+            if count > best_count:
+                best_count = count
+                best_dir = cand
+
+        onto_dir = best_dir or (project_root / "ontologies")
+        _ONTOLOGY_DIR_USED = onto_dir
+        print(f"[ONTOLOGY_LOAD_DIR] using={onto_dir}")
 
         for fname in expected_files:
             p = onto_dir / fname
+            print(f"[ONTOLOGY_FILE] path={p} exists={p.exists()}")
             if p.exists():
                 g.parse(str(p), format="turtle")
                 loaded = True
+                loaded_files.append(str(p))
                 logger.debug("[ONTOLOGY] Loaded: %s", p)
             else:
                 missing.append(fname)
@@ -92,11 +126,16 @@ def _get_ontology_graph():
             )
 
         _ONTOLOGY_GRAPH = g
+        print(
+            f"[ONTOLOGY_LOAD_SUCCESS] triples={len(g)} "
+            f"loaded_files={len(loaded_files)} missing={missing}"
+        )
 
     except OntologyLoadError:
         raise  # re-raise; do not swallow hard failures
     except Exception as exc:
         msg = f"[ONTOLOGY] Load failed: {exc}"
+        print(f"[ONTOLOGY_LOAD_ERROR] {msg}")
         logger.warning(msg)
         if _ONTOLOGY_REQUIRED:
             raise OntologyLoadError(msg) from exc
