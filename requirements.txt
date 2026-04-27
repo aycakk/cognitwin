@@ -19,7 +19,7 @@ filelock==3.16.1
 # PII masking & data processing
 python-dotenv==1.0.1
 pandas==2.2.3
-numpy==1.26.4
+numpy==2.0.2
 
 # Google API integration
 google-api-python-client
