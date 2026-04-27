@@ -140,10 +140,15 @@ class RoadmapPlanner:
     def _group_by_package(
         self, backlog: list[dict]
     ) -> dict[str, list[dict]]:
-        """Group stories by deployment_package → epic → 'Core' fallback."""
+        """Group stories by deployment_package → epic → 'Core' fallback.
+
+        Only "rejected" stories are excluded (they were discarded by PO or scope
+        filter). "accepted" stories represent delivered scope and MUST be included
+        so that roadmap packages are generated even when the sprint is complete.
+        """
         groups: dict[str, list[dict]] = {}
         for story in backlog:
-            if story.get("status") in ("accepted", "rejected"):
+            if story.get("status") == "rejected":
                 continue
             key = (
                 story.get("deployment_package")
@@ -167,6 +172,11 @@ class RoadmapPlanner:
         for s in stories:
             ac_pool.extend(s.get("acceptance_criteria", [])[:2])
 
+        # Mark as "delivered" when all stories in the package were accepted by PO
+        all_accepted = bool(stories) and all(
+            s.get("status") == "accepted" for s in stories
+        )
+
         return {
             "package_id":       f"PKG-{package_index:03d}",
             "release_package":  package_name[:80],
@@ -175,6 +185,6 @@ class RoadmapPlanner:
             "scope":            story_ids,
             "dependencies":     [],
             "success_criteria": ac_pool[:4],
-            "status":           "planned",
+            "status":           "delivered" if all_accepted else "planned",
             "created_at":       datetime.now().isoformat(timespec="seconds"),
         }

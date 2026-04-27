@@ -28,6 +28,7 @@ from src.gates.evaluator import evaluate_all_gates
 from src.pipeline.redo import run_redo_loop
 from src.pipeline.scrum_team.sprint_state_store import SprintStateStore
 from src.pipeline.shared import (
+    DEFAULT_MODEL,
     VECTOR_MEM,
     VECTOR_TOP_K,
     BLINDSPOT_TRIGGERS,
@@ -139,7 +140,8 @@ def _handle_task_lifecycle(intent: str, query: str) -> str:
             query, re.I | re.DOTALL,
         )
         summary = summary_match.group(1).strip() if summary_match else ""
-        if _SPRINT_STATE.complete_task(task_id, result_summary=summary):
+        ok = _SPRINT_STATE.complete_task(task_id, result_summary=summary)
+        if ok:
             msg = (
                 f"Görev tamamlandı\n"
                 f"  ID    : {task_id}\n"
@@ -149,7 +151,27 @@ def _handle_task_lifecycle(intent: str, query: str) -> str:
                 msg += f"  Özet  : {summary[:120]}\n"
             msg += "  Not   : PO inceleme için bilgilendirildi (ready_for_review)."
             return msg
-        return f"Görev bulunamadı: {task_id}"
+        # complete_task returns False either when the task is not found OR
+        # when acceptance criteria exist but have not been validated (ac_validated
+        # is False).  Distinguish the two so the user gets a clear error.
+        state = _SPRINT_STATE.load()
+        task_obj = next(
+            (t for t in state.get("tasks", []) if t.get("id") == task_id),
+            None,
+        )
+        if task_obj is None:
+            return f"Görev bulunamadı: {task_id}"
+        ac = task_obj.get("acceptance_criteria", [])
+        if ac and not task_obj.get("ac_validated"):
+            return (
+                f"Görev tamamlanamadı: {task_id}\n"
+                f"  Sebep : Kabul kriterleri doğrulanmadı (ac_validated = false).\n"
+                f"  AC    : {len(ac)} kriter tanımlı.\n"
+                "  Not   : Bu görev yalnızca otonom sprint döngüsü (C8 gate + PO "
+                "onayı) tamamlandıktan sonra 'done' olarak işaretlenebilir.\n"
+                "  İpucu : Görevin gate sürecinden geçmesi için 'sprint run' komutunu kullanın."
+            )
+        return f"Görev tamamlanamadı: {task_id} (bilinmeyen sebep)"
 
     if intent == "block_task":
         reason_match = re.search(
@@ -527,7 +549,7 @@ def _run_workflow_developer(task: AgentTask, workflow_context: str) -> AgentResp
     draft = ""
     try:
         resp  = _safe_chat(
-            "llama3.2",
+            DEFAULT_MODEL,
             [
                 {"role": "system", "content": _wf_system_content},
                 {"role": "user",   "content": user_prompt},
@@ -546,6 +568,7 @@ def _run_workflow_developer(task: AgentTask, workflow_context: str) -> AgentResp
         agent_role=AgentRole.DEVELOPER,
         draft=draft,
         status=TaskStatus.COMPLETED if len(draft.strip()) >= 15 else TaskStatus.FAILED,
+        artifact_type="text_plan",
     )
 
 
@@ -821,6 +844,7 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
                 agent_role=AgentRole.DEVELOPER,
                 draft=_handle_task_lifecycle(lifecycle_intent, user_text),
                 status=TaskStatus.COMPLETED,
+                artifact_type="text_plan",
             )
 
     redo_log: list[dict] = []
@@ -866,7 +890,7 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
 
     orchestrator = DeveloperOrchestrator(
         chat_fn=_safe_chat,
-        default_model="llama3.2",
+        default_model=DEFAULT_MODEL,
     )
     result = orchestrator.run(
         request=user_text,
@@ -944,6 +968,7 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
             draft=draft,
             status=TaskStatus.FAILED,
             redo_log=redo_log,
+            artifact_type="text_plan",
         )
 
     # Stage 4 — Emission
@@ -956,4 +981,5 @@ def _process_developer_message(task: AgentTask) -> AgentResponse:
         draft=draft,
         status=TaskStatus.COMPLETED,
         redo_log=redo_log,
+        artifact_type="text_plan",
     )

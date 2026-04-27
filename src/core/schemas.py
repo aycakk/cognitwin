@@ -110,3 +110,15 @@ class AgentResponse:
 
     # Arbitrary metadata (timing, model used, …)
     metadata:    dict[str, Any]       = field(default_factory=dict)
+
+    # Product-output detection fields.
+    # artifact_type distinguishes what the developer actually produced:
+    #   "text_plan" — LLM text description only; no files were written.
+    #   "patch"     — unified diff / patch produced.
+    #   "file"      — one or more real files were written.
+    #   "unknown"   — not yet classified.
+    # changed_files and test_evidence are empty until real file I/O or
+    # test-harness integration is implemented.
+    artifact_type:  str       = "unknown"
+    changed_files:  list[str] = field(default_factory=list)
+    test_evidence:  list[str] = field(default_factory=list)

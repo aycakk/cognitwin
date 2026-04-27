@@ -66,12 +66,17 @@ class MeetingNotesManager:
         backlog      = state.get("backlog", [])
         product_goal = state.get("product_goal", "Not defined")
 
-        in_sprint   = [s for s in backlog if s.get("status") == "in_sprint"]
-        without_ac  = [s for s in in_sprint if not s.get("acceptance_criteria")]
+        # Count stories actually promoted to sprint tasks (status changes from
+        # in_sprint → accepted/rejected as the sprint progresses, so counting
+        # only "in_sprint" gives zero for all completed stories).
+        tasks = state.get("tasks", [])
+        promoted_sids = {t.get("source_story_id") for t in tasks if t.get("source_story_id")}
+        selected    = [s for s in backlog if s.get("story_id") in promoted_sids]
+        without_ac  = [s for s in selected if not s.get("acceptance_criteria")]
 
         decisions = [
             f"Sprint goal set to: {sprint.get('goal', 'TBD')}",
-            f"{len(in_sprint)} stories selected for sprint backlog",
+            f"{len(selected)} stories selected for sprint backlog",
         ]
         if without_ac:
             decisions.append(

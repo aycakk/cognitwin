@@ -21,6 +21,7 @@ _project_root = os.path.dirname(_src_dir)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+from src.pipeline.shared import DEFAULT_MODEL
 from src.services.api.pipeline import (
     CHROMA,
     VECTOR_MEM,
@@ -40,7 +41,7 @@ VALID_ROLES = list(ONTOLOGY_AGENT_ROLES.keys())
 _ROLE_TO_MODEL: dict[str, str] = {
     "DeveloperAgent":   "cognitwin-developer",
     "ScrumMasterAgent": "cognitwin-scrum",
-    "StudentAgent":     "llama3.2",
+    "StudentAgent":     DEFAULT_MODEL,
 }
 
 
@@ -156,7 +157,7 @@ def ask() -> None:
             continue
 
         # ── Main pipeline ─────────────────────────────────────────────────────
-        model    = _ROLE_TO_MODEL.get(current_role, "llama3.2")
+        model    = _ROLE_TO_MODEL.get(current_role, DEFAULT_MODEL)
         result   = process_user_message(user_text=q, agent_role=current_role, model=model)
         response = result["answer"]
 

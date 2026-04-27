@@ -22,6 +22,10 @@ services:
       - "8600:8011"
     environment:
       OLLAMA_HOST: "http://ollama:11434"
+      # Centralised model selection. Override by exporting OLLAMA_MODEL=...
+      # before `docker compose up` (e.g. OLLAMA_MODEL=llama3.2:1b for the
+      # smaller/faster model). Read by src/core/llm_config.DEFAULT_MODEL.
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-llama3.2}"
     volumes:
       - cognitwin_chromadb:/app/static/chromadb
       - cognitwin_logs:/app/logs
@@ -43,6 +47,13 @@ services:
     image: ollama/ollama:latest
     container_name: cognitwin-ollama
     restart: unless-stopped
+    # Docker's embedded resolver (127.0.0.11) sometimes fails to resolve
+    # Cloudflare R2 hostnames during `ollama pull` (the model registry
+    # redirects to per-blob *.r2.cloudflarestorage.com URLs). Falling back
+    # to public resolvers makes large model pulls reliable.
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     ports:
       - "11434:11434"
     volumes:

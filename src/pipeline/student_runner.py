@@ -12,6 +12,7 @@ from src.core.schemas import AgentTask, AgentResponse, AgentRole, TaskStatus
 from src.gates.evaluator import evaluate_all_gates
 from src.pipeline.redo import run_redo_loop
 from src.pipeline.shared import (
+    DEFAULT_MODEL,
     VECTOR_MEM,
     VECTOR_TOP_K,
     SYSTEM_PROMPT,
@@ -74,7 +75,7 @@ def run_pipeline(task: AgentTask) -> AgentResponse:
         {"role": "user",   "content": user_message},
     ]
 
-    resp  = chat(model="llama3.2", messages=base_messages)
+    resp  = chat(model=DEFAULT_MODEL, messages=base_messages)
     draft = resp.message.content.strip()
 
     # ── Stage 3 — Compliance Verification ────────────────────────────────────

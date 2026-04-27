@@ -2,6 +2,8 @@ import sys
 import os
 import ollama
 
+from src.pipeline.shared import DEFAULT_MODEL
+
 # 1. ADIM: Klasör yollarını çok daha sağlam bir yöntemle tanıtıyoruz
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(BASE_DIR, "src"))
@@ -38,7 +40,7 @@ print("\n--- MASKELEŞMİŞ VERİ ---")
 print(temiz_veri)
 
 print("\n--- YAPAY ZEKA CEVAP VERİYOR... ---")
-response = ollama.chat(model='llama3.2', messages=[
+response = ollama.chat(model=DEFAULT_MODEL, messages=[
     {"role": "system", "content": agent.get_system_prompt()},
     {"role": "user", "content": f"Verileri incele ve grup üyelerini say: {temiz_veri}"}
 ])

@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from textwrap import dedent
 from typing import Callable, Iterable, Optional
 
+from src.core.llm_config import DEFAULT_MODEL
+
 logger = logging.getLogger(__name__)
 
 
@@ -74,7 +76,7 @@ class DeveloperAgent:
         request: str,
         context: str = "",
         language: str = "en",
-        model: str = "llama3.2",
+        model: str = DEFAULT_MODEL,
     ) -> str:
         """
         Generate a developer-mode response for *request*.

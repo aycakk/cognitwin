@@ -499,7 +499,12 @@ class SprintStateStore:
                     return True
         return False
 
-    def complete_task(self, task_id: str, result_summary: str = "") -> bool:
+    def complete_task(
+        self,
+        task_id: str,
+        result_summary: str = "",
+        artifact_type: str = "text_plan",
+    ) -> bool:
         """Mark a task as done and record the developer's result summary.
 
         Enforcement rule: a task that has non-empty acceptance_criteria can only
@@ -509,6 +514,11 @@ class SprintStateStore:
         When the task carries a source_story_id (i.e. it was promoted from
         the PO backlog), the po_status field is set to 'ready_for_review'
         so the PO can inspect and accept or reject the linked story.
+
+        artifact_type records what the developer actually produced:
+          "text_plan" — LLM description only, no real files written.
+          "patch"     — unified diff / patch produced.
+          "file"      — real files were written to disk.
 
         Returns False when the task_id is not found OR when AC have not been
         validated (logs a warning in the latter case).
@@ -530,6 +540,7 @@ class SprintStateStore:
                         return False
                     t["status"] = "done"
                     t["result_summary"] = result_summary[:500]
+                    t["artifact_type"] = artifact_type if isinstance(artifact_type, str) else "text_plan"
                     t["completed_at"] = datetime.now().isoformat(timespec="seconds")
                     if t.get("source_story_id"):
                         t["po_status"] = "ready_for_review"
@@ -552,6 +563,143 @@ class SprintStateStore:
                     self.save(state)
                     return True
         return False
+
+    def apply_human_feedback(
+        self,
+        task_id: str,
+        action: str,
+        reason: str = "",
+        actor: str = "human",
+        failed_acceptance_criteria: list[str] | None = None,
+    ) -> dict:
+        """Apply human feedback (accept / reject / change_request) to a sprint task.
+
+        Parameters
+        ----------
+        task_id : str
+            Sprint task ID to act on (e.g. "T-002").
+        action : str
+            One of "accept", "reject", "change_request".
+        reason : str
+            Free-text explanation shown in the report and stored on the task.
+        actor : str
+            Who triggered this feedback ("human", a user name, etc.).
+        failed_acceptance_criteria : list[str] | None
+            Specific AC items that were not satisfied (used for reject/change_request).
+
+        Behaviour
+        ---------
+        accept
+            Allowed only when ac_validated=True OR no acceptance_criteria exist.
+            Sets po_status="human_accepted". Adds to increment if task is done.
+        reject
+            Sets status="reopened", po_status="human_rejected".
+            Clears ac_validated. Removes task from increment.
+            Marks linked backlog story as "rejected".
+        change_request
+            Sets status="reopened", po_status="change_requested".
+            Clears ac_validated. Removes task from increment.
+            Appends reason to task["revision_hints"].
+            Marks linked backlog story as "change_requested".
+
+        Returns
+        -------
+        {"ok": bool, "message": str, "task": dict | None}
+        """
+        action = (action or "").strip().lower()
+        if action not in ("accept", "reject", "change_request"):
+            return {
+                "ok": False,
+                "message": (
+                    f"Unknown action {action!r}. "
+                    "Valid values: accept | reject | change_request"
+                ),
+                "task": None,
+            }
+
+        with self.state_lock():
+            state = self.load()
+            task: dict | None = None
+            for t in state.get("tasks", []):
+                if t.get("id") == task_id:
+                    task = t
+                    break
+            if task is None:
+                return {
+                    "ok": False,
+                    "message": f"Task {task_id!r} not found.",
+                    "task": None,
+                }
+
+            feedback_entry: dict = {
+                "action":                     action,
+                "reason":                     (reason or "")[:400],
+                "actor":                      actor,
+                "timestamp":                  datetime.now().isoformat(timespec="seconds"),
+                "failed_acceptance_criteria": list(failed_acceptance_criteria or []),
+            }
+            task.setdefault("human_feedback", []).append(feedback_entry)
+
+            if action == "accept":
+                ac = task.get("acceptance_criteria", [])
+                if ac and not task.get("ac_validated"):
+                    # Do NOT persist yet — AC guard failed; return early.
+                    # The feedback_entry was appended above; undo it to keep
+                    # state clean (accept that was blocked should not be recorded).
+                    task["human_feedback"].pop()
+                    self.save(state)
+                    return {
+                        "ok": False,
+                        "message": (
+                            f"Cannot accept {task_id}: acceptance criteria exist but "
+                            "ac_validated is False. The sprint gate must pass first."
+                        ),
+                        "task": task,
+                    }
+                task["po_status"] = "human_accepted"
+                if task.get("status") == "done":
+                    increment: list[str] = state.setdefault("increment", [])
+                    if task_id not in increment:
+                        increment.append(task_id)
+
+            else:  # reject or change_request
+                task["status"] = "reopened"
+                task["po_status"] = (
+                    "human_rejected" if action == "reject" else "change_requested"
+                )
+                task["ac_validated"] = False
+                task["updated_at"] = datetime.now().isoformat(timespec="seconds")
+                if reason:
+                    task.setdefault("revision_hints", []).append((reason or "")[:400])
+                # Remove from product increment
+                state["increment"] = [
+                    tid for tid in state.get("increment", []) if tid != task_id
+                ]
+                # Propagate to linked backlog story
+                source_story_id = task.get("source_story_id")
+                if source_story_id:
+                    for s in state.get("backlog", []):
+                        if s.get("story_id") == source_story_id:
+                            s["status"] = (
+                                "rejected" if action == "reject" else "change_requested"
+                            )
+                            if action == "reject":
+                                s["rejection_reason"] = (reason or "")[:200]
+                            s["updated_at"] = datetime.now().isoformat(timespec="seconds")
+                            break
+
+            self.save(state)
+
+        verb_map = {
+            "accept":         "accepted",
+            "reject":         "rejected",
+            "change_request": "change-requested",
+        }
+        return {
+            "ok": True,
+            "message": f"Task {task_id} {verb_map[action]} by {actor}.",
+            "task": task,
+        }
 
     def get_tasks_ready_for_review(self) -> list[dict]:
         """Return tasks the Developer completed that are awaiting PO acceptance.
@@ -607,6 +755,25 @@ class SprintStateStore:
             self.save(state)
         logger.info("sprint-state: cleared for new workflow run")
 
+    def reset_for_isolated_sprint(self) -> None:
+        """Full reset for an isolated sprint run.
+
+        Called by run_sprint_for_ui before each chat-completions sprint so that
+        stale backlog, tasks, roadmap, meeting notes, and product goal from a
+        previous unrelated goal do not contaminate the new sprint report.
+
+        Preserved: team capacity configuration.
+        Cleared:   tasks, backlog, increment, roadmap, meeting_notes,
+                   retro_actions, product_goal, sprint.goal.
+        """
+        with self.state_lock():
+            state = self.load()
+            team  = state.get("team") or copy.deepcopy(DEFAULT_SPRINT_STATE["team"])
+            new_state = copy.deepcopy(DEFAULT_SPRINT_STATE)
+            new_state["team"] = team
+            self.save(new_state)
+        logger.info("sprint-state: full reset for isolated sprint run")
+
     def set_sprint_goal(self, goal: str) -> None:
         """Update the sprint goal text.
 
@@ -642,13 +809,41 @@ class SprintStateStore:
     def add_to_increment(self, task_id: str) -> bool:
         """Record a completed+accepted task as part of the Product Increment.
 
-        Returns False when the task_id is not found in tasks[].
+        Eligibility guard (all must hold):
+          • task.status == "done"
+          • task.po_status in ("accepted", "human_accepted")
+          • task.ac_validated == True  OR  acceptance_criteria is empty
+
+        Returns False when the task_id is not found OR when the task does not
+        satisfy the guard (logs a warning in the latter case).
         """
         with self.state_lock():
             state = self.load()
-            task_ids = [t["id"] for t in state.get("tasks", [])]
-            if task_id not in task_ids:
+            task: dict | None = next(
+                (t for t in state.get("tasks", []) if t.get("id") == task_id),
+                None,
+            )
+            if task is None:
                 return False
+
+            ac = task.get("acceptance_criteria") or []
+            status   = task.get("status", "")
+            po       = task.get("po_status", "")
+            ac_valid = bool(task.get("ac_validated"))
+
+            if not (
+                status == "done"
+                and po in ("accepted", "human_accepted")
+                and (ac_valid or not ac)
+            ):
+                logger.warning(
+                    "add_to_increment refused for task %s: "
+                    "status=%s po_status=%s ac_validated=%s ac_count=%d. "
+                    "Task must be done, accepted, and C8-validated.",
+                    task_id, status, po, ac_valid, len(ac),
+                )
+                return False
+
             increment: list[str] = state.setdefault("increment", [])
             if task_id not in increment:
                 increment.append(task_id)

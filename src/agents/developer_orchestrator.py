@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.agents.developer_agent import DeveloperAgent
+from src.core.llm_config import DEFAULT_MODEL
 
 
 MEMORY_NOT_FOUND_TEXT = "Bunu hafizamda bulamadim."
@@ -58,7 +59,7 @@ class DeveloperOrchestrator:
         *,
         generator: DeveloperAgent | None = None,
         chat_fn: Callable[..., dict[str, Any]] | None = None,
-        default_model: str = "llama3.2",
+        default_model: str = DEFAULT_MODEL,
         ontology_path: str | Path | None = None,
     ) -> None:
         # Pass chat_fn into DeveloperAgent so its process() method can call the

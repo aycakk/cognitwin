@@ -21,9 +21,11 @@ import logging
 import re
 from typing import Any
 
+from src.core.llm_config import DEFAULT_MODEL
+
 logger = logging.getLogger(__name__)
 
-_MODEL = "llama3.2"
+_MODEL = DEFAULT_MODEL
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  System prompts

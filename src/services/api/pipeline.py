@@ -21,6 +21,7 @@ from src.gates.evaluator import evaluate_all_gates  # noqa: F401 (re-exported fo
 from src.ontology.loader import _get_ontology_graph, _sparql  # noqa: F401 (re-exported for main_cli)
 from src.pipeline.router import resolve_mode, UnknownModelError
 from src.pipeline.shared import (           # noqa: F401 (several re-exported for main_cli)
+    DEFAULT_MODEL,
     VECTOR_TOP_K,
     BLINDSPOT_TRIGGERS,
     _LABEL_RE,
@@ -77,7 +78,7 @@ _masker = PIIMasker()
 def process_user_message(
     user_text: str,
     agent_role: str = "StudentAgent",
-    model: str = "llama3.2",
+    model: str = DEFAULT_MODEL,
     messages: list | None = None,
     session_id: str = "",
 ) -> dict:

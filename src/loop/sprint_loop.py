@@ -29,6 +29,7 @@ Reuse
 from __future__ import annotations
 
 import logging
+import re as _re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -51,6 +52,66 @@ from src.pipeline.scrum_team.sprint_state_store import SprintStateStore
 _process_developer_message = None  # populated on first run_sprint() call
 
 logger = logging.getLogger(__name__)
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Story scope validation
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SCOPE_STOP_WORDS: frozenset[str] = frozenset({
+    "user", "users", "the", "and", "for", "with", "that", "this", "from",
+    "will", "their", "which", "have", "been", "when", "also", "should",
+})
+
+# Domain keyword sets — a story using any of these is ONLY in-scope when the
+# product goal also mentions at least one term from the same set.
+_GATED_DOMAINS: tuple[frozenset[str], ...] = (
+    frozenset({                                            # auth / identity
+        "login", "logout", "register", "signup", "password",
+        "authentication", "credential", "oauth", "jwt",
+        "session", "profile", "account",
+    }),
+    frozenset({                                            # infra / devops
+        "docker", "kubernetes", "nginx", "devops",
+        "cicd", "pipeline", "migration",
+    }),
+    frozenset({                                            # payments / billing
+        "payment", "checkout", "stripe", "invoice",
+        "billing", "subscription", "pricing",
+    }),
+)
+
+
+def _story_aligns_with_goal(story: dict, goal: str) -> bool:
+    """Return False when the story is clearly off-scope for the product goal.
+
+    Two checks:
+    1. Domain gate — story uses auth/infra/payment terms the goal does not.
+    2. Keyword overlap — story shares ≥1 content word with the goal.
+    """
+    def _words(text: str) -> frozenset[str]:
+        return frozenset(_re.findall(r"\b[a-z]{3,}\b", (text or "").lower()))
+
+    goal_words  = _words(goal)
+    story_words = _words(
+        " ".join([
+            story.get("title", ""),
+            story.get("description", ""),
+            story.get("epic", ""),
+        ])
+    )
+
+    # 1. Domain gate
+    for term_set in _GATED_DOMAINS:
+        if story_words & term_set and not (goal_words & term_set):
+            return False
+
+    # 2. Keyword overlap — at least one shared content word
+    goal_content  = goal_words  - _SCOPE_STOP_WORDS
+    story_content = story_words - _SCOPE_STOP_WORDS
+    if goal_content and story_content and not (goal_content & story_content):
+        return False
+
+    return True
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -218,6 +279,14 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
 
     # Stamp the goal into sprint state so downstream agents can see it
     state_store.set_sprint_goal(f"[AUTO] {goal[:180]}")
+
+    # Persist the product goal on first run (or if it was previously cleared).
+    # sprint_bridge._clean_goal_for_po() has already stripped report instructions,
+    # so `goal` here is the actual product scope, not formatting directives.
+    if not state_store.get_product_goal() and goal:
+        state_store.set_product_goal(goal[:300])
+        logger.info("sprint_loop: persisted product_goal=%r", goal[:60])
+
     step_count += 1
 
     logger.info("sprint_loop: ANALYZE done — goal_type=%s step=%d", analysis["goal_type"], step_count)
@@ -271,7 +340,7 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
 
     logger.info("sprint_loop: PLAN — %d stories generated", len(stories))
 
-    # Persist each story to the backlog
+    # Persist each story to the backlog; reject out-of-scope stories immediately.
     story_ids: list[str] = []
     for story_data in stories:
         if step_count >= MAX_STEPS_PER_SPRINT:
@@ -281,11 +350,20 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
             description=story_data.get("description", ""),
             priority=story_data.get("priority", "medium"),
             acceptance_criteria=story_data.get("acceptance_criteria", []),
+            epic=story_data.get("epic", ""),
+            deployment_package=story_data.get("deployment_package", ""),
         )
+        if not _story_aligns_with_goal(story_data, goal):
+            state_store.reject_story(sid, reason="Out of scope for current product goal.")
+            logger.info(
+                "sprint_loop: PLAN — story rejected (out of scope): %r",
+                story_data.get("title", "?")[:60],
+            )
+            continue  # do not execute; do not count as a planning step
         story_ids.append(sid)
         step_count += 1
 
-    logger.info("sprint_loop: PLAN done — %d stories added to backlog (step=%d)", len(story_ids), step_count)
+    logger.info("sprint_loop: PLAN done — %d in-scope stories queued (step=%d)", len(story_ids), step_count)
 
     # Prefer pre-existing backlog items whose target_sprint matches this
     # sprint id (roadmap-driven planning). When no such items exist,
@@ -470,7 +548,11 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
 
         # ── Finalise task state ───────────────────────────────────────
         if task_completed:
-            ok = state_store.complete_task(task_id, final_result[:500])
+            ok = state_store.complete_task(
+                task_id,
+                final_result[:500],
+                artifact_type=getattr(response, "artifact_type", "text_plan"),
+            )
             if not ok:
                 # AC enforcement blocked completion — treat as escalation
                 logger.warning(
