@@ -24,6 +24,8 @@ import datetime
 import uuid
 from typing import Callable, Optional
 
+from src.core.llm_config import DEFAULT_MODEL
+
 from src.pipeline.redo_audit import append_session
 
 
@@ -160,7 +162,7 @@ def run_redo_loop(
             + redo_rules
         )
         redo_resp = chat_fn(
-            model="llama3.2",
+            model=DEFAULT_MODEL,
             messages=base_messages + [
                 {"role": "assistant", "content": draft},
                 {"role": "user",      "content": redo_instruction},

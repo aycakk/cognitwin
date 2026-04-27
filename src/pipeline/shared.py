@@ -15,12 +15,18 @@ import re
 
 from ollama import chat
 
+from src.core.llm_config import DEFAULT_MODEL  # noqa: F401 (re-exported)
 from src.database.chroma_manager import db_manager
 from src.ontology.loader import _get_ontology_graph, _sparql
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
 # ─────────────────────────────────────────────────────────────────────────────
+
+# DEFAULT_MODEL is re-exported above from src.core.llm_config so existing
+# imports (`from src.pipeline.shared import DEFAULT_MODEL`) continue to work.
+# New code should prefer importing directly from src.core.llm_config to avoid
+# pulling the ollama client at import time.
 
 VECTOR_TOP_K = 15
 

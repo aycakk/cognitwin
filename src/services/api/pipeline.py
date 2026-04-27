@@ -21,6 +21,7 @@ from src.gates.evaluator import evaluate_all_gates  # noqa: F401 (re-exported fo
 from src.ontology.loader import _get_ontology_graph, _sparql  # noqa: F401 (re-exported for main_cli)
 from src.pipeline.router import resolve_mode, UnknownModelError
 from src.pipeline.shared import (           # noqa: F401 (several re-exported for main_cli)
+    DEFAULT_MODEL,
     VECTOR_TOP_K,
     BLINDSPOT_TRIGGERS,
     _LABEL_RE,
@@ -77,7 +78,7 @@ _masker = PIIMasker()
 def process_user_message(
     user_text: str,
     agent_role: str = "StudentAgent",
-    model: str = "llama3.2",
+    model: str = DEFAULT_MODEL,
     messages: list | None = None,
     session_id: str = "",
 ) -> dict:
@@ -98,6 +99,13 @@ def process_user_message(
     try:
         masked = _masker.mask_data(user_text)
         mode, strategy = resolve_mode(model)
+
+        if mode == "sprint":
+            # Autonomous advisor-upgrade pipeline (run_sprint).
+            # Bypasses the AgentTask/AgentResponse contract because run_sprint
+            # is a multi-step sprint runner, not a single agent call.
+            from src.services.api.sprint_bridge import run_sprint_for_ui  # noqa: PLC0415
+            return run_sprint_for_ui(masked)
 
         if mode == "developer":
             task = AgentTask(

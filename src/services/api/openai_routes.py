@@ -10,6 +10,7 @@ import time
 
 from src.services.api.pipeline import process_user_message
 from src.services.api.model_access import get_role, get_models_for_role, is_model_allowed
+from src.pipeline.shared import DEFAULT_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,18 @@ class ChatCompletionRequest(BaseModel):
     messages: List[Dict[str, Any]]
     stream: Optional[bool] = False
     session_id: Optional[str] = None
+
+
+class SprintRunRequest(BaseModel):
+    goal: str
+    reset_state: Optional[bool] = False
+
+
+class FeedbackRequest(BaseModel):
+    task_id: str
+    action: str                                      # accept | reject | change_request
+    reason: Optional[str] = ""
+    failed_acceptance_criteria: Optional[List[str]] = None
 
 
 def _derive_session_id(req: "ChatCompletionRequest") -> str:
@@ -113,6 +126,98 @@ async def list_models(request: Request):
     )
 
 
+@openai_router.post("/v1/sprint/run")
+async def sprint_run(req: SprintRunRequest, request: Request):
+    """Debug endpoint: invoke run_sprint(goal) directly, bypassing LibreChat.
+
+    Role gate: same as /v1/chat/completions for model "cognitwin-sprint"
+    (agile or admin role required).
+
+    Body:
+      {"goal": "<free-text goal>", "reset_state": false}
+
+    Returns the sprint_bridge summary dict plus the full SprintResult fields.
+    """
+    role = get_role(request)
+    if not is_model_allowed(role, "cognitwin-sprint"):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Role {role!r} cannot invoke /v1/sprint/run.",
+        )
+
+    loop = asyncio.get_running_loop()
+
+    def _invoke() -> dict:
+        from src.services.api.sprint_bridge import run_sprint_for_ui  # noqa: PLC0415
+        # isolated=req.reset_state: full state reset when requested; default False
+        # so /v1/sprint/run preserves state across successive API calls unless
+        # the caller explicitly passes "reset_state": true.
+        return run_sprint_for_ui(req.goal, isolated=req.reset_state)
+
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, _invoke),
+            timeout=_PIPELINE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Sprint run timed out.")
+    except Exception as exc:
+        logger.error("sprint-run: failure: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Sprint run failed: {exc}")
+
+    return Response(
+        content=json.dumps(result, ensure_ascii=False),
+        media_type="application/json; charset=utf-8",
+    )
+
+
+@openai_router.post("/v1/feedback")
+async def task_feedback(req: FeedbackRequest, request: Request):
+    """Apply human feedback (accept / reject / change_request) to a sprint task.
+
+    Role gate: agile or admin role required (same as /v1/sprint/run).
+
+    Body:
+      {
+        "task_id": "T-002",
+        "action":  "reject",
+        "reason":  "Delete button does not remove the task",
+        "failed_acceptance_criteria": ["User can delete a task"]
+      }
+
+    Supported actions
+    -----------------
+    accept         — mark task as human-accepted; add to increment when ac_validated.
+    reject         — reopen task; clear ac_validated; remove from increment.
+    change_request — reopen task; record revision hint; remove from increment.
+
+    Returns {"ok": bool, "message": str, "task": dict | None}
+    """
+    role = get_role(request)
+    if not is_model_allowed(role, "cognitwin-sprint"):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Role {role!r} cannot invoke /v1/feedback.",
+        )
+
+    from src.pipeline.scrum_team.sprint_state_store import SprintStateStore  # noqa: PLC0415
+
+    result = SprintStateStore().apply_human_feedback(
+        task_id=req.task_id,
+        action=req.action,
+        reason=req.reason or "",
+        actor="human",
+        failed_acceptance_criteria=req.failed_acceptance_criteria,
+    )
+
+    status_code = 200 if result["ok"] else 422
+    return Response(
+        content=json.dumps(result, ensure_ascii=False),
+        media_type="application/json; charset=utf-8",
+        status_code=status_code,
+    )
+
+
 @openai_router.post("/v1/chat/completions")
 async def chat_completions(req: ChatCompletionRequest, request: Request):
     # 0) Role-based access control — enforced before any pipeline work.
@@ -120,7 +225,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
     #    even if the model name was guessed manually (e.g. a student typing
     #    "cognitwin-product-owner" into the LibreChat model field).
     role  = get_role(request)
-    model = req.model or "llama3.2"
+    model = req.model or DEFAULT_MODEL
 
     if not is_model_allowed(role, model):
         logger.warning(

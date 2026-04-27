@@ -77,6 +77,7 @@ from src.core.session_store import SESSION_STORE
 from src.pipeline.developer_runner import _process_developer_message
 from src.pipeline.product_owner_runner import run_product_owner_pipeline
 from src.pipeline.scrum_master_runner import run_scrum_master_pipeline
+from src.pipeline.shared import DEFAULT_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -419,7 +420,7 @@ def _step_product_owner(
     try:
         from src.pipeline.shared import _safe_chat  # lazy — avoids ollama at module load
         resp  = _safe_chat(
-            "llama3.2",
+            DEFAULT_MODEL,
             [
                 {"role": "system", "content": _PO_WORKFLOW_SYSTEM},
                 {"role": "user",   "content": po_input},
@@ -450,7 +451,7 @@ def _step_product_owner(
                 + "Bu proje için Proje Hedefi, Kapsam ve Epikler/Hikayeler bölümlerini üret."
             )
             resp2 = _safe_chat(
-                "llama3.2",
+                DEFAULT_MODEL,
                 [
                     {"role": "system", "content": _PO_WORKFLOW_SYSTEM},
                     {"role": "user",   "content": simple_user},
@@ -735,7 +736,7 @@ def _step_po_final_review(
     try:
         from src.pipeline.shared import _safe_chat  # lazy import — avoids ollama at module load
         resp  = _safe_chat(
-            "llama3.2",
+            DEFAULT_MODEL,
             [
                 {"role": "system", "content": _PO_REVIEW_SYSTEM},
                 {"role": "user",   "content": user_prompt},

@@ -24,6 +24,9 @@ version: "1.3.6"
 #   • cognitwin-product-owner → Sadece PO aşamasını çalıştırır
 #   • cognitwin-scrum         → Sadece SM aşamasını çalıştırır
 #   • cognitwin-developer     → Sadece Developer aşamasını çalıştırır
+#   • cognitwin-sprint        → Otonom advisor-upgrade sprint döngüsü
+#                               (run_sprint: PO review_story + retro_actions
+#                               injection + roadmap target_sprint tercihi)
 #
 # NOT — agents: disableBuilder: true bu LibreChat sürümünde (v0.8.4 / config
 #   schema v1.3.x) Zod tarafından tanınmıyor ve container crash'e yol açıyor.
@@ -42,6 +45,7 @@ endpoints:
           - "cognitwin-product-owner"
           - "cognitwin-scrum"
           - "cognitwin-developer"
+          - "cognitwin-sprint"
         fetch: false
       modelDisplayLabel: "CogniTwin Agile"
       titleConvo: true

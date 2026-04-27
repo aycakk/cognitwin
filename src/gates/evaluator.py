@@ -20,6 +20,7 @@ import re
 
 from src.governance.policy import GATE_POLICY, DEFAULT_GATE_POLICY
 from src.shared.patterns import PII_PATTERNS
+from src.gates.c8_acceptance_criteria import check_acceptance_criteria as _check_c8
 from src.gates.c2_grounding import check_grounding as _check_c2
 from src.gates.c2_dev_grounding import check_dev_grounding as _check_c2_dev
 from src.gates.c3_ontology_compliance import check_ontology_compliance as _check_c3
@@ -233,6 +234,20 @@ def gate_c7_blindspot(draft: str, is_empty: bool) -> tuple[bool, str]:
     return False, "Empty vector memory but BlindSpot phrase missing."
 
 
+def gate_c8_acceptance_criteria(
+    draft: str,
+    acceptance_criteria: list[str],
+) -> tuple[bool, str]:
+    """C8 — Developer output must address every task acceptance criterion.
+
+    Delegates to src.gates.c8_acceptance_criteria.check_acceptance_criteria.
+    Returns PASS (True) immediately when acceptance_criteria is empty so
+    that tasks without AC are unaffected.
+    """
+    passed, evidence = _check_c8(draft, acceptance_criteria)
+    return passed, evidence
+
+
 def gate_a1_redo_checksum(redo_log: list[dict]) -> tuple[bool, str]:
     """A1 — No zombie REDO cycles (more than one open cycle is anomalous).
 
@@ -258,6 +273,7 @@ def evaluate_all_gates(
     redo_log: list[dict],
     *,
     codebase_context: str = "",
+    acceptance_criteria: list[str] | None = None,
 ) -> dict:
     """
     Execute the gate set defined in GATE_POLICY[agent_role] and return a
@@ -308,6 +324,10 @@ def evaluate_all_gates(
         _gate_dispatch["C7"] = gate_c7_blindspot(draft, is_empty)
     if "A1" in role_gates:
         _gate_dispatch["A1"] = gate_a1_redo_checksum(redo_log)
+    if "C8" in role_gates:
+        _gate_dispatch["C8"] = gate_c8_acceptance_criteria(
+            draft, acceptance_criteria or []
+        )
 
     gates.update(_gate_dispatch)
 
@@ -332,6 +352,7 @@ def evaluate_all_gates_rich(
     redo_log: list[dict],
     *,
     codebase_context: str = "",
+    acceptance_criteria: list[str] | None = None,
 ) -> dict:
     """
     Same as evaluate_all_gates() but attaches revision_hint and confidence_score
@@ -355,6 +376,7 @@ def evaluate_all_gates_rich(
         agent_role,
         redo_log,
         codebase_context=codebase_context,
+        acceptance_criteria=acceptance_criteria,
     )
 
     enriched: dict[str, dict] = {}

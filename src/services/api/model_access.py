@@ -83,6 +83,11 @@ _MODEL_REGISTRY: list[dict] = [
         "group": "agile",
         "label": "CogniTwin Composer",
     },
+    {
+        "id":    "cognitwin-sprint",
+        "group": "agile",
+        "label": "CogniTwin Sprint (autonomous)",
+    },
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────

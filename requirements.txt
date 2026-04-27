@@ -2,15 +2,9 @@
 fastapi==0.115.0
 uvicorn[standard]==0.34.0
 
-# LLM — Ollama runtime (used as fallback when local model is not mounted)
+# LLM — Ollama runtime
 ollama==0.4.7
 openai==1.68.0
-
-# Local Scrum Master model inference (HuggingFace Transformers)
-# Required when SCRUM_MODEL_PATH points to a locally trained model directory.
-transformers>=4.40.0
-accelerate>=0.26.0
-torch
 
 # Ontology & symbolic AI
 owlready2==0.47
@@ -19,15 +13,15 @@ rdflib==7.0.0
 # Vector database
 chromadb==0.6.3
 
-# File locking (sprint_state.json concurrent access safety)
+# File locking
 filelock==3.16.1
 
 # PII masking & data processing
 python-dotenv==1.0.1
-pandas
-numpy
+pandas==2.2.3
+numpy==2.0.2
 
-# Google API integration (Gmail & Drive)
+# Google API integration
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2

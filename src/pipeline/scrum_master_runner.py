@@ -100,6 +100,7 @@ from src.agents.scrum_master_agent import ScrumMasterAgent
 from src.core.schemas import AgentTask, AgentResponse, AgentRole, TaskStatus
 from src.ontology.loader import build_scrum_master_ontology_context
 from src.pipeline.scrum_team.sprint_state_store import SprintStateStore
+from src.pipeline.shared import DEFAULT_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -349,7 +350,7 @@ def _sm_chat(messages: list[dict]) -> str:
 
     # ── Priority 2: Ollama fallback ───────────────────────────────────────────
     resp = _ollama_chat(
-        model="llama3.2",
+        model=DEFAULT_MODEL,
         messages=messages,
         options={"temperature": 0.15, "top_p": 0.9, "num_predict": 1024},
     )

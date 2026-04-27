@@ -54,8 +54,13 @@ DEFAULT_SPRINT_STATE: dict[str, Any] = {
         "end": "",
         "velocity": 0,
     },
+    "product_goal": "",
     "tasks": [],
     "backlog": [],
+    "roadmap": [],
+    "meeting_notes": [],
+    "increment": [],
+    "retro_actions": [],
     "team": [
         # Role IDs are scenario-specific. "developer-default" is a placeholder
         # and must NEVER appear in SM or Developer output. The SM LLM assigns
@@ -203,21 +208,52 @@ class SprintStateStore:
         priority: str = "medium",
         acceptance_criteria: list[str] | None = None,
         source_request: str = "",
+        *,
+        epic: str = "",
+        title_en: str = "",
+        title_tr: str = "",
+        user_story_en: str = "",
+        user_story_tr: str = "",
+        story_points: int = 0,
+        target_sprint: str = "",
+        target_date: str = "",
+        deployment_package: str = "",
     ) -> str:
-        """Append a new story to the backlog. Returns the story_id."""
+        """Append a new story to the backlog. Returns the story_id.
+
+        Canonical English fields (title_en, user_story_en, …) are optional but
+        recommended for reports and papers. Turkish display fields (title_tr,
+        user_story_tr) are likewise optional.
+
+        A story is marked 'needs_refinement' when acceptance_criteria is empty;
+        it becomes 'draft' once criteria are provided.
+        """
         with self.state_lock():
             state = self.load()
             story_id = self._next_story_id(state)
+            ac = acceptance_criteria or []
+            # Enforce AC requirement: no AC → needs_refinement, not draft
+            initial_status = "draft" if ac else "needs_refinement"
             story: dict[str, Any] = {
                 "story_id":            story_id,
                 "title":               title[:120],
                 "description":         description[:500],
                 "priority":            priority if priority in ("high", "medium", "low") else "medium",
-                "acceptance_criteria": acceptance_criteria or [],
+                "acceptance_criteria": ac,
                 "source_request":      source_request[:200],
-                "status":              "draft",
+                "status":              initial_status,
                 "created_at":          datetime.now().isoformat(timespec="seconds"),
                 "updated_at":          None,
+                # ── Canonical English fields ──────────────────────────────────
+                "epic":                epic[:80] if epic else "",
+                "title_en":            (title_en or title)[:120],
+                "title_tr":            title_tr[:120] if title_tr else "",
+                "user_story_en":       user_story_en[:500] if user_story_en else description[:500],
+                "user_story_tr":       user_story_tr[:500] if user_story_tr else "",
+                "story_points":        max(0, int(story_points)) if story_points else 0,
+                "target_sprint":       target_sprint[:30] if target_sprint else "",
+                "target_date":         target_date[:10] if target_date else "",
+                "deployment_package":  deployment_package[:80] if deployment_package else "",
             }
             backlog = state.get("backlog", [])
             backlog.append(story)
@@ -251,7 +287,11 @@ class SprintStateStore:
             Allowed keys: title, description, priority, acceptance_criteria, status.
             Other keys are silently ignored.
         """
-        allowed = {"title", "description", "priority", "acceptance_criteria", "status"}
+        allowed = {
+            "title", "description", "priority", "acceptance_criteria", "status",
+            "epic", "title_en", "title_tr", "user_story_en", "user_story_tr",
+            "story_points", "target_sprint", "target_date", "deployment_package",
+        }
         with self.state_lock():
             state = self.load()
             for s in state.get("backlog", []):
@@ -259,6 +299,13 @@ class SprintStateStore:
                     for k, v in fields.items():
                         if k in allowed:
                             s[k] = v
+                    # Auto-promote needs_refinement → draft when AC are now defined
+                    if (
+                        "acceptance_criteria" in fields
+                        and fields["acceptance_criteria"]
+                        and s.get("status") == "needs_refinement"
+                    ):
+                        s["status"] = "draft"
                     s["updated_at"] = datetime.now().isoformat(timespec="seconds")
                     self.save(state)
                     return True
@@ -341,6 +388,7 @@ class SprintStateStore:
             ] or [0]
             new_task_id = f"T-{(max(nums) + 1):03d}"
 
+            task_ac = story.get("acceptance_criteria", [])
             new_task: dict[str, Any] = {
                 "id":                  new_task_id,
                 "title":               story.get("title", ""),
@@ -351,10 +399,14 @@ class SprintStateStore:
                 "priority":            story.get("priority", "medium"),
                 "story_points":        0,
                 "blocker":             None,
-                "acceptance_criteria": story.get("acceptance_criteria", []),
+                "acceptance_criteria": task_ac,
                 "source_story_id":     story_id,
                 "po_status":           "pending_review",
                 "created_at":          datetime.now().isoformat(timespec="seconds"),
+                # Legacy marker: tasks without AC bypass C8 and complete_task
+                # enforcement. Surfaced here so operators and reports can audit
+                # which completed tasks skipped the AC pipeline.
+                "legacy_no_ac":        not bool(task_ac),
             }
             tasks.append(new_task)
             state["tasks"] = tasks
@@ -429,12 +481,12 @@ class SprintStateStore:
                     return True
         return False
 
-    def complete_task(self, task_id: str, result_summary: str = "") -> bool:
-        """Mark a task as done and record the developer's result summary.
+    def mark_ac_validated(self, task_id: str) -> bool:
+        """Record that the C8 acceptance-criteria gate passed for this task.
 
-        When the task carries a source_story_id (i.e. it was promoted from
-        the PO backlog), the po_status field is set to 'ready_for_review'
-        so the PO can inspect and accept or reject the linked story.
+        Must be called by the sprint loop (or any caller) before complete_task()
+        when the task carries non-empty acceptance_criteria. Without this flag,
+        complete_task() will refuse to mark the task done.
 
         Returns False when the task_id is not found.
         """
@@ -442,8 +494,53 @@ class SprintStateStore:
             state = self.load()
             for t in state.get("tasks", []):
                 if t["id"] == task_id:
+                    t["ac_validated"] = True
+                    self.save(state)
+                    return True
+        return False
+
+    def complete_task(
+        self,
+        task_id: str,
+        result_summary: str = "",
+        artifact_type: str = "text_plan",
+    ) -> bool:
+        """Mark a task as done and record the developer's result summary.
+
+        Enforcement rule: a task that has non-empty acceptance_criteria can only
+        be marked done once ac_validated == True (set by mark_ac_validated()).
+        Tasks with empty acceptance_criteria are unaffected (legacy behaviour).
+
+        When the task carries a source_story_id (i.e. it was promoted from
+        the PO backlog), the po_status field is set to 'ready_for_review'
+        so the PO can inspect and accept or reject the linked story.
+
+        artifact_type records what the developer actually produced:
+          "text_plan" — LLM description only, no real files written.
+          "patch"     — unified diff / patch produced.
+          "file"      — real files were written to disk.
+
+        Returns False when the task_id is not found OR when AC have not been
+        validated (logs a warning in the latter case).
+        """
+        with self.state_lock():
+            state = self.load()
+            for t in state.get("tasks", []):
+                if t["id"] == task_id:
+                    # AC enforcement: block completion when criteria are defined
+                    # but have not been validated by the C8 gate.
+                    ac = t.get("acceptance_criteria", [])
+                    if ac and not t.get("ac_validated"):
+                        logger.warning(
+                            "complete_task blocked: task %s has %d acceptance criteria "
+                            "that have not been validated (ac_validated is not set). "
+                            "Call mark_ac_validated() after C8 gate passes.",
+                            task_id, len(ac),
+                        )
+                        return False
                     t["status"] = "done"
                     t["result_summary"] = result_summary[:500]
+                    t["artifact_type"] = artifact_type if isinstance(artifact_type, str) else "text_plan"
                     t["completed_at"] = datetime.now().isoformat(timespec="seconds")
                     if t.get("source_story_id"):
                         t["po_status"] = "ready_for_review"
@@ -466,6 +563,143 @@ class SprintStateStore:
                     self.save(state)
                     return True
         return False
+
+    def apply_human_feedback(
+        self,
+        task_id: str,
+        action: str,
+        reason: str = "",
+        actor: str = "human",
+        failed_acceptance_criteria: list[str] | None = None,
+    ) -> dict:
+        """Apply human feedback (accept / reject / change_request) to a sprint task.
+
+        Parameters
+        ----------
+        task_id : str
+            Sprint task ID to act on (e.g. "T-002").
+        action : str
+            One of "accept", "reject", "change_request".
+        reason : str
+            Free-text explanation shown in the report and stored on the task.
+        actor : str
+            Who triggered this feedback ("human", a user name, etc.).
+        failed_acceptance_criteria : list[str] | None
+            Specific AC items that were not satisfied (used for reject/change_request).
+
+        Behaviour
+        ---------
+        accept
+            Allowed only when ac_validated=True OR no acceptance_criteria exist.
+            Sets po_status="human_accepted". Adds to increment if task is done.
+        reject
+            Sets status="reopened", po_status="human_rejected".
+            Clears ac_validated. Removes task from increment.
+            Marks linked backlog story as "rejected".
+        change_request
+            Sets status="reopened", po_status="change_requested".
+            Clears ac_validated. Removes task from increment.
+            Appends reason to task["revision_hints"].
+            Marks linked backlog story as "change_requested".
+
+        Returns
+        -------
+        {"ok": bool, "message": str, "task": dict | None}
+        """
+        action = (action or "").strip().lower()
+        if action not in ("accept", "reject", "change_request"):
+            return {
+                "ok": False,
+                "message": (
+                    f"Unknown action {action!r}. "
+                    "Valid values: accept | reject | change_request"
+                ),
+                "task": None,
+            }
+
+        with self.state_lock():
+            state = self.load()
+            task: dict | None = None
+            for t in state.get("tasks", []):
+                if t.get("id") == task_id:
+                    task = t
+                    break
+            if task is None:
+                return {
+                    "ok": False,
+                    "message": f"Task {task_id!r} not found.",
+                    "task": None,
+                }
+
+            feedback_entry: dict = {
+                "action":                     action,
+                "reason":                     (reason or "")[:400],
+                "actor":                      actor,
+                "timestamp":                  datetime.now().isoformat(timespec="seconds"),
+                "failed_acceptance_criteria": list(failed_acceptance_criteria or []),
+            }
+            task.setdefault("human_feedback", []).append(feedback_entry)
+
+            if action == "accept":
+                ac = task.get("acceptance_criteria", [])
+                if ac and not task.get("ac_validated"):
+                    # Do NOT persist yet — AC guard failed; return early.
+                    # The feedback_entry was appended above; undo it to keep
+                    # state clean (accept that was blocked should not be recorded).
+                    task["human_feedback"].pop()
+                    self.save(state)
+                    return {
+                        "ok": False,
+                        "message": (
+                            f"Cannot accept {task_id}: acceptance criteria exist but "
+                            "ac_validated is False. The sprint gate must pass first."
+                        ),
+                        "task": task,
+                    }
+                task["po_status"] = "human_accepted"
+                if task.get("status") == "done":
+                    increment: list[str] = state.setdefault("increment", [])
+                    if task_id not in increment:
+                        increment.append(task_id)
+
+            else:  # reject or change_request
+                task["status"] = "reopened"
+                task["po_status"] = (
+                    "human_rejected" if action == "reject" else "change_requested"
+                )
+                task["ac_validated"] = False
+                task["updated_at"] = datetime.now().isoformat(timespec="seconds")
+                if reason:
+                    task.setdefault("revision_hints", []).append((reason or "")[:400])
+                # Remove from product increment
+                state["increment"] = [
+                    tid for tid in state.get("increment", []) if tid != task_id
+                ]
+                # Propagate to linked backlog story
+                source_story_id = task.get("source_story_id")
+                if source_story_id:
+                    for s in state.get("backlog", []):
+                        if s.get("story_id") == source_story_id:
+                            s["status"] = (
+                                "rejected" if action == "reject" else "change_requested"
+                            )
+                            if action == "reject":
+                                s["rejection_reason"] = (reason or "")[:200]
+                            s["updated_at"] = datetime.now().isoformat(timespec="seconds")
+                            break
+
+            self.save(state)
+
+        verb_map = {
+            "accept":         "accepted",
+            "reject":         "rejected",
+            "change_request": "change-requested",
+        }
+        return {
+            "ok": True,
+            "message": f"Task {task_id} {verb_map[action]} by {actor}.",
+            "task": task,
+        }
 
     def get_tasks_ready_for_review(self) -> list[dict]:
         """Return tasks the Developer completed that are awaiting PO acceptance.
@@ -521,6 +755,25 @@ class SprintStateStore:
             self.save(state)
         logger.info("sprint-state: cleared for new workflow run")
 
+    def reset_for_isolated_sprint(self) -> None:
+        """Full reset for an isolated sprint run.
+
+        Called by run_sprint_for_ui before each chat-completions sprint so that
+        stale backlog, tasks, roadmap, meeting notes, and product goal from a
+        previous unrelated goal do not contaminate the new sprint report.
+
+        Preserved: team capacity configuration.
+        Cleared:   tasks, backlog, increment, roadmap, meeting_notes,
+                   retro_actions, product_goal, sprint.goal.
+        """
+        with self.state_lock():
+            state = self.load()
+            team  = state.get("team") or copy.deepcopy(DEFAULT_SPRINT_STATE["team"])
+            new_state = copy.deepcopy(DEFAULT_SPRINT_STATE)
+            new_state["team"] = team
+            self.save(new_state)
+        logger.info("sprint-state: full reset for isolated sprint run")
+
     def set_sprint_goal(self, goal: str) -> None:
         """Update the sprint goal text.
 
@@ -532,3 +785,184 @@ class SprintStateStore:
             state = self.load()
             state.setdefault("sprint", {})["goal"] = goal[:200]
             self.save(state)
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Product Goal  (distinct from Sprint Goal)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def set_product_goal(self, goal: str) -> None:
+        """Set the long-lived Product Goal (distinct from the Sprint Goal)."""
+        with self.state_lock():
+            state = self.load()
+            state["product_goal"] = goal[:500]
+            self.save(state)
+
+    def get_product_goal(self) -> str:
+        with self.state_lock():
+            state = self.load()
+        return state.get("product_goal", "")
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Product Increment
+    # ─────────────────────────────────────────────────────────────────────
+
+    def add_to_increment(self, task_id: str) -> bool:
+        """Record a completed+accepted task as part of the Product Increment.
+
+        Eligibility guard (all must hold):
+          • task.status == "done"
+          • task.po_status in ("accepted", "human_accepted")
+          • task.ac_validated == True  OR  acceptance_criteria is empty
+
+        Returns False when the task_id is not found OR when the task does not
+        satisfy the guard (logs a warning in the latter case).
+        """
+        with self.state_lock():
+            state = self.load()
+            task: dict | None = next(
+                (t for t in state.get("tasks", []) if t.get("id") == task_id),
+                None,
+            )
+            if task is None:
+                return False
+
+            ac = task.get("acceptance_criteria") or []
+            status   = task.get("status", "")
+            po       = task.get("po_status", "")
+            ac_valid = bool(task.get("ac_validated"))
+
+            if not (
+                status == "done"
+                and po in ("accepted", "human_accepted")
+                and (ac_valid or not ac)
+            ):
+                logger.warning(
+                    "add_to_increment refused for task %s: "
+                    "status=%s po_status=%s ac_validated=%s ac_count=%d. "
+                    "Task must be done, accepted, and C8-validated.",
+                    task_id, status, po, ac_valid, len(ac),
+                )
+                return False
+
+            increment: list[str] = state.setdefault("increment", [])
+            if task_id not in increment:
+                increment.append(task_id)
+            self.save(state)
+        return True
+
+    def get_increment(self) -> list[str]:
+        """Return list of task IDs that form the current Product Increment."""
+        with self.state_lock():
+            state = self.load()
+        return state.get("increment", [])
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Roadmap
+    # ─────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _next_roadmap_id(state: dict[str, Any]) -> str:
+        roadmap = state.get("roadmap", [])
+        nums = [
+            int(e["package_id"].split("-")[1])
+            for e in roadmap
+            if re.match(r"PKG-\d+", e.get("package_id", ""))
+        ] or [0]
+        return f"PKG-{(max(nums) + 1):03d}"
+
+    def add_roadmap_entry(self, entry: dict[str, Any]) -> str:
+        """Persist a roadmap entry. Assigns a PKG-NNN id if missing.
+
+        Returns the package_id.
+        """
+        with self.state_lock():
+            state = self.load()
+            roadmap: list[dict] = state.setdefault("roadmap", [])
+            if not entry.get("package_id"):
+                entry = {**entry, "package_id": self._next_roadmap_id(state)}
+            roadmap.append(entry)
+            self.save(state)
+        return entry["package_id"]
+
+    def get_roadmap(self) -> list[dict[str, Any]]:
+        with self.state_lock():
+            state = self.load()
+        return state.get("roadmap", [])
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Meeting Notes
+    # ─────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _next_note_id(state: dict[str, Any]) -> str:
+        notes = state.get("meeting_notes", [])
+        nums = [
+            int(n["note_id"].split("-")[1])
+            for n in notes
+            if re.match(r"MN-\d+", n.get("note_id", ""))
+        ] or [0]
+        return f"MN-{(max(nums) + 1):03d}"
+
+    def add_meeting_note(self, note: dict[str, Any]) -> str:
+        """Persist a structured meeting note. Returns the note_id."""
+        with self.state_lock():
+            state = self.load()
+            notes: list[dict] = state.setdefault("meeting_notes", [])
+            note_id = self._next_note_id(state)
+            note = {**note, "note_id": note_id}
+            notes.append(note)
+            self.save(state)
+        return note_id
+
+    def get_meeting_notes(
+        self, event_type: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Return all meeting notes, optionally filtered by event_type."""
+        with self.state_lock():
+            state = self.load()
+        notes = state.get("meeting_notes", [])
+        if event_type:
+            notes = [n for n in notes if n.get("event_type") == event_type]
+        return notes
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Retrospective Action Items  (cross-sprint context)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def add_retro_actions(self, actions: list[str]) -> None:
+        """Append retrospective action items (replacing previous retro actions).
+
+        Replaces rather than appends so that stale actions from two sprints ago
+        don't accumulate indefinitely.
+        """
+        with self.state_lock():
+            state = self.load()
+            state["retro_actions"] = [a[:200] for a in actions[:10]]
+            self.save(state)
+
+    def get_retro_actions(self) -> list[str]:
+        """Return action items from the most recent retrospective."""
+        with self.state_lock():
+            state = self.load()
+        return state.get("retro_actions", [])
+
+    # ─────────────────────────────────────────────────────────────────────
+    #  Legacy / audit helpers
+    # ─────────────────────────────────────────────────────────────────────
+
+    def get_legacy_tasks(self) -> list[dict[str, Any]]:
+        """Return tasks that bypass AC enforcement.
+
+        A task is legacy when it has no acceptance_criteria (either
+        explicitly flagged via legacy_no_ac=True, or implicitly by
+        having an empty acceptance_criteria list). These tasks can
+        be marked done without calling mark_ac_validated() — the
+        flag makes the bypass visible for auditing and reports.
+        """
+        with self.state_lock():
+            state = self.load()
+        return [
+            t for t in state.get("tasks", [])
+            if t.get("legacy_no_ac") is True
+            or not t.get("acceptance_criteria")
+        ]
