@@ -21,3 +21,8 @@ numpy
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
+# Local Scrum Master model inference
+# Install only when SCRUM_MODEL_PATH points to a local HuggingFace model.
+transformers==4.46.3
+accelerate==1.1.1
+torch==2.2.2
