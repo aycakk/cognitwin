@@ -232,6 +232,7 @@ class TestSprintStateStoreNewFields:
         store, sid, task_id = store_with_task
         store.mark_ac_validated(task_id)
         store.complete_task(task_id, "Result")
+        store.accept_story(sid)  # transitions po_status → "accepted"
         result = store.add_to_increment(task_id)
         assert result is True
         assert task_id in store.get_increment()
