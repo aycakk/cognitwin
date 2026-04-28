@@ -98,6 +98,7 @@ services:
       - "${PORTAL_PORT:-8080}:80"
     volumes:
       - ./infra/portal/index.html:/usr/share/nginx/html/index.html:ro
+      - ./infra/portal/cockpit.html:/usr/share/nginx/html/cockpit.html:ro
       - ./infra/portal/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/health"]

@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CognitWin — Autonomous Scrum Cockpit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:           #0c0e14;
+      --bg-elev:      #131620;
+      --bg-elev-2:    #191d2a;
+      --bg-elev-3:    #1f2438;
+      --border:       #232840;
+      --border-strong:#2d3455;
+      --text:         #e4e8f5;
+      --text-dim:     #8892b0;
+      --text-faint:   #4a5278;
+      --accent:       #d4ff3a;
+      --po:           #ff8a3d;
+      --sm:           #5db8ff;
+      --dev:          #d4ff3a;
+      --done:         #7ad97a;
+      --danger:       #ff5d5d;
+      --todo:         #8892b0;
+      --inprogress:   #5db8ff;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: var(--bg); color: var(--text);
+      font-family: 'JetBrains Mono', monospace; font-size: 12.5px;
+      line-height: 1.5; overflow: hidden; }
+
+    /* ── TOP BAR ─────────────────────────────────────────────────── */
+    .topbar {
+      height: 50px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; padding: 0 18px; gap: 16px;
+      background: var(--bg); flex-shrink: 0;
+    }
+    .logo { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
+    .logo .dot { color: var(--accent); }
+    .logo .sub { font-family: 'JetBrains Mono', monospace; font-size: 9px;
+      color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.15em;
+      margin-left: 8px; font-weight: 400; }
+    .sys-status { margin-left: auto; display: flex; align-items: center; gap: 8px;
+      font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; }
+    .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
+    .pulse.live { background: var(--accent); animation: blink 1.6s infinite; }
+    .pulse.done { background: var(--done); }
+    .pulse.err  { background: var(--danger); }
+    @keyframes blink {
+      0%   { box-shadow: 0 0 0 0 rgba(212,255,58,.5); }
+      70%  { box-shadow: 0 0 0 8px rgba(212,255,58,0); }
+      100% { box-shadow: 0 0 0 0 rgba(212,255,58,0); }
+    }
+    .topbtn { background: var(--bg-elev); border: 1px solid var(--border-strong);
+      color: var(--text-dim); font-family: inherit; font-size: 10px;
+      padding: 5px 12px; border-radius: 4px; cursor: pointer;
+      text-transform: uppercase; letter-spacing: 0.07em; }
+    .topbtn:hover { color: var(--text); border-color: var(--text-faint); }
+
+    /* ── INTRO ───────────────────────────────────────────────────── */
+    .intro {
+      position: fixed; inset: 0; z-index: 200; display: flex;
+      align-items: center; justify-content: center; padding: 40px;
+      background:
+        radial-gradient(circle at 20% 30%, rgba(212,255,58,.05), transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(255,138,61,.04), transparent 50%),
+        var(--bg);
+    }
+    .intro-card { max-width: 640px; width: 100%; }
+    .intro-eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.25em;
+      color: var(--accent); margin-bottom: 14px; }
+    .intro-title { font-family: 'Fraunces', serif; font-size: 40px; line-height: 1.1;
+      letter-spacing: -0.02em; margin-bottom: 12px; font-weight: 500; }
+    .intro-title em { font-style: italic; color: var(--text-dim); }
+    .intro-sub { color: var(--text-dim); font-size: 12.5px; line-height: 1.7;
+      margin-bottom: 28px; }
+    .intro-roles { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 28px; }
+    .intro-role { border: 1px solid var(--border); padding: 12px; border-radius: 6px;
+      background: var(--bg-elev); }
+    .role-name { font-family: 'Fraunces', serif; font-size: 13px; font-weight: 500;
+      margin-bottom: 3px; }
+    .role-name.po  { color: var(--po);  }
+    .role-name.sm  { color: var(--sm);  }
+    .role-name.dev { color: var(--dev); }
+    .role-desc { font-size: 10.5px; color: var(--text-dim); line-height: 1.5; }
+    .intro-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em;
+      color: var(--text-faint); margin-bottom: 8px; }
+    .intro-input { width: 100%; background: var(--bg-elev); border: 1px solid var(--border-strong);
+      color: var(--text); padding: 12px 14px; border-radius: 6px; font-family: inherit;
+      font-size: 13px; line-height: 1.5; resize: vertical; min-height: 72px; margin-bottom: 10px;
+      outline: none; }
+    .intro-input:focus { border-color: var(--accent); }
+    .intro-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
+    .intro-sug { background: transparent; border: 1px solid var(--border);
+      color: var(--text-dim); padding: 5px 10px; border-radius: 4px;
+      font-family: inherit; font-size: 11px; cursor: pointer; }
+    .intro-sug:hover { color: var(--accent); border-color: var(--accent); }
+    .intro-start { background: var(--accent); color: var(--bg); border: none;
+      padding: 11px 24px; border-radius: 6px; font-family: inherit; font-size: 13px;
+      font-weight: 600; cursor: pointer; text-transform: uppercase; letter-spacing: 0.08em; }
+    .intro-start:hover { background: #c4ef2a; }
+
+    /* ── MAIN GRID ───────────────────────────────────────────────── */
+    .cockpit { display: none; flex-direction: column; height: 100vh; }
+    .cockpit.visible { display: flex; }
+    .cockpit-body { display: grid; grid-template-columns: 268px 1fr 340px;
+      flex: 1; overflow: hidden; }
+
+    /* ── AGENTS PANEL ────────────────────────────────────────────── */
+    .agents { border-right: 1px solid var(--border); overflow-y: auto;
+      padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .panel-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.18em;
+      color: var(--text-faint); margin-bottom: 2px; }
+    .agent-card { border: 1px solid var(--border); border-radius: 6px;
+      padding: 12px; background: var(--bg-elev); transition: all 0.35s;
+      position: relative; overflow: hidden; }
+    .agent-card.po  { border-left: 3px solid var(--po);  }
+    .agent-card.sm  { border-left: 3px solid var(--sm);  }
+    .agent-card.dev { border-left: 3px solid var(--dev); }
+    .agent-card.active { background: var(--bg-elev-2); border-color: var(--border-strong); }
+    .agent-card.active.po  { box-shadow: 0 0 0 1px rgba(255,138,61,.25), 0 4px 12px rgba(255,138,61,.08); }
+    .agent-card.active.sm  { box-shadow: 0 0 0 1px rgba(93,184,255,.25), 0 4px 12px rgba(93,184,255,.08); }
+    .agent-card.active.dev { box-shadow: 0 0 0 1px rgba(212,255,58,.25), 0 4px 12px rgba(212,255,58,.08); }
+    .agent-head { display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 8px; }
+    .agent-name { font-family: 'Fraunces', serif; font-size: 14px; font-weight: 500; }
+    .agent-role { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-faint); }
+    .agent-badge { font-size: 9px; padding: 2px 7px; border-radius: 8px;
+      text-transform: uppercase; letter-spacing: 0.08em; border: 1px solid var(--border);
+      color: var(--text-dim); }
+    .agent-badge.thinking { color: var(--accent); border-color: rgba(212,255,58,.35); }
+    .agent-badge.working  { color: var(--po);    border-color: rgba(255,138,61,.35); }
+    .agent-badge.talking  { color: var(--sm);    border-color: rgba(93,184,255,.35);  }
+    .agent-badge.done     { color: var(--done);  border-color: rgba(122,217,122,.35); }
+    .agent-thought { font-size: 11px; color: var(--text-dim); line-height: 1.45;
+      min-height: 36px; font-style: italic; border-top: 1px dashed var(--border);
+      padding-top: 8px; word-break: break-word; }
+    .agent-thought::before { content: '› '; color: var(--text-faint); }
+    .agent-thought.empty::before { content: ''; }
+    .agent-thought.empty { color: var(--text-faint); font-style: normal; }
+    .agent-stats { display: flex; gap: 12px; margin-top: 8px; font-size: 10px;
+      color: var(--text-faint); }
+    .agent-stats strong { color: var(--text-dim); }
+
+    /* ── CENTER ──────────────────────────────────────────────────── */
+    .center { display: flex; flex-direction: column; overflow: hidden;
+      border-right: 1px solid var(--border); }
+    .center-head { padding: 12px 18px; border-bottom: 1px solid var(--border);
+      background: var(--bg); }
+    .goal-text { font-family: 'Fraunces', serif; font-size: 16px; font-weight: 500;
+      letter-spacing: -0.01em; }
+    .sprint-meta { font-size: 10px; color: var(--text-dim); margin-top: 2px;
+      text-transform: uppercase; letter-spacing: 0.09em; }
+    .sprint-meta .ph { color: var(--accent); }
+    .complete-banner { padding: 10px 18px; background: linear-gradient(90deg,
+      rgba(122,217,122,.07), transparent); border-bottom: 1px solid rgba(122,217,122,.25);
+      color: var(--done); font-size: 11.5px; display: none; align-items: center; gap: 10px; }
+    .complete-banner.show { display: flex; }
+    .complete-banner strong { font-family: 'Fraunces', serif; font-size: 13px; }
+    .tabs { display: flex; gap: 2px; padding: 0 18px;
+      border-bottom: 1px solid var(--border); background: var(--bg); }
+    .tab { background: none; border: none; color: var(--text-dim); font-family: inherit;
+      font-size: 10.5px; padding: 9px 13px; cursor: pointer; text-transform: uppercase;
+      letter-spacing: 0.09em; border-bottom: 1.5px solid transparent; margin-bottom: -1px; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+    .center-body { flex: 1; overflow-y: auto; padding: 18px; }
+
+    /* Board */
+    .board { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; height: 100%; }
+    .col { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 6px;
+      display: flex; flex-direction: column; overflow: hidden; }
+    .col-head { padding: 8px 12px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--bg-elev-2); }
+    .col-title { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 500; }
+    .col[data-status="todo"]      .col-title { color: var(--todo);       }
+    .col[data-status="inprogress"] .col-title { color: var(--inprogress); }
+    .col[data-status="done"]      .col-title { color: var(--done);       }
+    .col[data-status="blocked"]   .col-title { color: var(--danger);     }
+    .col-cnt { font-size: 10px; color: var(--text-faint); background: var(--bg);
+      padding: 1px 7px; border-radius: 8px; }
+    .col-body { flex: 1; overflow-y: auto; padding: 8px; display: flex;
+      flex-direction: column; gap: 7px; }
+    .task-card { background: var(--bg); border: 1px solid var(--border);
+      border-radius: 5px; padding: 9px 10px; animation: slideIn .4s ease-out; }
+    @keyframes slideIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+    .task-id { font-size: 9px; color: var(--text-faint); }
+    .task-title { font-size: 11.5px; margin-top: 2px; line-height: 1.4; }
+    .task-foot { display: flex; justify-content: space-between; align-items: center;
+      margin-top: 7px; gap: 6px; }
+    .prio { font-size: 8.5px; padding: 2px 6px; border-radius: 3px;
+      text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
+    .prio.high { background: rgba(255,93,93,.13); color: var(--danger); }
+    .prio.medium { background: rgba(255,138,61,.13); color: var(--po); }
+    .prio.low  { background: rgba(93,184,255,.13); color: var(--sm); }
+    .gate-badge { font-size: 8px; padding: 2px 5px; border-radius: 3px;
+      text-transform: uppercase; font-weight: 600; }
+    .gate-badge.pass    { background: rgba(122,217,122,.15); color: var(--done); }
+    .gate-badge.fail    { background: rgba(255,93,93,.15);   color: var(--danger); }
+    .gate-badge.pending { background: rgba(72,82,120,.3);    color: var(--text-faint); }
+    .col-empty { color: var(--text-faint); font-size: 10.5px; text-align: center;
+      padding: 18px 8px; font-style: italic; }
+
+    /* Preview */
+    .preview-wrap { height: 100%; display: flex; flex-direction: column; gap: 8px; }
+    .preview-meta { font-size: 10px; color: var(--text-dim); text-transform: uppercase;
+      letter-spacing: 0.09em; }
+    .preview-frame { flex: 1; background: white; border: 1px solid var(--border);
+      border-radius: 6px; width: 100%; min-height: 300px; }
+    .preview-empty { flex: 1; border: 1px dashed var(--border); border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-faint); font-size: 11px; background: var(--bg-elev); }
+
+    /* Code */
+    .code-wrap { height: 100%; display: flex; gap: 10px; }
+    .file-list { width: 160px; flex-shrink: 0; background: var(--bg-elev);
+      border: 1px solid var(--border); border-radius: 6px; overflow-y: auto;
+      padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .file-item { font-size: 11px; padding: 5px 8px; border-radius: 4px;
+      cursor: pointer; color: var(--text-dim); word-break: break-all; }
+    .file-item:hover { background: var(--bg-elev-2); color: var(--text); }
+    .file-item.active { background: var(--bg-elev-3); color: var(--accent); }
+    .file-empty { color: var(--text-faint); font-size: 10.5px; text-align: center;
+      padding: 12px 6px; font-style: italic; }
+    .code-viewer { flex: 1; background: var(--bg-elev); border: 1px solid var(--border);
+      border-radius: 6px; display: flex; flex-direction: column; overflow: hidden; }
+    .code-toolbar { padding: 7px 12px; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+      background: var(--bg-elev-2); }
+    .code-filename { font-size: 10px; text-transform: uppercase; letter-spacing: 0.09em;
+      color: var(--text-dim); }
+    .copy-btn { background: none; border: 1px solid var(--border); color: var(--text-dim);
+      font-family: inherit; font-size: 9.5px; padding: 3px 9px; border-radius: 3px; cursor: pointer; }
+    .copy-btn:hover { color: var(--text); border-color: var(--text-faint); }
+    .code-body { flex: 1; overflow: auto; padding: 12px; font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px; line-height: 1.55; color: var(--text); white-space: pre; }
+    .code-empty { color: var(--text-faint); font-size: 11px; text-align: center;
+      padding: 40px 16px; font-style: italic; }
+
+    /* ── EVENT STREAM ────────────────────────────────────────────── */
+    .stream { overflow: hidden; display: flex; flex-direction: column; background: var(--bg); }
+    .stream-head { padding: 11px 14px; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center; }
+    .stream-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em;
+      color: var(--text-dim); }
+    .stream-cnt { font-size: 10px; color: var(--text-faint); }
+    .stream-body { flex: 1; overflow-y: auto; padding: 12px 14px;
+      display: flex; flex-direction: column; gap: 12px; position: relative; }
+    .event { display: grid; grid-template-columns: 14px 1fr; gap: 9px;
+      animation: fadeIn .3s ease-out; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:none; } }
+    .ev-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 4px;
+      border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--border); flex-shrink: 0; }
+    .ev-dot.po     { background: var(--po);         }
+    .ev-dot.sm     { background: var(--sm);         }
+    .ev-dot.dev    { background: var(--dev);        }
+    .ev-dot.gate   { background: var(--done);       }
+    .ev-dot.system { background: var(--text-faint); }
+    .ev-dot.ceremony { background: var(--bg); border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(212,255,58,.18); }
+    .ev-content { min-width: 0; }
+    .ev-meta { display: flex; gap: 7px; align-items: baseline; margin-bottom: 3px; }
+    .ev-author { font-size: 10.5px; font-weight: 600; }
+    .ev-author.po     { color: var(--po);  }
+    .ev-author.sm     { color: var(--sm);  }
+    .ev-author.dev    { color: var(--dev); }
+    .ev-author.gate   { color: var(--done); }
+    .ev-author.system { color: var(--text-faint); font-size: 9.5px;
+      text-transform: uppercase; letter-spacing: 0.09em; }
+    .ev-time { font-size: 9px; color: var(--text-faint); }
+    .ev-text { font-size: 11.5px; line-height: 1.5; color: var(--text); word-break: break-word; }
+    .ev-text.dim { color: var(--text-dim); }
+    .ev-ceremony { border: 1px solid var(--border); border-radius: 4px;
+      padding: 7px 10px; background: var(--bg-elev); }
+    .ev-ceremony-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em;
+      color: var(--accent); font-weight: 600; margin-bottom: 2px; }
+    .ev-ceremony-name { font-family: 'Fraunces', serif; font-size: 13px; font-weight: 500; }
+
+    /* scrollbars */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ══ INTRO ═══════════════════════════════════════════════════════════════ -->
+<div class="intro" id="intro">
+  <div class="intro-card">
+    <div class="intro-eyebrow">CognitWin · Autonomous Scrum</div>
+    <h1 class="intro-title">Set a goal.<br><em>Watch the team ship it.</em></h1>
+    <p class="intro-sub">Three AI agents run a full Scrum sprint — backlog to done — while you watch live.</p>
+
+    <div class="intro-roles">
+      <div class="intro-role">
+        <div class="role-name po">Product Owner Agent</div>
+        <div class="role-desc">Turns the goal into backlog stories with acceptance criteria.</div>
+      </div>
+      <div class="intro-role">
+        <div class="role-name sm">Scrum Master Agent</div>
+        <div class="role-desc">Plans the sprint, runs ceremonies, watches blockers.</div>
+      </div>
+      <div class="intro-role">
+        <div class="role-name dev">Developer Agent</div>
+        <div class="role-desc">Picks up tasks, writes code, moves cards to Done.</div>
+      </div>
+    </div>
+
+    <div class="intro-label">Product goal</div>
+    <textarea class="intro-input" id="goalInput"
+      placeholder="E.g. Build a simple to-do web app with add, complete, and delete features."></textarea>
+
+    <div class="intro-suggestions">
+      <button class="intro-sug" data-goal="Build a simple to-do web app with add, complete, and delete task features">To-Do App</button>
+      <button class="intro-sug" data-goal="Create a landing page with hero, features section, and a call-to-action button">Landing Page</button>
+      <button class="intro-sug" data-goal="Build a basic calculator web app with add, subtract, multiply, and divide">Calculator</button>
+      <button class="intro-sug" data-goal="Create a simple user registration and login web form with validation">Login / Register</button>
+    </div>
+
+    <button class="intro-start" id="startBtn">Start Sprint ↵</button>
+  </div>
+</div>
+
+<!-- ══ COCKPIT ══════════════════════════════════════════════════════════════ -->
+<div class="cockpit" id="cockpit">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="logo">CognitWin<span class="dot">.</span><span class="sub">Scrum Cockpit</span></div>
+    <div class="sys-status">
+      <div class="pulse" id="pulse"></div>
+      <span id="sysLabel">IDLE</span>
+    </div>
+    <button class="topbtn" id="resetBtn">↩ New Sprint</button>
+  </div>
+
+  <!-- Body -->
+  <div class="cockpit-body">
+
+    <!-- ── LEFT: Agents ────────────────────────────────────────── -->
+    <div class="agents">
+      <div class="panel-label">Agents</div>
+
+      <div class="agent-card po" id="card-po">
+        <div class="agent-head">
+          <div>
+            <div class="agent-name">Product Owner</div>
+            <div class="agent-role">PO Agent</div>
+          </div>
+          <div class="agent-badge idle" id="badge-po">idle</div>
+        </div>
+        <div class="agent-thought empty" id="thought-po">Waiting for product goal</div>
+        <div class="agent-stats">
+          <div><strong id="po-stories">0</strong> stories</div>
+          <div><strong id="po-done">0</strong> accepted</div>
+        </div>
+      </div>
+
+      <div class="agent-card sm" id="card-sm">
+        <div class="agent-head">
+          <div>
+            <div class="agent-name">Scrum Master</div>
+            <div class="agent-role">SM Agent</div>
+          </div>
+          <div class="agent-badge idle" id="badge-sm">idle</div>
+        </div>
+        <div class="agent-thought empty" id="thought-sm">Awaiting backlog</div>
+        <div class="agent-stats">
+          <div><strong id="sm-events">0</strong> events</div>
+        </div>
+      </div>
+
+      <div class="agent-card dev" id="card-dev">
+        <div class="agent-head">
+          <div>
+            <div class="agent-name">Developer</div>
+            <div class="agent-role">Dev Agent</div>
+          </div>
+          <div class="agent-badge idle" id="badge-dev">idle</div>
+        </div>
+        <div class="agent-thought empty" id="thought-dev">stack: html · css · js</div>
+        <div class="agent-stats">
+          <div><strong id="dev-done">0</strong> done</div>
+          <div><strong id="dev-files">0</strong> files</div>
+        </div>
+      </div>
+
+      <!-- Sprint info box -->
+      <div style="margin-top:auto;">
+        <div class="panel-label">Sprint</div>
+        <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:6px;padding:10px;margin-top:6px;font-size:10.5px;color:var(--text-dim);line-height:1.6;">
+          <div><span style="color:var(--text-faint)">ID</span> &nbsp;<span id="info-id">—</span></div>
+          <div><span style="color:var(--text-faint)">Phase</span> <span id="info-phase" style="color:var(--accent)">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CENTER: Board / Preview / Code ─────────────────────── -->
+    <div class="center">
+      <div class="center-head">
+        <div class="goal-text" id="goalDisplay">—</div>
+        <div class="sprint-meta">Phase: <span class="ph" id="phaseDisplay">—</span></div>
+      </div>
+
+      <div class="complete-banner" id="completeBanner">
+        <strong>✓ Sprint Complete.</strong>
+        <span id="completeText"></span>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="board">Sprint Board</button>
+        <button class="tab" data-tab="preview">Live Preview</button>
+        <button class="tab" data-tab="code">Code Output</button>
+      </div>
+
+      <div class="center-body">
+
+        <!-- Board -->
+        <div id="tab-board" class="board">
+          <div class="col" data-status="todo">
+            <div class="col-head"><div class="col-title">To Do</div><div class="col-cnt" id="cnt-todo">0</div></div>
+            <div class="col-body" id="col-todo"><div class="col-empty">—</div></div>
+          </div>
+          <div class="col" data-status="inprogress">
+            <div class="col-head"><div class="col-title">In Progress</div><div class="col-cnt" id="cnt-inprogress">0</div></div>
+            <div class="col-body" id="col-inprogress"><div class="col-empty">—</div></div>
+          </div>
+          <div class="col" data-status="done">
+            <div class="col-head"><div class="col-title">Done</div><div class="col-cnt" id="cnt-done">0</div></div>
+            <div class="col-body" id="col-done"><div class="col-empty">—</div></div>
+          </div>
+          <div class="col" data-status="blocked">
+            <div class="col-head"><div class="col-title">Blocked</div><div class="col-cnt" id="cnt-blocked">0</div></div>
+            <div class="col-body" id="col-blocked"><div class="col-empty">—</div></div>
+          </div>
+        </div>
+
+        <!-- Preview -->
+        <div id="tab-preview" class="preview-wrap" style="display:none;">
+          <div class="preview-meta" id="previewMeta">No artefact yet</div>
+          <iframe id="previewFrame" class="preview-frame" sandbox="allow-scripts allow-forms" style="display:none;" title="Live Preview"></iframe>
+          <div class="preview-empty" id="previewEmpty">Developer is still working…</div>
+        </div>
+
+        <!-- Code -->
+        <div id="tab-code" class="code-wrap" style="display:none;">
+          <div class="file-list" id="fileList"><div class="file-empty">No files yet</div></div>
+          <div class="code-viewer">
+            <div class="code-toolbar">
+              <div class="code-filename" id="codeFilename">—</div>
+              <button class="copy-btn" id="copyBtn">copy</button>
+            </div>
+            <div class="code-body" id="codeBody"><span style="color:var(--text-faint);font-style:italic;">Select a file to view its content.</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── RIGHT: Event Stream ─────────────────────────────────── -->
+    <div class="stream">
+      <div class="stream-head">
+        <div class="stream-title">Event Stream</div>
+        <div class="stream-cnt" id="evCount">0 events</div>
+      </div>
+      <div class="stream-body" id="streamBody">
+        <div class="event">
+          <div class="ev-dot system"></div>
+          <div class="ev-content">
+            <div class="ev-meta">
+              <span class="ev-author system">system</span>
+              <span class="ev-time">--:--</span>
+            </div>
+            <div class="ev-text dim">Idle. Waiting for product goal.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- .cockpit-body -->
+</div><!-- .cockpit -->
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════════════════════════
+const state = {
+  sprintId:       null,
+  polling:        null,
+  startTime:      null,
+  renderedEvents: 0,
+  activeTab:      'board',
+  files:          [],
+  activeFile:     null,
+  boardTasks:     {},   // id → task
+  phase:          'planning',
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  INTRO / START
+// ══════════════════════════════════════════════════════════════════════════════
+document.getElementById('startBtn').onclick = startSprint;
+document.getElementById('goalInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); startSprint(); }
+});
+
+document.querySelectorAll('.intro-sug').forEach(b => {
+  b.onclick = () => {
+    document.getElementById('goalInput').value = b.dataset.goal;
+    document.getElementById('goalInput').style.borderColor = '';
+  };
+});
+
+async function startSprint() {
+  const goal = document.getElementById('goalInput').value.trim();
+  if (!goal) {
+    const el = document.getElementById('goalInput');
+    el.style.borderColor = 'var(--danger)';
+    el.focus();
+    return;
+  }
+
+  document.getElementById('startBtn').textContent = 'Starting…';
+  document.getElementById('startBtn').disabled = true;
+
+  try {
+    const res = await fetch('/api/sprint/start', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ goal }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    state.sprintId  = data.sprint_id;
+    state.startTime = Date.now();
+
+    // Switch to cockpit view
+    document.getElementById('intro').style.display   = 'none';
+    document.getElementById('cockpit').classList.add('visible');
+    document.getElementById('goalDisplay').textContent = goal;
+    document.getElementById('info-id').textContent     = data.sprint_id;
+    setPulse('live');
+    setSysLabel('RUNNING');
+    beginPolling();
+  } catch (err) {
+    alert('Failed to start sprint: ' + err.message);
+    document.getElementById('startBtn').textContent = 'Start Sprint ↵';
+    document.getElementById('startBtn').disabled    = false;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  POLLING
+// ══════════════════════════════════════════════════════════════════════════════
+function beginPolling() {
+  poll();  // immediate first fetch
+  state.polling = setInterval(poll, 2000);
+}
+
+async function poll() {
+  if (!state.sprintId) return;
+  const id = state.sprintId;
+
+  try {
+    const [boardRes, eventsRes, filesRes] = await Promise.all([
+      fetch(`/api/sprint/${id}/board`),
+      fetch(`/api/sprint/${id}/events`),
+      fetch(`/api/sprint/${id}/files`),
+    ]);
+
+    if (boardRes.ok)  renderBoard(await boardRes.json());
+    if (eventsRes.ok) renderEvents(await eventsRes.json());
+    if (filesRes.ok)  renderFiles(await filesRes.json());
+
+    // Stop polling when done/blocked
+    const phase = state.phase;
+    if (phase === 'complete' || phase === 'blocked') {
+      stopPolling(phase);
+    }
+  } catch (_) { /* network hiccup — retry next tick */ }
+}
+
+function stopPolling(phase) {
+  if (state.polling) { clearInterval(state.polling); state.polling = null; }
+  const done = phase === 'complete';
+  setPulse(done ? 'done' : 'err');
+  setSysLabel(done ? 'COMPLETE' : 'BLOCKED');
+  const doneCnt = Object.values(state.boardTasks).filter(t => t.status === 'done').length;
+  if (done && doneCnt > 0) {
+    document.getElementById('completeText').textContent =
+      `${doneCnt} task(s) done · ${state.files.length} file(s) generated`;
+    document.getElementById('completeBanner').classList.add('show');
+  } else if (done && doneCnt === 0) {
+    setPulse('err');
+    setSysLabel('NEEDS REFINEMENT');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  BOARD RENDER
+// ══════════════════════════════════════════════════════════════════════════════
+function renderBoard(data) {
+  state.phase = data.phase || 'planning';
+  document.getElementById('phaseDisplay').textContent  = state.phase;
+  document.getElementById('info-phase').textContent    = state.phase;
+
+  const columns = { todo: [], inprogress: [], done: [], blocked: [] };
+  const normStatus = (raw) => {
+    const s = String(raw || '').toLowerCase().replace(/[\s-]+/g, '_');
+    if (['in_progress','inprogress','running','active','wip'].includes(s)) return 'inprogress';
+    if (['done','completed','complete','accepted','finished'].includes(s)) return 'done';
+    if (['blocked','failed','rejected','escalated'].includes(s)) return 'blocked';
+    if (['todo','to_do','pending','planned','ready','draft','new','open'].includes(s)) return 'todo';
+    return 'todo';
+  };
+  (data.tasks || []).forEach(t => {
+    t.status = normStatus(t.status);
+    state.boardTasks[t.id] = t;
+    columns[t.status].push(t);
+  });
+
+  ['todo','inprogress','done','blocked'].forEach(st => {
+    const col  = document.getElementById('col-' + st);
+    const cnt  = document.getElementById('cnt-' + st);
+    const tasks = columns[st];
+    cnt.textContent = tasks.length;
+    col.innerHTML   = '';
+    if (!tasks.length) {
+      col.innerHTML = '<div class="col-empty">—</div>';
+      return;
+    }
+    tasks.forEach(t => col.appendChild(makeTaskCard(t)));
+  });
+
+  // Update agent stats from summary
+  const s = data.summary || {};
+  document.getElementById('po-stories').textContent = (data.tasks || []).length;
+  document.getElementById('po-done').textContent    = s.done || 0;
+  document.getElementById('dev-done').textContent   = s.done || 0;
+
+  deriveAgentStates(data);
+}
+
+function makeTaskCard(t) {
+  const div = document.createElement('div');
+  div.className = 'task-card';
+  const prio  = (t.priority || 'medium').toLowerCase();
+  const gate  = t.gate_status || 'pending';
+  div.innerHTML = `
+    <div class="task-id">${esc(t.id)}</div>
+    <div class="task-title">${esc(t.title)}</div>
+    <div class="task-foot">
+      <span class="prio ${prio}">${prio}</span>
+      <span class="gate-badge ${gate}">${gate}</span>
+    </div>`;
+  return div;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  AGENT STATE DERIVATION
+// ══════════════════════════════════════════════════════════════════════════════
+function deriveAgentStates(board) {
+  const phase = board.phase || 'planning';
+  const done  = phase === 'complete' || phase === 'blocked';
+
+  if (done) {
+    setAgent('po',  'done',  'Backlog and acceptance criteria finalised.');
+    setAgent('sm',  'done',  'Sprint closed.');
+    setAgent('dev', 'done',  'All assigned tasks processed.');
+    return;
+  }
+  if (phase === 'planning') {
+    setAgent('po',  'thinking', 'Decomposing product goal into user stories…');
+    setAgent('sm',  'idle',     'Awaiting backlog');
+    setAgent('dev', 'idle',     'Awaiting sprint plan');
+  } else if (phase === 'executing') {
+    setAgent('po',  'idle',    'Backlog ready.');
+    setAgent('sm',  'working', 'Managing sprint, tracking blockers.');
+    setAgent('dev', 'working', 'Implementing sprint tasks…');
+  }
+}
+
+function setAgent(role, stateKey, thought) {
+  const badge  = document.getElementById('badge-'  + role);
+  const thoughtEl = document.getElementById('thought-' + role);
+  const card   = document.getElementById('card-'   + role);
+
+  badge.className   = 'agent-badge ' + stateKey;
+  badge.textContent = stateKey;
+
+  const active = stateKey !== 'idle';
+  card.classList.toggle('active', active);
+
+  if (thought !== undefined) {
+    if (!thought) {
+      thoughtEl.classList.add('empty');
+    } else {
+      thoughtEl.classList.remove('empty');
+      thoughtEl.textContent = thought;
+    }
+  }
+}
+
+// Update agent thought from latest event per agent
+function updateAgentThoughtsFromEvents(events) {
+  const latest = {};
+  events.forEach(e => { latest[e.agent] = e; });
+  const labels = { po: 'po', sm: 'sm', dev: 'dev' };
+  Object.entries(labels).forEach(([role, agent]) => {
+    const ev = latest[agent];
+    if (ev) {
+      const thoughtEl = document.getElementById('thought-' + role);
+      thoughtEl.classList.remove('empty');
+      thoughtEl.textContent = ev.message;
+    }
+  });
+  if (latest.sm) document.getElementById('sm-events').textContent =
+    events.filter(e => e.agent === 'sm').length;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  EVENT STREAM RENDER
+// ══════════════════════════════════════════════════════════════════════════════
+function renderEvents(data) {
+  const events = data.events || [];
+  if (events.length === state.renderedEvents) return;
+
+  const body = document.getElementById('streamBody');
+  const newEvts = events.slice(state.renderedEvents);
+  state.renderedEvents = events.length;
+
+  document.getElementById('evCount').textContent = events.length + ' event' + (events.length !== 1 ? 's' : '');
+  updateAgentThoughtsFromEvents(events);
+
+  newEvts.forEach(ev => {
+    const el    = document.createElement('div');
+    el.className = 'event';
+    const isCeremony = ev.type === 'ceremony';
+    const dotClass   = isCeremony ? 'ev-dot ceremony' : `ev-dot ${ev.agent || 'system'}`;
+    const ts = formatTs(ev.ts);
+
+    if (isCeremony) {
+      el.innerHTML = `
+        <div class="${dotClass}"></div>
+        <div class="ev-content">
+          <div class="ev-meta">
+            <span class="ev-author system">ceremony</span>
+            <span class="ev-time">${ts}</span>
+          </div>
+          <div class="ev-ceremony">
+            <div class="ev-ceremony-label">CEREMONY</div>
+            <div class="ev-ceremony-name">${esc(ev.message)}</div>
+          </div>
+        </div>`;
+    } else {
+      const authorLabel = { po: 'Product Owner Agent', sm: 'Scrum Master Agent',
+                            dev: 'Developer Agent', gate: 'Gate Validator',
+                            system: 'System' }[ev.agent] || ev.agent;
+      const isDim = ev.agent === 'system';
+      el.innerHTML = `
+        <div class="${dotClass}"></div>
+        <div class="ev-content">
+          <div class="ev-meta">
+            <span class="ev-author ${ev.agent || 'system'}">${esc(authorLabel)}</span>
+            <span class="ev-time">${ts}</span>
+          </div>
+          <div class="ev-text${isDim ? ' dim' : ''}">${esc(ev.message)}</div>
+        </div>`;
+    }
+    body.appendChild(el);
+  });
+
+  body.scrollTop = body.scrollHeight;
+}
+
+function formatTs(isoStr) {
+  if (!state.startTime || !isoStr) return '--:--';
+  try {
+    const d = new Date(isoStr);
+    const elapsed = Math.floor((d.getTime() - state.startTime) / 1000);
+    if (elapsed < 0) return '--:--';
+    const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const ss = String(elapsed % 60).padStart(2, '0');
+    return mm + ':' + ss;
+  } catch { return '--:--'; }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  FILE RENDER
+// ══════════════════════════════════════════════════════════════════════════════
+function renderFiles(data) {
+  const files = data.files || [];
+  state.files = files;
+  document.getElementById('dev-files').textContent = files.length;
+
+  // Update file list panel
+  const listEl = document.getElementById('fileList');
+  listEl.innerHTML = '';
+  if (!files.length) {
+    listEl.innerHTML = '<div class="file-empty">No files yet</div>';
+    return;
+  }
+  files.forEach((f, i) => {
+    const item = document.createElement('div');
+    item.className = 'file-item' + (state.activeFile === f.name ? ' active' : '');
+    item.textContent = f.name;
+    item.onclick = () => selectFile(f, i);
+    listEl.appendChild(item);
+  });
+
+  // Auto-select first file if nothing selected
+  if (!state.activeFile && files.length) selectFile(files[0], 0);
+
+  // Update preview (refresh src to force reload)
+  updatePreview();
+}
+
+function selectFile(f, _i) {
+  state.activeFile = f.name;
+  document.getElementById('codeFilename').textContent = f.name;
+  document.getElementById('codeBody').textContent     = f.content;
+  // re-render list to update active class
+  document.querySelectorAll('.file-item').forEach(el => {
+    el.classList.toggle('active', el.textContent === f.name);
+  });
+}
+
+function updatePreview() {
+  const hasFiles = state.files.length > 0;
+  const frame    = document.getElementById('previewFrame');
+  const empty    = document.getElementById('previewEmpty');
+  const meta     = document.getElementById('previewMeta');
+  if (hasFiles && state.sprintId) {
+    frame.src = `/api/sprint/${state.sprintId}/preview?ts=${Date.now()}`;
+    frame.style.display = '';
+    empty.style.display = 'none';
+    meta.textContent    = `${state.files.length} file(s) generated`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════════════════════════════════════════
+document.querySelectorAll('.tab').forEach(t => {
+  t.onclick = () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    state.activeTab = t.dataset.tab;
+    document.getElementById('tab-board').style.display   = t.dataset.tab === 'board'   ? 'grid' : 'none';
+    document.getElementById('tab-preview').style.display = t.dataset.tab === 'preview' ? 'flex' : 'none';
+    document.getElementById('tab-code').style.display    = t.dataset.tab === 'code'    ? 'flex' : 'none';
+    if (t.dataset.tab === 'preview') updatePreview();
+  };
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  COPY / RESET
+// ══════════════════════════════════════════════════════════════════════════════
+document.getElementById('copyBtn').onclick = () => {
+  const text = document.getElementById('codeBody').textContent;
+  navigator.clipboard.writeText(text).catch(() => {});
+};
+
+document.getElementById('resetBtn').onclick = () => {
+  if (state.polling) { clearInterval(state.polling); state.polling = null; }
+  state.sprintId = null; state.renderedEvents = 0;
+  state.files = []; state.activeFile = null; state.boardTasks = {};
+  // Reset UI
+  document.getElementById('cockpit').classList.remove('visible');
+  document.getElementById('intro').style.display = 'flex';
+  document.getElementById('goalInput').value = '';
+  document.getElementById('startBtn').textContent = 'Start Sprint ↵';
+  document.getElementById('startBtn').disabled    = false;
+  document.getElementById('completeBanner').classList.remove('show');
+  document.getElementById('streamBody').innerHTML = `
+    <div class="event">
+      <div class="ev-dot system"></div>
+      <div class="ev-content">
+        <div class="ev-meta"><span class="ev-author system">system</span><span class="ev-time">--:--</span></div>
+        <div class="ev-text dim">Idle. Waiting for product goal.</div>
+      </div>
+    </div>`;
+  document.getElementById('evCount').textContent  = '0 events';
+  document.getElementById('previewFrame').src     = '';
+  document.getElementById('previewFrame').style.display = 'none';
+  document.getElementById('previewEmpty').style.display = '';
+  document.getElementById('codeBody').innerHTML   = '<span style="color:var(--text-faint);font-style:italic;">Select a file to view its content.</span>';
+  document.getElementById('fileList').innerHTML   = '<div class="file-empty">No files yet</div>';
+  setPulse('');
+  setSysLabel('IDLE');
+  ['todo','inprogress','done','blocked'].forEach(s => {
+    document.getElementById('col-' + s).innerHTML = '<div class="col-empty">—</div>';
+    document.getElementById('cnt-' + s).textContent = '0';
+  });
+  ['po','sm','dev'].forEach(r => setAgent(r, 'idle', ''));
+  document.getElementById('thought-po').classList.add('empty');
+  document.getElementById('thought-sm').classList.add('empty');
+  document.getElementById('thought-dev').classList.add('empty');
+  document.getElementById('thought-po').textContent  = 'Waiting for product goal';
+  document.getElementById('thought-sm').textContent  = 'Awaiting backlog';
+  document.getElementById('thought-dev').textContent = 'stack: html · css · js';
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════════════════════════════════════════
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function setPulse(cls) {
+  const el = document.getElementById('pulse');
+  el.className = 'pulse' + (cls ? ' ' + cls : '');
+}
+
+function setSysLabel(txt) {
+  document.getElementById('sysLabel').textContent = txt;
+}
+</script>
+</body>
+</html>
