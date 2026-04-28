@@ -31,3 +31,11 @@ If the CogniTwin API uses another port, update `baseURL` in `librechat.yaml`.
 
 - `PORT=3900` avoids the blocked `3080/3081` ports we hit locally.
 - If LibreChat fails with log permission errors on Windows, use the override file that runs the relevant containers as `0:0`.
+
+## Multi-Workspace Ports
+
+- Student workspace: `http://localhost:3900`
+- Agile workspace: `http://localhost:3901`
+- HR workspace: `http://localhost:3902`
+- Workspace portal: `http://localhost:8080`
+- n8n UI (automation): `http://localhost:5678`

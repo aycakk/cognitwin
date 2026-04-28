@@ -1,0 +1,163 @@
+{
+  "name": "CogniTwin HR Actions",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hr-action",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "HR Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "hr-action"
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{$json.body.action_type}}",
+        "rules": {
+          "rules": [
+            { "value2": "shortlist_to_sheets" },
+            { "value2": "notify_slack" },
+            { "value2": "send_outreach_email" },
+            { "value2": "create_calendar_event" },
+            { "value2": "log_to_ats" }
+          ]
+        },
+        "fallbackOutput": "extra"
+      },
+      "id": "a1b2c3d4-0002-0002-0002-000000000002",
+      "name": "Route by action_type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "placeholder" },
+            { "name": "action", "value": "shortlist_to_sheets" },
+            { "name": "note", "value": "Replace with Google Sheets node. Use $json.candidate_name, $json.job_title, $json.score, $json.decision from input." }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0003-0003-0003-000000000003",
+      "name": "Shortlist → Sheets (placeholder)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [700, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SLACK_HR_WEBHOOK_URL }}",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ text: `*Yeni İK Bildirimi*\\n\\nAday: ${$json.body.candidate_name}\\nPozisyon: ${$json.body.job_title}\\nKarar: ${$json.body.decision}\\nPuan: ${$json.body.score}\\nKaynak: CognitWin HR Agent` }) }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0004-0004-0004-000000000004",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [700, 220]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "placeholder" },
+            { "name": "action", "value": "send_outreach_email" },
+            { "name": "note", "value": "Replace with Gmail/SMTP node. Use $json.candidate_name, $json.job_title, $json.text_response from input." }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0005-0005-0005-000000000005",
+      "name": "Outreach Email (placeholder)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [700, 340]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "placeholder" },
+            { "name": "action", "value": "create_calendar_event" },
+            { "name": "note", "value": "Replace with Google Calendar node. Use $json.candidate_name, $json.job_title, $json.session_id from input." }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0006-0006-0006-000000000006",
+      "name": "Calendar Event (placeholder)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [700, 460]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "placeholder" },
+            { "name": "action", "value": "log_to_ats" },
+            { "name": "note", "value": "Replace with HTTP Request node pointing at your ATS API. Full payload available in $json." }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0007-0007-0007-000000000007",
+      "name": "Log to ATS (placeholder)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [700, 580]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "unhandled_action" },
+            { "name": "action_type", "value": "={{$json.action_type}}" },
+            { "name": "note", "value": "Unknown action_type received. Add a new branch in the Switch node." }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0008-0008-0008-000000000008",
+      "name": "Unknown Action (fallback)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [700, 700]
+    }
+  ],
+  "connections": {
+    "HR Webhook": {
+      "main": [
+        [{ "node": "Route by action_type", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route by action_type": {
+      "main": [
+        [{ "node": "Shortlist → Sheets (placeholder)", "type": "main", "index": 0 }],
+        [{ "node": "Notify Slack",                     "type": "main", "index": 0 }],
+        [{ "node": "Outreach Email (placeholder)",     "type": "main", "index": 0 }],
+        [{ "node": "Calendar Event (placeholder)",     "type": "main", "index": 0 }],
+        [{ "node": "Log to ATS (placeholder)",         "type": "main", "index": 0 }],
+        [{ "node": "Unknown Action (fallback)",        "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["cognitwin", "hr", "automation"]
+}

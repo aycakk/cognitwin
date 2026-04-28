@@ -46,3 +46,12 @@ endpoints:
           - "cognitwin-composer"
         fetch: false
       modelDisplayLabel: "CogniTwin Composer"
+
+    - name: "CogniTwin HR"
+      apiKey: "cognitwin"
+      baseURL: "http://cognitwin-api:8011/v1/"
+      models:
+        default:
+          - "cognitwin-hr"
+        fetch: false
+      modelDisplayLabel: "CogniTwin HR Recruiter"

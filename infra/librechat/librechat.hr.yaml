@@ -1,0 +1,14 @@
+version: "1.3.6"
+
+endpoints:
+  custom:
+    - name: "CogniTwin İK"
+      apiKey: "${COGNITWIN_HR_KEY}"
+      baseURL: "http://cognitwin-api:8011/v1/"
+      models:
+        default:
+          - "cognitwin-hr"
+        fetch: false
+      modelDisplayLabel: "CogniTwin İK Asistanı"
+      titleConvo: true
+      titleModel: "cognitwin-hr"

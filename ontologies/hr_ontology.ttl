@@ -1,0 +1,137 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix cog:  <http://cognitwin.ai/ontology#> .
+@prefix hr:   <http://cognitwin.ai/hr#> .
+
+# ── Ontology Header ───────────────────────────────────────────────────────────
+<http://cognitwin.ai/hr>
+    rdf:type owl:Ontology ;
+    rdfs:label "CogniTwin HR Ontology"@en ;
+    rdfs:comment "Lightweight HR domain ontology for the CogniTwin recruiter agent."@en .
+
+# ── Core Classes ──────────────────────────────────────────────────────────────
+hr:Recruiter
+    rdf:type owl:Class ;
+    rdfs:subClassOf cog:Person ;
+    rdfs:label "Recruiter"@en , "İşe Alım Uzmanı"@tr .
+
+hr:Candidate
+    rdf:type owl:Class ;
+    rdfs:subClassOf cog:Person ;
+    rdfs:label "Candidate"@en , "Aday"@tr .
+
+hr:JobRequisition
+    rdf:type owl:Class ;
+    rdfs:subClassOf cog:Artifact ;
+    rdfs:label "Job Requisition"@en , "İş İlanı"@tr .
+
+hr:CandidateProfile
+    rdf:type owl:Class ;
+    rdfs:subClassOf cog:Artifact ;
+    rdfs:label "Candidate Profile"@en , "Aday Profili"@tr .
+
+hr:RecruiterProfile
+    rdf:type owl:Class ;
+    rdfs:subClassOf cog:Artifact ;
+    rdfs:label "Recruiter Profile"@en , "Recruiter Profili"@tr .
+
+hr:MatchResult
+    rdf:type owl:Class ;
+    rdfs:subClassOf cog:Artifact ;
+    rdfs:label "Match Result"@en , "Eşleştirme Sonucu"@tr .
+
+hr:Shortlist
+    rdf:type owl:Class ;
+    rdfs:subClassOf cog:Artifact ;
+    rdfs:label "Shortlist"@en , "Kısa Liste"@tr .
+
+hr:InterviewPlan
+    rdf:type owl:Class ;
+    rdfs:subClassOf cog:Artifact ;
+    rdfs:label "Interview Plan"@en , "Mülakat Planı"@tr .
+
+hr:OutreachMessage
+    rdf:type owl:Class ;
+    rdfs:subClassOf cog:Artifact ;
+    rdfs:label "Outreach Message"@en , "Outreach Mesajı"@tr .
+
+hr:TokenLedger
+    rdf:type owl:Class ;
+    rdfs:subClassOf cog:Artifact ;
+    rdfs:label "Token Ledger"@en , "Token Bütçe Defteri"@tr .
+
+hr:AuditRecord
+    rdf:type owl:Class ;
+    rdfs:subClassOf cog:Artifact ;
+    rdfs:label "Audit Record"@en , "Denetim Kaydı"@tr .
+
+# ── Seniority Levels ──────────────────────────────────────────────────────────
+hr:SeniorityLevel  rdf:type owl:Class ; rdfs:label "Seniority Level"@en .
+hr:Intern          rdf:type hr:SeniorityLevel ; rdfs:label "Intern"@en , "Stajyer"@tr .
+hr:Junior          rdf:type hr:SeniorityLevel ; rdfs:label "Junior"@en .
+hr:Mid             rdf:type hr:SeniorityLevel ; rdfs:label "Mid-level"@en , "Orta"@tr .
+hr:Senior          rdf:type hr:SeniorityLevel ; rdfs:label "Senior"@en .
+hr:Lead            rdf:type hr:SeniorityLevel ; rdfs:label "Lead"@en .
+hr:Principal       rdf:type hr:SeniorityLevel ; rdfs:label "Principal"@en .
+
+# ── Work Mode ─────────────────────────────────────────────────────────────────
+hr:WorkMode  rdf:type owl:Class ; rdfs:label "Work Mode"@en .
+hr:Onsite    rdf:type hr:WorkMode ; rdfs:label "On-site"@en , "Ofis"@tr .
+hr:Remote    rdf:type hr:WorkMode ; rdfs:label "Remote"@en , "Uzaktan"@tr .
+hr:Hybrid    rdf:type hr:WorkMode ; rdfs:label "Hybrid"@en , "Hibrit"@tr .
+
+# ── Object Properties ─────────────────────────────────────────────────────────
+hr:hasProfile
+    rdf:type owl:ObjectProperty ;
+    rdfs:domain hr:Recruiter ;
+    rdfs:range  hr:RecruiterProfile ;
+    rdfs:label  "has profile"@en .
+
+hr:evaluates
+    rdf:type owl:ObjectProperty ;
+    rdfs:domain hr:Recruiter ;
+    rdfs:range  hr:Candidate ;
+    rdfs:label  "evaluates"@en .
+
+hr:matchedTo
+    rdf:type owl:ObjectProperty ;
+    rdfs:domain hr:CandidateProfile ;
+    rdfs:range  hr:JobRequisition ;
+    rdfs:label  "matched to"@en .
+
+hr:producesShortlist
+    rdf:type owl:ObjectProperty ;
+    rdfs:domain hr:MatchResult ;
+    rdfs:range  hr:Shortlist ;
+    rdfs:label  "produces shortlist"@en .
+
+hr:requiresSkill
+    rdf:type owl:ObjectProperty ;
+    rdfs:domain hr:JobRequisition ;
+    rdfs:label  "requires skill"@en .
+
+hr:hasSkill
+    rdf:type owl:ObjectProperty ;
+    rdfs:domain hr:CandidateProfile ;
+    rdfs:label  "has skill"@en .
+
+# ── Data Properties ───────────────────────────────────────────────────────────
+hr:overallScore
+    rdf:type owl:DatatypeProperty ;
+    rdfs:domain hr:MatchResult ;
+    rdfs:range  xsd:float ;
+    rdfs:label  "overall match score"@en .
+
+hr:tokenBudget
+    rdf:type owl:DatatypeProperty ;
+    rdfs:domain hr:TokenLedger ;
+    rdfs:range  xsd:integer ;
+    rdfs:label  "token budget"@en .
+
+hr:tokenUsed
+    rdf:type owl:DatatypeProperty ;
+    rdfs:domain hr:TokenLedger ;
+    rdfs:range  xsd:integer ;
+    rdfs:label  "tokens used"@en .

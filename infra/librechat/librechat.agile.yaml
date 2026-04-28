@@ -1,0 +1,17 @@
+version: "1.3.6"
+
+endpoints:
+  custom:
+    - name: "CogniTwin Agile"
+      apiKey: "${COGNITWIN_AGILE_KEY}"
+      baseURL: "http://cognitwin-api:8011/v1/"
+      models:
+        default:
+          - "cognitwin-developer"
+          - "cognitwin-scrum"
+          - "cognitwin-product-owner"
+          - "cognitwin-composer"
+        fetch: false
+      modelDisplayLabel: "CogniTwin Agile"
+      titleConvo: true
+      titleModel: "cognitwin-composer"

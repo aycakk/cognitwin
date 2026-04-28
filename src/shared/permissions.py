@@ -39,4 +39,9 @@ ONTOLOGY_AGENT_ROLES: dict[str, set[str]] = {
                               "define_acceptance_criteria",
                               "prioritize_backlog", "accept_reject_stories",
                               "read_sprint_status"},
+    "HRAgent":               {"read_candidate_profiles", "write_candidate_profiles",
+                              "read_job_requisitions", "write_shortlists",
+                              "write_interview_plans", "write_outreach_drafts",
+                              "manage_recruiter_profile", "read_audit_log",
+                              "manage_token_budget"},
 }

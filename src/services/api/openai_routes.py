@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from fastapi.responses import Response, StreamingResponse
@@ -9,6 +9,7 @@ import logging
 import time
 
 from src.services.api.pipeline import process_user_message
+from src.services.api.model_access import visible_models_for_headers
 
 logger = logging.getLogger(__name__)
 
@@ -75,16 +76,9 @@ def _make_chunk(chat_id: str, now: int, model: str, delta: dict, finish_reason=N
 
 
 @openai_router.get("/v1/models")
-async def list_models():
+async def list_models(request: Request):
     now = int(time.time())
-    model_ids = [
-        "llama3.2",
-        "cognitwin-student-llm",
-        "cognitwin-developer",
-        "cognitwin-scrum",
-        "cognitwin-product-owner",
-        "cognitwin-composer",
-    ]
+    model_ids = visible_models_for_headers(dict(request.headers))
     payload = {
         "object": "list",
         "data": [

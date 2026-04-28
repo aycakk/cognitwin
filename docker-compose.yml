@@ -22,6 +22,15 @@ services:
       - "8600:8011"
     environment:
       OLLAMA_HOST: "http://ollama:11434"
+      N8N_ENABLED: "${N8N_ENABLED:-false}"
+      N8N_WEBHOOK_URL: "${N8N_WEBHOOK_URL:-}"
+      N8N_WEBHOOK_BASE_URL: "${N8N_WEBHOOK_BASE_URL:-http://n8n:5678/webhook}"
+      N8N_SHORTLIST_WEBHOOK: "${N8N_SHORTLIST_WEBHOOK:-}"
+      N8N_SLACK_WEBHOOK: "${N8N_SLACK_WEBHOOK:-}"
+      N8N_OUTREACH_WEBHOOK: "${N8N_OUTREACH_WEBHOOK:-}"
+      N8N_INTERVIEW_WEBHOOK: "${N8N_INTERVIEW_WEBHOOK:-}"
+      N8N_MATCH_WEBHOOK: "${N8N_MATCH_WEBHOOK:-}"
+      N8N_CV_WEBHOOK: "${N8N_CV_WEBHOOK:-}"
     volumes:
       - cognitwin_chromadb:/app/static/chromadb
       - cognitwin_logs:/app/logs
@@ -43,8 +52,11 @@ services:
     image: ollama/ollama:latest
     container_name: cognitwin-ollama
     restart: unless-stopped
-    ports:
-      - "11434:11434"
+    # Port 11434 is in the Windows Hyper-V/WinNAT reserved range on this machine.
+    # cognitwin-api accesses Ollama via Docker networking (http://ollama:11434),
+    # so host-side exposure is not required.
+    # ports:
+    #   - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
@@ -70,16 +82,16 @@ services:
     networks:
       - cognitwin-net
 
-  # ── LibreChat (UI) ───────────────────────────────────────────────────────
-  librechat:
+  # ── LibreChat — Student workspace (port 3900) ────────────────────────────
+  librechat-student:
     image: ghcr.io/danny-avila/librechat:latest
-    container_name: librechat-api
+    container_name: librechat-student
     restart: unless-stopped
     ports:
-      - "${LIBRECHAT_PORT:-3900}:${LIBRECHAT_PORT:-3900}"
+      - "${LIBRECHAT_PORT:-3900}:3900"
     environment:
       HOST: "0.0.0.0"
-      PORT: "${LIBRECHAT_PORT:-3900}"
+      PORT: "3900"
       DOMAIN_CLIENT: "${DOMAIN_CLIENT:-http://localhost:3900}"
       DOMAIN_SERVER: "${DOMAIN_SERVER:-http://localhost:3900}"
       MONGO_URI: "${MONGO_URI:-mongodb://mongodb:27017/LibreChat}"
@@ -92,8 +104,10 @@ services:
       TRUST_PROXY: "${TRUST_PROXY:-1}"
       JWT_SECRET: "${JWT_SECRET:-change-this-jwt-secret}"
       JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:-change-this-jwt-refresh-secret}"
+      ENDPOINTS: "custom"
+      COGNITWIN_STUDENT_KEY: "${COGNITWIN_STUDENT_KEY:-cognitwin-student}"
     volumes:
-      - ./infra/librechat/librechat.yaml:/app/librechat.yaml:ro
+      - ./infra/librechat/librechat.student.yaml:/app/librechat.yaml:ro
       - librechat_images:/app/client/public/images
       - librechat_logs:/app/api/logs
     depends_on:
@@ -104,10 +118,8 @@ services:
       cognitwin-api:
         condition: service_healthy
     healthcheck:
-      # LibreChat does not expose /health.
-      # Use 127.0.0.1 explicitly — inside this container wget resolves
-      # "localhost" → ::1 (IPv6) but Node.js only binds on 0.0.0.0 (IPv4),
-      # so the IPv6 attempt always gets "Connection refused".
+      # Use 127.0.0.1 — inside the container wget resolves "localhost" → ::1 (IPv6)
+      # but Node.js only binds 0.0.0.0 (IPv4), causing connection refused on IPv6.
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3900/"]
       interval: 15s
       timeout: 5s
@@ -116,7 +128,144 @@ services:
     networks:
       - cognitwin-net
 
+  # ── LibreChat — Agile workspace (port 3901) — PO / SM / Developer / Composer
+  librechat-agile:
+    image: ghcr.io/danny-avila/librechat:latest
+    container_name: librechat-agile
+    restart: unless-stopped
+    ports:
+      - "${AGILE_PORT:-3901}:3901"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3901"
+      DOMAIN_CLIENT: "${AGILE_DOMAIN_CLIENT:-http://localhost:3901}"
+      DOMAIN_SERVER: "${AGILE_DOMAIN_SERVER:-http://localhost:3901}"
+      MONGO_URI: "${AGILE_MONGO_URI:-mongodb://mongodb:27017/LibreChat_Agile}"
+      MEILI_HOST: "http://meilisearch:7700"
+      MEILI_MASTER_KEY: "${MEILI_MASTER_KEY:-change-me}"
+      DEBUG_LOGGING: "${DEBUG_LOGGING:-true}"
+      DEBUG_CONSOLE: "${DEBUG_CONSOLE:-false}"
+      ALLOW_REGISTRATION: "${ALLOW_REGISTRATION:-true}"
+      NO_INDEX: "${NO_INDEX:-true}"
+      TRUST_PROXY: "${TRUST_PROXY:-1}"
+      JWT_SECRET: "${JWT_SECRET:-change-this-jwt-secret}"
+      JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:-change-this-jwt-refresh-secret}"
+      ENDPOINTS: "custom"
+      COGNITWIN_AGILE_KEY: "${COGNITWIN_AGILE_KEY:-cognitwin-agile}"
+    volumes:
+      - ./infra/librechat/librechat.agile.yaml:/app/librechat.yaml:ro
+      - librechat_agile_images:/app/client/public/images
+      - librechat_agile_logs:/app/api/logs
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      cognitwin-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3901/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - cognitwin-net
+
+  # ── LibreChat — İK / İşe Alım workspace (port 3902) ─────────────────────
+  librechat-hr:
+    image: ghcr.io/danny-avila/librechat:latest
+    container_name: librechat-hr
+    restart: unless-stopped
+    ports:
+      - "${HR_PORT:-3902}:3902"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3902"
+      DOMAIN_CLIENT: "${HR_DOMAIN_CLIENT:-http://localhost:3902}"
+      DOMAIN_SERVER: "${HR_DOMAIN_SERVER:-http://localhost:3902}"
+      MONGO_URI: "${HR_MONGO_URI:-mongodb://mongodb:27017/LibreChat_HR}"
+      MEILI_HOST: "http://meilisearch:7700"
+      MEILI_MASTER_KEY: "${MEILI_MASTER_KEY:-change-me}"
+      DEBUG_LOGGING: "${DEBUG_LOGGING:-true}"
+      DEBUG_CONSOLE: "${DEBUG_CONSOLE:-false}"
+      ALLOW_REGISTRATION: "${ALLOW_REGISTRATION:-true}"
+      NO_INDEX: "${NO_INDEX:-true}"
+      TRUST_PROXY: "${TRUST_PROXY:-1}"
+      JWT_SECRET: "${JWT_SECRET:-change-this-jwt-secret}"
+      JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:-change-this-jwt-refresh-secret}"
+      ENDPOINTS: "custom"
+      COGNITWIN_HR_KEY: "${COGNITWIN_HR_KEY:-cognitwin-hr}"
+    volumes:
+      - ./infra/librechat/librechat.hr.yaml:/app/librechat.yaml:ro
+      - librechat_hr_images:/app/client/public/images
+      - librechat_hr_logs:/app/api/logs
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      cognitwin-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3902/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - cognitwin-net
+
+  # ── Portal — Workspace seçim sayfası (port 8080) ──────────────────────────
+  cognitwin-portal:
+    image: nginx:alpine
+    container_name: cognitwin-portal
+    restart: unless-stopped
+    ports:
+      - "${PORTAL_PORT:-8080}:80"
+    volumes:
+      - ./infra/portal/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/portal/index.html:/usr/share/nginx/html/index.html:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - cognitwin-net
+
   # ── MongoDB ──────────────────────────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: cognitwin-n8n
+    restart: unless-stopped
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      N8N_HOST: "n8n"
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: "http"
+      N8N_SECURE_COOKIE: "false"
+      WEBHOOK_URL: "${N8N_PUBLIC_WEBHOOK_URL:-http://localhost:5678/}"
+      GENERIC_TIMEZONE: "${TZ:-Europe/Istanbul}"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:5678',(r)=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1));",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - cognitwin-net
+
   mongodb:
     image: mongo:7
     container_name: librechat-mongodb
@@ -164,3 +313,8 @@ volumes:
   librechat_meilisearch:
   librechat_images:
   librechat_logs:
+  librechat_agile_images:
+  librechat_agile_logs:
+  librechat_hr_images:
+  librechat_hr_logs:
+  n8n_data:

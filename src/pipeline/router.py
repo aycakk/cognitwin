@@ -28,11 +28,13 @@ UnknownModelError = UnknownRoleError
 _ROUTING_TABLE: list[tuple[str, str, str]] = [
     # (substring_to_match, mode, strategy)
     # "product_owner" must precede "scrum" to prevent false substring matches.
+    # "hr" must precede generic fallbacks.
     ("composer",      "composer",      "rule"),
     ("product_owner", "product_owner", "rule"),
     ("developer",     "developer",     "auto"),
     ("scrum",         "scrum_master",  "rule"),
     ("student",       "student",       "llm"),
+    ("hr",            "hr",            "llm"),
 ]
 
 # Models that are explicitly recognised as valid student-path models
@@ -55,7 +57,7 @@ def resolve_mode(model: str) -> tuple[str, str]:
     """
     Map the LibreChat model name to (mode, strategy).
 
-    mode     : 'student' | 'developer' | 'scrum_master' | 'product_owner' | 'composer'
+    mode     : 'student' | 'developer' | 'scrum_master' | 'product_owner' | 'composer' | 'hr'
     strategy : 'auto' (developer) | 'llm' (student) | 'rule' (scrum_master, product_owner, composer)
 
     Raises UnknownModelError if the name matches nothing in the routing
@@ -95,6 +97,6 @@ def resolve_mode(model: str) -> tuple[str, str]:
     raise UnknownModelError(
         f"Model {model!r} does not match any known agent. "
         "Use a model name containing 'composer', 'product_owner', "
-        "'developer', 'scrum', or 'student', "
+        "'developer', 'scrum', 'student', or 'hr', "
         "or a recognised base model (llama3.2, mistral, …)."
     )

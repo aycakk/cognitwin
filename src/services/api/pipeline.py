@@ -38,6 +38,7 @@ from src.pipeline.developer_runner import _process_developer_message
 from src.pipeline.scrum_master_runner import run_scrum_master_pipeline
 from src.pipeline.product_owner_runner import run_product_owner_pipeline
 from src.pipeline.composer_runner import run_composer_pipeline
+from src.pipeline.hr_runner import run_hr_pipeline
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -136,6 +137,14 @@ def process_user_message(
                 masked_input=masked,
             )
             response = run_scrum_master_pipeline(task)
+        elif mode == "hr":
+            task = AgentTask(
+                session_id=session_id,
+                role=AgentRole.HR_AGENT,
+                masked_input=masked,
+                metadata={"strategy": strategy, "messages": messages or []},
+            )
+            response = run_hr_pipeline(task)
         else:
             try:
                 role = AgentRole(agent_role)
