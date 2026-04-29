@@ -46,3 +46,13 @@ endpoints:
           - "cognitwin-composer"
         fetch: false
       modelDisplayLabel: "CogniTwin Composer"
+
+    - name: "CognitWin Fashion Buyer"
+      description: "Fashion Buyer Agent (Trend + Assortment + RFQ + Risk + Token Budget)"
+      apiKey: "cognitwin"
+      baseURL: "http://cognitwin-api:8011/v1/"
+      models:
+        default:
+          - "cognitwin-buyer"
+        fetch: false
+      modelDisplayLabel: "CognitWin Fashion Buyer"

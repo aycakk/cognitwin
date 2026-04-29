@@ -53,6 +53,7 @@ async def list_models():
         "cognitwin-scrum",
         "cognitwin-product-owner",
         "cognitwin-composer",
+        "cognitwin-buyer",
     ]
     payload = {
         "object": "list",

@@ -6,7 +6,7 @@ Gate Array    : C1 ∧ C2 ∧ C3 ∧ C4 ∧ C5 ∧ C6 ∧ C7 ∧ C8  (BOTH paths
 Memory        : ChromaDB  (k=15)
 Ontology      : cognitwin-upper.ttl + student_ontology.ttl  (rdflib, lazy-loaded)
 LLM           : Ollama llama3.2  (local)
-Routing       : model name → student (default) | developer | scrum | product_owner | composer
+Routing       : model name → student (default) | developer | scrum | product_owner | composer | buyer
 
 Entry points (called by routes.py and openai_routes.py):
   process_user_message(user_text, agent_role, model, messages) -> dict
@@ -38,6 +38,7 @@ from src.pipeline.developer_runner import _process_developer_message
 from src.pipeline.scrum_master_runner import run_scrum_master_pipeline
 from src.pipeline.product_owner_runner import run_product_owner_pipeline
 from src.pipeline.composer_runner import run_composer_pipeline
+from src.pipeline.buyer_runner import run_buyer_pipeline
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS
@@ -89,6 +90,7 @@ def process_user_message(
       model contains 'product_owner' →  ProductOwner rule pipeline (backlog)
       model contains 'developer'     →  DeveloperOrchestrator + C1-C8 + REDO
       model contains 'scrum'         →  ScrumMaster rule pipeline
+      model contains 'buyer'         →  Fashion Buyer deterministic template pipeline
       all other models               →  Student ZT4SWE pipeline (C1-C8 + REDO)
 
     Returns {"answer": str} for the FastAPI layer.
@@ -131,6 +133,9 @@ def process_user_message(
                 masked_input=masked,
             )
             response = run_scrum_master_pipeline(task)
+        elif mode == "buyer":
+            # Buyer MVP is deterministic/template-based in this step.
+            return {"answer": run_buyer_pipeline(masked, session_id=session_id or None)}
         else:
             try:
                 role = AgentRole(agent_role)
