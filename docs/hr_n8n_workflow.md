@@ -163,10 +163,10 @@ HR workspace'te şunu yazın:
 Beklenen yanıt sonu:
 ```
 ---
-OTOMASYON: Slack bildirimi n8n otomasyonuna iletildi.
+OTOMASYON: Slack bildirimi n8n otomasyon akışına iletildi. Teslim durumu n8n Executions ekranından doğrulanmalıdır.
 ```
 
-n8n **Executions** sekmesinde yeni execution göreceksiniz ve hedef Slack kanalına mesaj gelecektir.
+n8n **Executions** sekmesinde yeni execution göreceksiniz. `SLACK_HR_WEBHOOK_URL` değişkeni n8n'de tanımlıysa Slack kanalına mesaj iletilir; tanımlı değilse execution hata verir ve bunu Executions ekranından görebilirsiniz.
 
 ## 9) Hızlı Test Komutları
 

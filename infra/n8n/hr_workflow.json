@@ -60,7 +60,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({ text: `*Yeni İK Bildirimi*\\n\\nAday: ${$json.body.candidate_name}\\nPozisyon: ${$json.body.job_title}\\nKarar: ${$json.body.decision}\\nPuan: ${$json.body.score}\\nKaynak: CognitWin HR Agent` }) }}",
+        "body": "={{ JSON.stringify({ text: $json.body.slack_text || ('*Yeni İK Bildirimi*\\n\\nAday: ' + ($json.body.candidate_name || '?') + '\\nPozisyon: ' + ($json.body.job_title || '?') + '\\nKarar: ' + ($json.body.decision || '?') + '\\nKaynak: CognitWin HR Agent') }) }}",
         "options": {}
       },
       "id": "a1b2c3d4-0004-0004-0004-000000000004",
