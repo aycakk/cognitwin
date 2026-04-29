@@ -56,16 +56,105 @@ _agent = HRAgent()
 _hr_sessions: dict[str, HRSessionContext] = {}
 
 _AUTOMATION_SIGNAL_RE = re.compile(
-    r"\botomasyon\b|\bn8n\b|\bwebhook\b|tetikle|g[öo]nder|aktar|kaydet|bildir",
-    re.I,
+    r"\botomasyon\b|\bn8n\b|\bwebhook\b|tetikle|g[öo]nder|aktar|bildir"
+    r"|slack.{0,6}bildir|ekib[ei].{0,8}bildir|haber ver"
+    r"|kısa listeye ekle|kısa listeye al|kısa listeye yaz|shortlist.{0,4}(ekle|al)"
+    r"|mail hazırla|e.?posta hazırla|outreach"
+    r"|takvim.{0,15}(oluştur|ekle|planla)|görüşme planla|mülakat planla"
+    r"|ats.{0,6}kaydet|aday kaydını işle",
+    re.I | re.UNICODE,
 )
 
+_EXPLICIT_ACTION_RE = re.compile(r"[Aa]ksiyon\s*[:=]\s*([\w_]+)", re.I)
+_KNOWN_AUTOMATION_ACTIONS: frozenset[str] = frozenset({
+    "notify_slack", "shortlist_to_sheets", "send_outreach_email",
+    "create_calendar_event", "log_to_ats", "log_cv_analysis",
+})
+
+
+def _parse_explicit_actions(text: str) -> list[str]:
+    """Return action names declared as 'Aksiyon: <name>' in user input."""
+    return [
+        m.group(1).lower()
+        for m in _EXPLICIT_ACTION_RE.finditer(text)
+        if m.group(1).lower() in _KNOWN_AUTOMATION_ACTIONS
+    ]
+
+
+_CANDIDATE_NAME_RES: list[re.Pattern] = [
+    re.compile(r"([A-ZÇŞÜÖĞİ][a-zçşüöğı]+(?:\s+[A-ZÇŞÜÖĞİ][a-zçşüöğı]+){1,2})\s+aday", re.U),
+    re.compile(r"aday(?:\s*(?:adı|:|-)\s*)([^\n,\.;]{3,40})", re.I | re.U),
+]
+_JOB_TITLE_RES: list[re.Pattern] = [
+    re.compile(r"aday\w*\s+([A-Za-zÇŞÜÖĞİçşüöğı][A-Za-zÇŞÜÖĞİçşüöğı +/\-#\.]{2,40}?)\s+pozisyon", re.I | re.U),
+    re.compile(r"([A-Za-zÇŞÜÖĞİçşüöğı][A-Za-zÇŞÜÖĞİçşüöğı +/\-#\.]{2,40}?)\s+pozisyon", re.U),
+    re.compile(r"(?:pozisyon|i̇lan|ilan|rol)\s*[:\-]\s*([^\n,\.;]{3,50})", re.I | re.U),
+]
+_SKILLS_IN_TEXT_RE = re.compile(
+    r"(?:yetkinlik(?:ler)?|beceri(?:ler)?|teknoloji(?:ler)?)\s*[:\-]\s*([^\n]+)",
+    re.I | re.U,
+)
+
+
+def _extract_first(text: str, patterns: list[re.Pattern]) -> str:
+    for p in patterns:
+        m = p.search(text)
+        if m:
+            return m.group(1).strip().rstrip(".,;")
+    return ""
+
+
+def _extract_skills_from_text(text: str) -> list[str]:
+    m = _SKILLS_IN_TEXT_RE.search(text)
+    if not m:
+        return []
+    return [s.strip() for s in re.split(r"[,;/]", m.group(1)) if s.strip()]
+
+
+def _skill_match_score(candidate_skills: list[str], required_skills: list[str]) -> float:
+    if not required_skills or not candidate_skills:
+        return 0.0
+    c_lower = [s.lower() for s in candidate_skills]
+    matched = sum(
+        1 for r in required_skills
+        if any(r.lower() in c or c in r.lower() for c in c_lower)
+    )
+    return round(matched / len(required_skills) * 100)
+
+
+def _auto_decision(score: float) -> str:
+    if score >= 80:
+        return "Önerilir"
+    if score >= 60:
+        return "Şartlı Önerilir"
+    return "Önerilmez"
+
+
 _ACTION_HINT_RE: dict[str, re.Pattern] = {
-    "shortlist_to_sheets": re.compile(r"kısa liste|sheet|tablo|airtable|ats", re.I),
-    "notify_slack": re.compile(r"slack|bildir|kanal", re.I),
-    "send_outreach_email": re.compile(r"e.?posta|mail|işe davet|mesaj", re.I),
-    "create_calendar_event": re.compile(r"m[üu]lakat|takvim|calendar|randevu", re.I),
-    "log_to_ats": re.compile(r"ats|crm|işe alım sistemi|kaydet|log", re.I),
+    "shortlist_to_sheets": re.compile(
+        r"kısa liste(ye (ekle|yaz|al))?|shortlist.{0,4}(ekle|al|e al)"
+        r"|sheet|tablo|airtable",
+        re.I | re.UNICODE,
+    ),
+    "notify_slack": re.compile(
+        r"slack|bildir|kanal|haber ver"
+        r"|ekib[ei].{0,8}(bildir|haber)",
+        re.I | re.UNICODE,
+    ),
+    "send_outreach_email": re.compile(
+        r"e.?posta (hazırla|yaz|gönder)|mail (hazırla|yaz|gönder)"
+        r"|outreach|işe davet|adaya ulaş",
+        re.I | re.UNICODE,
+    ),
+    "create_calendar_event": re.compile(
+        r"m[üu]lakat (takvim|planla|etkinlik)|takvim etkinli"
+        r"|görüşme planla|interview planla|randevu|calendar",
+        re.I | re.UNICODE,
+    ),
+    "log_to_ats": re.compile(
+        r"ats.{0,6}(kaydet|kaydı)|aday kaydını işle|crm|işe alım sistemi",
+        re.I | re.UNICODE,
+    ),
 }
 
 
@@ -80,7 +169,11 @@ _AUTOMATION_TR: dict[str, str] = {
 
 def _automation_note(actions: list[str]) -> str:
     labels = ", ".join(_AUTOMATION_TR.get(a, a) for a in actions)
-    return f"---\nOTOMASYON: {labels} n8n otomasyonuna iletildi."
+    return (
+        f"---\n"
+        f"OTOMASYON: {labels} n8n otomasyon akışına iletildi. "
+        f"Teslim durumu n8n Executions ekranından doğrulanmalıdır."
+    )
 
 
 def _get_or_create_session(session_id: str, recruiter_id: str) -> HRSessionContext:
@@ -107,11 +200,15 @@ _INTENT_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("req_parse",           re.compile(
         r"ilan.*analiz|pozisyon.*analiz|iş.*ilanı.*incele"
         r"|ilan.*değerlendir|bu ilan", re.I)),
-    # Aday–pozisyon eşleştirme
+    # Aday–pozisyon eşleştirme (doğal dil dahil)
     ("candidate_match",     re.compile(
         r"uygun mu|eşleştir|bu (cv|aday).*(ilan|pozisyon)"
         r"|bu pozisyon için.*aday|bu ilan için.*aday"
-        r"|aday.*uyum|uyum değerlendir", re.I)),
+        r"|aday.*uyum|uyum değerlendir"
+        r"|aday[ıiını]?.{1,40}(pozisyon|ilan|için).{0,20}değerlendir"
+        r"|değerlendir.{0,40}(pozisyon|ilan|aday)",
+        re.I | re.UNICODE,
+    )),
     # Kısa liste
     ("shortlist",           re.compile(
         r"kısa liste|en iyi \d+|ilk \d+ aday|\d+ aday.*sırala"
@@ -165,6 +262,65 @@ def _llm(messages: list[dict], model: str = "llama3.2") -> str:
         return f"LLM çağrısı başarısız oldu: {exc}"
 
 
+# ── Output cleaning ───────────────────────────────────────────────────────────
+
+_BANNED_OUTPUT_RE = re.compile(
+    r"잘"                               # Korean fragment
+    r"|(?<!\w)candidate(?!\w)"          # English tech words
+    r"|(?<!\w)experience(?!\w)"
+    r"|skillset"
+    r"|(?<!\w)skills(?!\w)"
+    r"|requirementlar?"
+    r"|explainability"
+    r"|(?<!\w)below(?!\w)"
+    r"|(?<!\w)command(?!\w)"
+    r"|RECRUITER PROFİLİ"              # leaked internal section labels
+    r"|KULLANICI SORUSU"
+    r"|ÇEVİRİ\s*:",
+    re.I | re.UNICODE,
+)
+
+# Lines that start with these are internal prompt headers echoed by the LLM
+_LEAKED_HEADER_RE = re.compile(
+    r"^(?:"
+    r"={3,}[^=]*={3,}"                 # === SECTION ===
+    r"|Recruiter\s*:"
+    r"|Industry focus\s*:"
+    r"|Industry\s*:"
+    r"|Company\s*:"
+    r"|Seniority preference\s*:"
+    r"|Strictness\s*:"
+    r"|Language preference\s*:"
+    r"|Tone preference\s*:"
+    r").*$",
+    re.I | re.UNICODE,
+)
+
+_FALLBACK_DRAFT = (
+    "ADAY ÖN DEĞERLENDİRME SONUCU\n\n"
+    "Verilen bilgiler doğrultusunda genel bir değerlendirme yapılmıştır. "
+    "Aday, temel yetkinlik gereksinimleriyle uyumlu görünmektedir.\n\n"
+    "Eksik Bilgiler:\n"
+    "- Proje detayları, ekip deneyimi ve çalışma modeli bilgisi sağlanmamıştır.\n\n"
+    "Recruiter Notu:\n"
+    "Aday teknik uygunluğunu karşıladığı takdirde ilk görüşmeye alınabilir. "
+    "Kesin karar için ayrıntılı özgeçmiş ve mülakat önerilir."
+)
+
+
+def _strip_leaked_sections(text: str) -> str:
+    lines = [ln for ln in text.splitlines() if not _LEAKED_HEADER_RE.match(ln.strip())]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
+def _clean_draft(draft: str) -> str:
+    """Strip internal prompt sections; fall back to safe Turkish template if banned content remains."""
+    cleaned = _strip_leaked_sections(draft)
+    if not cleaned or _BANNED_OUTPUT_RE.search(cleaned):
+        return _FALLBACK_DRAFT
+    return cleaned
+
+
 # ── Gate pass ─────────────────────────────────────────────────────────────────
 
 def _gate_pass(draft: str) -> tuple[str, dict]:
@@ -177,7 +333,8 @@ def _gate_pass(draft: str) -> tuple[str, dict]:
             "Yanıt güvenlik kontrolünden geçemedi. "
             "Lütfen isteğinizi PII içermeyecek ve belirsizlik ifadesi taşımayacak biçimde yeniden iletin."
         )
-    return draft, report["gates"]
+        return draft, report["gates"]
+    return _clean_draft(draft), report["gates"]
 
 
 def _line_value(text: str, patterns: list[str]) -> str:
@@ -237,10 +394,19 @@ def _decide_automation_targets(
     if not allowed_actions:
         return False, []
 
-    signal = bool(_AUTOMATION_SIGNAL_RE.search(user_input) or _AUTOMATION_SIGNAL_RE.search(draft))
+    explicit_actions = _parse_explicit_actions(user_input)
+    signal = bool(
+        explicit_actions
+        or _AUTOMATION_SIGNAL_RE.search(user_input)
+        or _AUTOMATION_SIGNAL_RE.search(draft)
+    )
 
     selected: list[str] = []
     for action in allowed_actions:
+        # Explicit "Aksiyon: <name>" directive takes highest priority.
+        if action in explicit_actions:
+            selected.append(action)
+            continue
         # If action is explicitly recommended in text, keep it.
         if any(action == a for a in recommended_actions):
             selected.append(action)
@@ -250,12 +416,12 @@ def _decide_automation_targets(
         if hint and (hint.search(user_input) or hint.search(draft)):
             selected.append(action)
 
-    if intent == "shortlist" and not selected:
-        selected = allowed_actions
-    elif intent == "candidate_match" and decision in {"Önerilir", "Şartlı Önerilir"} and not selected:
-        selected = [a for a in allowed_actions if a == "log_to_ats"]
+    # Shortlist always includes all default actions (output-oriented intent).
+    # All other intents require an explicit signal from the user.
+    if intent == "shortlist":
+        selected = list(dict.fromkeys(selected + allowed_actions))
 
-    should_trigger = bool(selected) and (signal or intent in {"shortlist", "candidate_match", "outreach_draft", "interview_questions"})
+    should_trigger = bool(selected) and (signal or intent == "shortlist")
     selected = [a for a in selected if _action_allowed_for_intent(intent, a)]
     return should_trigger, selected
 
@@ -301,6 +467,11 @@ def _build_structured_response(
             normalized.append(a)
     recommended_actions = normalized
 
+    # Merge explicit "Aksiyon: <name>" directives from user input into recommended list
+    for ea in _parse_explicit_actions(user_input):
+        if ea not in recommended_actions:
+            recommended_actions.append(ea)
+
     should_trigger, selected_actions = _decide_automation_targets(
         intent=intent,
         decision=decision,
@@ -309,14 +480,35 @@ def _build_structured_response(
         recommended_actions=recommended_actions,
     )
 
+    # ── Fallback extraction from user_input when draft lacks structured fields ──
+    if not candidate_name:
+        candidate_name = _extract_first(user_input, _CANDIDATE_NAME_RES)
+
+    job_title = session.current_req.title if session.current_req else ""
+    if not job_title:
+        job_title = _extract_first(user_input, _JOB_TITLE_RES)
+
+    score = _extract_score(draft)
+    strengths = _split_list(strengths_raw)
+    missing_skills_list = _split_list(missing_raw)
+
+    candidate_skills = _extract_skills_from_text(user_input)
+    req_skills = list(session.current_req.required_skills) if session.current_req else []
+    if score == 0.0 and candidate_skills:
+        score = _skill_match_score(candidate_skills, req_skills or candidate_skills)
+    if not strengths and candidate_skills:
+        strengths = candidate_skills
+    if not decision and candidate_skills:
+        decision = _auto_decision(score)
+
     return HRStructuredResponse(
         intent=intent,
         decision=decision,
         candidate_name=candidate_name,
-        job_title=(session.current_req.title if session.current_req else ""),
-        score=_extract_score(draft),
-        strengths=_split_list(strengths_raw),
-        missing_skills=_split_list(missing_raw),
+        job_title=job_title,
+        score=score,
+        strengths=strengths,
+        missing_skills=missing_skills_list,
         risks=risks,
         shortlist_status=("oluşturuldu" if intent == "shortlist" else ""),
         automation_targets=selected_actions,
@@ -575,8 +767,8 @@ def run_hr_pipeline(task: AgentTask) -> AgentResponse:
     user_input  = task.masked_input
     session_id  = task.session_id or "hr-default"
 
-    # Derive a stable recruiter_id from session prefix
-    recruiter_id = f"recruiter-{session_id[:8]}"
+    # Panel passes explicit recruiter_id via metadata; LibreChat falls back to session prefix.
+    recruiter_id = task.metadata.get("recruiter_id") or f"recruiter-{session_id[:8]}"
 
     profile  = load_profile(recruiter_id)
     ledger   = load_ledger(recruiter_id)
@@ -681,22 +873,31 @@ def run_hr_pipeline(task: AgentTask) -> AgentResponse:
         draft = _handle_missing_skills(user_input, session, profile_summary, ledger, session_id)
 
     else:
-        # General HR question — LLM with full recruiter context
-        ok, msg = check_and_deduct(ledger, "explanation", note=session_id)
-        if not ok:
-            draft = msg
+        # If input is only automation directives (e.g. "Aksiyon: notify_slack"),
+        # skip the LLM entirely and return a deterministic acknowledgement.
+        input_for_llm = _EXPLICIT_ACTION_RE.sub("", user_input).strip()
+        if not input_for_llm or len(input_for_llm) < 10:
+            draft = "İşleminiz alındı. Belirtilen otomasyon aksiyonları n8n akışına iletilmektedir."
+            log_action(recruiter_id, "general", session_id,
+                       token_cost=0, token_remaining=ledger.remaining,
+                       result_summary=draft[:100])
         else:
-            session_ctx = f"Önceki işlem: {session.last_action}" if session.last_action else ""
-            budget = budget_status_block(ledger)
-            messages = _agent.build_general_prompt(user_input, profile_summary, session_ctx, budget)
-            draft = _llm(messages)
-            draft, _ = _gate_pass(draft)
-            log_action(
-                recruiter_id, "general", session_id,
-                token_cost=TOKEN_ACTION_COSTS["explanation"],
-                token_remaining=ledger.remaining,
-                result_summary=draft[:100],
-            )
+            # General HR question — LLM with full recruiter context
+            ok, msg = check_and_deduct(ledger, "explanation", note=session_id)
+            if not ok:
+                draft = msg
+            else:
+                session_ctx = f"Önceki işlem: {session.last_action}" if session.last_action else ""
+                budget = budget_status_block(ledger)
+                messages = _agent.build_general_prompt(user_input, profile_summary, session_ctx, budget)
+                draft = _llm(messages)
+                draft, _ = _gate_pass(draft)
+                log_action(
+                    recruiter_id, "general", session_id,
+                    token_cost=TOKEN_ACTION_COSTS["explanation"],
+                    token_remaining=ledger.remaining,
+                    result_summary=draft[:100],
+                )
 
     session.last_action = intent
     token_cost = max(0, remaining_before - ledger.remaining)
@@ -708,6 +909,13 @@ def run_hr_pipeline(task: AgentTask) -> AgentResponse:
         draft=draft,
         token_cost=token_cost,
         remaining_budget=ledger.remaining,
+    )
+    logger.info(
+        "HR automation check  session=%s intent=%s should_trigger=%s actions=%s n8n_enabled=%s",
+        session_id, intent,
+        structured.should_trigger_automation,
+        structured.recommended_actions,
+        _n8n_enabled(),
     )
     _dispatch_automation(
         structured=structured,

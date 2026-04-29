@@ -69,3 +69,100 @@ def read_audit_tail(recruiter_id: str, n: int = 20) -> list[dict]:
     except Exception as exc:
         logger.warning("audit read failed: %s", exc)
         return []
+
+
+# ── Per-recruiter scoped JSONL stores ─────────────────────────────────────────
+# Stored under data/hr_profiles/<recruiter_id>/ (subdirectory per recruiter).
+# Existing flat files (profile JSON, ledger JSON, audit JSONL) are unaffected.
+
+def _recruiter_dir(recruiter_id: str) -> Path:
+    d = _DATA_DIR / recruiter_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _append_jsonl(path: Path, record: dict) -> None:
+    """Append one JSON record to a JSONL file. Never raises."""
+    try:
+        with _lock:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception as exc:
+        logger.error("jsonl write failed (%s): %s", path, exc)
+
+
+def _read_jsonl_tail(path: Path, n: int) -> list[dict]:
+    """Return last n records from a JSONL file."""
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").strip().splitlines()
+        tail = lines[-n:] if len(lines) >= n else lines
+        return [json.loads(ln) for ln in tail if ln.strip()]
+    except Exception as exc:
+        logger.warning("jsonl read failed (%s): %s", path, exc)
+        return []
+
+
+def log_candidate_event(
+    recruiter_id: str,
+    *,
+    candidate_name: str = "",
+    job_title: str = "",
+    decision: str = "",
+    score: float = 0.0,
+    action_type: str = "",
+    automation_status: str = "",
+    token_cost: int = 0,
+    remaining_budget: int = 0,
+) -> None:
+    """Append one candidate evaluation record to <recruiter_id>/candidates.jsonl."""
+    record = {
+        "created_at":       datetime.now(timezone.utc).isoformat(),
+        "recruiter_id":     recruiter_id,
+        "candidate_name":   candidate_name,
+        "job_title":        job_title,
+        "decision":         decision,
+        "score":            score,
+        "action_type":      action_type,
+        "automation_status": automation_status,
+        "token_cost":       token_cost,
+        "remaining_budget": remaining_budget,
+    }
+    path = _recruiter_dir(recruiter_id) / "candidates.jsonl"
+    _append_jsonl(path, record)
+
+
+def log_automation_event(
+    recruiter_id: str,
+    *,
+    action_type: str = "",
+    candidate_name: str = "",
+    job_title: str = "",
+    status: str = "",
+    n8n_status: str = "",
+) -> None:
+    """Append one n8n automation dispatch record to <recruiter_id>/automation_log.jsonl."""
+    record = {
+        "created_at":     datetime.now(timezone.utc).isoformat(),
+        "recruiter_id":   recruiter_id,
+        "action_type":    action_type,
+        "candidate_name": candidate_name,
+        "job_title":      job_title,
+        "status":         status,
+        "n8n_status":     n8n_status,
+    }
+    path = _recruiter_dir(recruiter_id) / "automation_log.jsonl"
+    _append_jsonl(path, record)
+
+
+def read_candidate_events(recruiter_id: str, n: int = 50) -> list[dict]:
+    """Return the last n candidate events for a recruiter."""
+    path = _recruiter_dir(recruiter_id) / "candidates.jsonl"
+    return _read_jsonl_tail(path, n)
+
+
+def read_automation_events(recruiter_id: str, n: int = 50) -> list[dict]:
+    """Return the last n automation events for a recruiter."""
+    path = _recruiter_dir(recruiter_id) / "automation_log.jsonl"
+    return _read_jsonl_tail(path, n)

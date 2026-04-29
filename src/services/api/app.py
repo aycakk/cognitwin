@@ -2,9 +2,11 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.services.api.routes import router
 from src.services.api.openai_routes import openai_router
+from src.services.api.hr_router import hr_router
 from src.core.session_store import SESSION_STORE
 
 logger = logging.getLogger("cognitwin.bootstrap")
@@ -39,6 +41,23 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="CogniTwin Middleware API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:8600",
+        "http://127.0.0.1:8600",
+        "http://localhost:3900",
+        "http://localhost:3901",
+        "http://localhost:3902",
+        "http://localhost:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
@@ -97,3 +116,4 @@ async def list_sessions(n: int = 20):
 
 app.include_router(router)
 app.include_router(openai_router)
+app.include_router(hr_router, prefix="/api/hr")

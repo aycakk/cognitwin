@@ -136,6 +136,10 @@ def trigger_automation(payload: "N8nWebhookPayload") -> None:
         return
 
     url = _resolve_url(payload.action_type)
+    logger.info(
+        "n8n dispatch  action=%s  url=%s  session=%s",
+        payload.action_type, url, payload.session_id,
+    )
 
     payload_dict = {
         "action_type":      payload.action_type,
@@ -157,6 +161,7 @@ def trigger_automation(payload: "N8nWebhookPayload") -> None:
         "token_cost":       payload.token_cost,
         "remaining_budget": payload.remaining_budget,
         "source":           payload.source,
+        "slack_text":       payload.slack_text,
         "triggered_at":     datetime.now(timezone.utc).isoformat(),
         "extra":            payload.extra or {},
     }
@@ -182,6 +187,24 @@ def trigger_all(payloads: "list[N8nWebhookPayload]") -> None:
 
 def _is_allowed_action(intent: str, action_type: str) -> bool:
     return action_type in INTENT_AUTOMATION_MAP.get(intent, [])
+
+
+def _build_slack_text(p: "N8nWebhookPayload") -> str:
+    lines = ["*Yeni İK Bildirimi*", ""]
+    if p.candidate_name:
+        lines.append(f"Aday: {p.candidate_name}")
+    if p.job_title:
+        lines.append(f"Pozisyon: {p.job_title}")
+    if p.decision:
+        lines.append(f"Karar: {p.decision}")
+    if p.score:
+        lines.append(f"Puan: {int(p.score)}/100")
+    if p.strengths:
+        lines.append(f"Uygun Yetkinlikler: {', '.join(p.strengths)}")
+    if p.missing_skills:
+        lines.append(f"Eksik Bilgiler: {', '.join(p.missing_skills)}")
+    lines.extend(["", "Kaynak: CognitWin HR Agent"])
+    return "\n".join(lines)
 
 
 def _build_extra_fields(structured: "HRStructuredResponse") -> dict:
@@ -228,4 +251,7 @@ def build_payloads(
                 extra=_build_extra_fields(structured),
             )
         )
+    # Build slack_text for each payload after all fields are populated
+    for p in payloads:
+        p.slack_text = _build_slack_text(p)
     return payloads

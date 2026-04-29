@@ -291,6 +291,7 @@ class N8nWebhookPayload:
     token_cost:       int        = 0
     remaining_budget: int        = 0
     source:           str        = "cognitwin_hr_agent"
+    slack_text:       str        = ""
     extra:            dict       = field(default_factory=dict)
 
 
@@ -312,7 +313,7 @@ INTENT_AUTOMATION_MAP: dict[str, list[str]] = {
     "shortlist":           ["shortlist_to_sheets", "notify_slack"],
     "outreach_draft":      ["send_outreach_email"],
     "interview_questions": ["create_calendar_event"],
-    "candidate_match":     ["log_to_ats"],
+    "candidate_match":     ["log_to_ats", "notify_slack"],
     "cv_analyze":          [],
     "req_parse":           [],
     "missing_skills":      [],
@@ -322,5 +323,5 @@ INTENT_AUTOMATION_MAP: dict[str, list[str]] = {
     "recruiter_history":   [],
     "audit_show":          [],
     "cost_table":          [],
-    "general":             [],
+    "general":             ["notify_slack"],  # only fires when explicitly requested
 }
