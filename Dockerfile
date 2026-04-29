@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Python dependencies first (layer cache)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+# Keep joblib explicit because API imports it at startup.
+RUN pip install --no-cache-dir joblib
 
 # Copy project source
 COPY . .

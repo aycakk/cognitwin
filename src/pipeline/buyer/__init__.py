@@ -1,2 +1,0 @@
-"""Buyer-specific pipeline helpers."""
-
