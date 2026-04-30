@@ -13,6 +13,7 @@ from src.services.api.pipeline import process_user_message
 openai_router = APIRouter()
 
 
+
 class ChatCompletionRequest(BaseModel):
     model: Optional[str] = None
     messages: List[Dict[str, Any]]
