@@ -1,0 +1,12 @@
+version: "1.3.4"
+
+endpoints:
+  custom:
+    - name: "CogniTwin Student"
+      apiKey: "cognitwin-student"
+      baseURL: "http://cognitwin-api:8011/v1/"
+      models:
+        default:
+          - "cognitwin-student-llm"
+        fetch: false
+      modelDisplayLabel: "CogniTwin Student"

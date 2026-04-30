@@ -26,6 +26,9 @@ services:
       # before `docker compose up` (e.g. OLLAMA_MODEL=llama3.2:1b for the
       # smaller/faster model). Read by src/core/llm_config.DEFAULT_MODEL.
       OLLAMA_MODEL: "${OLLAMA_MODEL:-llama3.2}"
+      COGNITWIN_STUDENT_KEY: "${COGNITWIN_STUDENT_KEY:-cognitwin-student}"
+      COGNITWIN_AGILE_KEY: "${COGNITWIN_AGILE_KEY:-cognitwin-agile}"
+      COGNITWIN_ADMIN_KEY: "${COGNITWIN_ADMIN_KEY:-cognitwin-admin}"
     volumes:
       - cognitwin_chromadb:/app/static/chromadb
       - cognitwin_logs:/app/logs
@@ -95,7 +98,7 @@ services:
     container_name: cognitwin-portal
     restart: unless-stopped
     ports:
-      - "${PORTAL_PORT:-8080}:80"
+      - "${PORTAL_PORT:-8081}:80"
     volumes:
       - ./infra/portal/index.html:/usr/share/nginx/html/index.html:ro
       - ./infra/portal/nginx.conf:/etc/nginx/conf.d/default.conf:ro
