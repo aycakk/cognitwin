@@ -48,7 +48,7 @@ def client(tmp_path_factory):
         },
     )
 
-    with patch("src.pipeline.hr_runner.run_hr_pipeline", return_value=fake_response):
+    with patch("src.services.api.hr_router.run_hr_pipeline", return_value=fake_response):
         from src.services.api.app import app
         yield TestClient(app)
 

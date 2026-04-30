@@ -3,1652 +3,615 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>İK Paneli — CogniTwin</title>
+  <title>CogniTwin İK Paneli</title>
   <style>
-/* ── Reset ─────────────────────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; }
+    :root {
+      --bg:#f3f6fb; --card:#fff; --text:#1f2937; --muted:#6b7280; --line:#e5e7eb;
+      --blue:#1f4ed8; --blue2:#2563eb; --green:#16a34a; --amber:#d97706; --red:#dc2626;
+      --shadow:0 6px 20px rgba(15,23,42,.08); --radius:14px; --sidebar:260px; --top:68px;
+      --font:"Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
+    }
+    html, body { height:100%; margin:0; font-family:var(--font); color:var(--text); background:var(--bg); }
+    body { display:flex; }
 
-:root {
-  --bg:             #f1f5f9;
-  --sidebar-bg:     #ffffff;
-  --topbar-bg:      #1e40af;
-  --topbar-border:  #1d4ed8;
-  --surface:        #ffffff;
-  --surface-2:      #f8fafc;
-  --border:         #e2e8f0;
-  --border-2:       #cbd5e1;
-  --accent:         #2563eb;
-  --accent-hover:   #1d4ed8;
-  --accent-light:   #dbeafe;
-  --accent-lighter: #eff6ff;
-  --text:           #1e293b;
-  --text-2:         #475569;
-  --muted:          #94a3b8;
-  --success:        #16a34a;
-  --success-bg:     #dcfce7;
-  --success-border: #bbf7d0;
-  --warning:        #d97706;
-  --warning-bg:     #fef3c7;
-  --warning-border: #fde68a;
-  --danger:         #dc2626;
-  --danger-bg:      #fee2e2;
-  --danger-border:  #fecaca;
-  --info:           #0891b2;
-  --info-bg:        #e0f2fe;
-  --shadow-sm:      0 1px 2px 0 rgba(0,0,0,.05);
-  --shadow:         0 1px 3px 0 rgba(0,0,0,.1), 0 1px 2px -1px rgba(0,0,0,.06);
-  --shadow-md:      0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.06);
-  --radius:         0.5rem;
-  --radius-lg:      0.75rem;
-  --radius-xl:      1rem;
-  --sidebar-w:      248px;
-  --topbar-h:       64px;
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
+    #sidebar { width:var(--sidebar); position:fixed; inset:0 auto 0 0; background:#fff; border-right:1px solid var(--line); padding:18px 14px; display:flex; flex-direction:column; gap:14px; }
+    .brand { display:flex; align-items:center; gap:10px; padding:8px; }
+    .brand-badge { width:38px; height:38px; border-radius:10px; background:var(--blue); color:#fff; display:grid; place-items:center; font-weight:700; }
+    .brand h1 { font-size:16px; margin:0; }
+    .brand p { font-size:12px; margin:2px 0 0; color:var(--muted); }
+    .profile { border:1px solid #dbeafe; background:#eff6ff; border-radius:12px; padding:10px; display:flex; gap:10px; align-items:center; }
+    .avatar { width:38px; height:38px; border-radius:50%; background:var(--blue2); color:#fff; display:grid; place-items:center; font-weight:700; position:relative; }
+    .avatar::after { content:""; position:absolute; right:1px; bottom:1px; width:9px; height:9px; border-radius:50%; background:#22c55e; border:2px solid #fff; }
+    .profile .name { font-size:13px; font-weight:600; }
+    .profile .role { font-size:12px; color:var(--muted); }
+    .menu { display:flex; flex-direction:column; gap:5px; }
+    .nav-btn { border:0; border-radius:10px; background:transparent; text-align:left; padding:10px 12px; cursor:pointer; color:#374151; font-size:14px; }
+    .nav-btn:hover { background:#f3f4f6; }
+    .nav-btn.active { background:#dbeafe; color:#1d4ed8; font-weight:600; }
 
-html, body { height: 100%; }
-body {
-  font-family: var(--font); background: var(--bg); color: var(--text);
-  font-size: 14px; line-height: 1.5; display: flex;
-}
+    #topbar { position:fixed; left:var(--sidebar); right:0; top:0; height:var(--top); background:linear-gradient(90deg,#1f4ed8,#2563eb); color:#fff; display:flex; align-items:center; gap:12px; padding:0 20px; z-index:9; }
+    .search { flex:1; max-width:540px; position:relative; }
+    .search input { width:100%; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.14); color:#fff; border-radius:12px; padding:10px 12px 10px 36px; }
+    .search input::placeholder { color:rgba(255,255,255,.75); }
+    .search i { position:absolute; left:12px; top:50%; transform:translateY(-50%); opacity:.8; }
+    .icon-btn { width:36px; height:36px; border-radius:10px; border:0; background:rgba(255,255,255,.16); color:#fff; }
+    .quick { border:0; border-radius:10px; background:#fff; color:#1d4ed8; font-weight:700; padding:10px 12px; }
 
-/* ── Sidebar ────────────────────────────────────────────────────────────────── */
-#sidebar {
-  width: var(--sidebar-w); min-height: 100vh; background: var(--sidebar-bg);
-  border-right: 1px solid var(--border); display: flex; flex-direction: column;
-  position: fixed; top: 0; left: 0; bottom: 0; z-index: 20;
-  box-shadow: var(--shadow);
-}
+    #content { margin-left:var(--sidebar); padding-top:var(--top); width:calc(100% - var(--sidebar)); }
+    .wrap { padding:18px; max-width:1400px; }
+    .page { display:none; }
+    .page.active { display:block; }
+    .head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+    .head h2 { margin:0; font-size:24px; }
+    .sub { margin-top:3px; color:var(--muted); font-size:14px; }
 
-.sidebar-brand {
-  padding: 1.25rem 1.25rem 1rem;
-  border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; gap: 0.65rem;
-}
-.brand-icon {
-  width: 36px; height: 36px; background: var(--accent); border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  color: white; font-size: 1rem; font-weight: 800; flex-shrink: 0;
-}
-.brand-text { min-width: 0; }
-.brand-name { font-size: 0.9rem; font-weight: 700; color: var(--text); line-height: 1.2; }
-.brand-sub  { font-size: 0.7rem; color: var(--muted); margin-top: 0.1rem; }
+    .notice    { background:#e0f2fe; border:1px solid #bae6fd; border-radius:10px; padding:10px 12px; color:#0c4a6e; font-size:14px; margin-bottom:8px; }
+    .notice-ok { background:#dcfce7; border:1px solid #86efac; border-radius:10px; padding:10px 12px; color:#166534; font-size:14px; margin-bottom:8px; }
+    .notice-warn { background:#fef3c7; border:1px solid #fde68a; border-radius:10px; padding:10px 12px; color:#92400e; font-size:14px; margin-bottom:8px; }
+    .error { background:#fee2e2; border:1px solid #fecaca; color:#991b1b; border-radius:10px; padding:10px 12px; margin-bottom:10px; }
 
-/* Sidebar user card */
-.sidebar-user-card {
-  margin: 0.75rem 0.75rem 0;
-  background: var(--accent-lighter); border: 1px solid var(--accent-light);
-  border-radius: var(--radius-lg); padding: 0.75rem;
-  display: flex; align-items: center; gap: 0.65rem;
-}
-.user-avatar {
-  width: 36px; height: 36px; border-radius: 50%; background: var(--accent);
-  color: white; font-weight: 700; font-size: 0.875rem;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  position: relative;
-}
-.user-avatar::after {
-  content: ''; position: absolute; bottom: 1px; right: 1px;
-  width: 8px; height: 8px; background: var(--success);
-  border: 1.5px solid white; border-radius: 50%;
-}
-.user-info { min-width: 0; flex: 1; }
-.user-name  { font-size: 0.8rem; font-weight: 600; color: var(--text);
-              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.user-role  { font-size: 0.68rem; color: var(--muted); }
+    .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:12px; }
+    .kpi { background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); }
+    .kpi .l { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+    .kpi .v { font-size:30px; font-weight:800; margin-top:5px; }
 
-/* Navigation */
-.nav-section { padding: 0.75rem 0.75rem 0; }
-.nav-section-label {
-  font-size: 0.65rem; font-weight: 700; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.6px;
-  padding: 0 0.5rem; margin-bottom: 0.4rem;
-}
-.nav-list { list-style: none; display: flex; flex-direction: column; gap: 1px; }
-.nav-btn {
-  display: flex; align-items: center; gap: 0.65rem;
-  padding: 0.55rem 0.75rem; color: var(--text-2); text-decoration: none;
-  font-size: 0.85rem; font-weight: 500; border-radius: var(--radius);
-  transition: all 0.15s; cursor: pointer; border: none; background: none;
-  width: 100%; text-align: left;
-}
-.nav-btn:hover { color: var(--accent); background: var(--accent-lighter); }
-.nav-btn.active { color: var(--accent); background: var(--accent-light); font-weight: 600; }
-.nav-icon {
-  width: 20px; height: 20px; display: flex; align-items: center;
-  justify-content: center; font-size: 0.95rem; flex-shrink: 0;
-}
-.nav-badge {
-  margin-left: auto; background: var(--accent); color: white;
-  font-size: 0.62rem; font-weight: 700; padding: 0.1rem 0.4rem;
-  border-radius: 999px; min-width: 18px; text-align: center;
-}
+    .grid2 { display:grid; grid-template-columns:1.4fr 1fr; gap:12px; }
+    .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+    .card { background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; margin-bottom:12px; }
+    .ct { font-size:16px; font-weight:700; margin-bottom:8px; }
+    .step-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--blue2); margin-bottom:2px; }
+    .hint { color:var(--muted); font-size:12px; }
+    .field-label { font-size:13px; font-weight:600; color:#374151; display:block; margin-top:10px; margin-bottom:4px; }
+    .field-label:first-child { margin-top:0; }
+    textarea, input[type=text], input[type=number], select { width:100%; border:1px solid #d1d5db; border-radius:10px; padding:10px 11px; font-family:var(--font); font-size:14px; }
+    textarea { min-height:100px; resize:vertical; }
+    .btns { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; align-items:center; }
+    .btn { border:0; border-radius:10px; padding:10px 14px; font-weight:600; cursor:pointer; font-size:14px; }
+    .btn.p { background:var(--blue2); color:#fff; }
+    .btn.s { background:#f3f4f6; color:#1f2937; border:1px solid #d1d5db; }
+    .chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+    .chip { border:1px solid #dbeafe; background:#eff6ff; color:#1e40af; border-radius:999px; padding:6px 10px; font-size:12px; cursor:pointer; }
+    .chip:hover { background:#dbeafe; }
 
-.sidebar-footer {
-  margin-top: auto; padding: 1rem 1rem 1.25rem;
-  border-top: 1px solid var(--border);
-  font-size: 0.72rem; color: var(--muted); text-align: center;
-}
+    .upload { border:2px dashed #bfdbfe; background:#f8fbff; border-radius:12px; padding:24px; text-align:center; cursor:pointer; transition:border-color .15s,background .15s; }
+    .upload:hover, .upload.dragover { border-color:#2563eb; background:#eef4ff; }
+    .file-list { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+    .file-item { border:1px solid var(--line); border-radius:10px; padding:8px 10px; display:flex; justify-content:space-between; align-items:center; background:#fff; font-size:13px; }
 
-/* ── Top bar ────────────────────────────────────────────────────────────────── */
-#topbar {
-  position: fixed; top: 0; left: var(--sidebar-w); right: 0; height: var(--topbar-h);
-  background: var(--topbar-bg); border-bottom: 1px solid var(--topbar-border);
-  display: flex; align-items: center; gap: 1rem; padding: 0 1.5rem;
-  z-index: 15; box-shadow: 0 1px 8px rgba(0,0,0,.15);
-}
-.topbar-title {
-  font-size: 0.9rem; font-weight: 600; color: rgba(255,255,255,.85);
-  white-space: nowrap; min-width: 120px;
-}
-.topbar-search {
-  flex: 1; max-width: 400px; position: relative;
-}
-.topbar-search input {
-  width: 100%; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
-  border-radius: var(--radius-lg); color: white; padding: 0.45rem 0.75rem 0.45rem 2.25rem;
-  font-size: 0.82rem; font-family: var(--font);
-  transition: all 0.15s;
-}
-.topbar-search input::placeholder { color: rgba(255,255,255,.5); }
-.topbar-search input:focus { outline: none; background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.4); }
-.topbar-search-icon {
-  position: absolute; left: 0.65rem; top: 50%; transform: translateY(-50%);
-  color: rgba(255,255,255,.5); font-size: 0.85rem; pointer-events: none;
-}
-.topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
-.topbar-icon-btn {
-  width: 36px; height: 36px; border: none; background: rgba(255,255,255,.12);
-  border-radius: var(--radius); color: rgba(255,255,255,.8); cursor: pointer;
-  display: flex; align-items: center; justify-content: center; font-size: 1rem;
-  transition: background 0.15s; position: relative;
-}
-.topbar-icon-btn:hover { background: rgba(255,255,255,.22); }
-.notif-dot {
-  position: absolute; top: 6px; right: 6px; width: 7px; height: 7px;
-  background: #f59e0b; border: 1.5px solid var(--topbar-bg); border-radius: 50%;
-}
-.topbar-user-btn {
-  display: flex; align-items: center; gap: 0.5rem;
-  background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.15);
-  border-radius: var(--radius-lg); padding: 0.3rem 0.75rem 0.3rem 0.4rem;
-  cursor: pointer; transition: background 0.15s; color: white; font-size: 0.82rem;
-  font-family: var(--font); font-weight: 500;
-}
-.topbar-user-btn:hover { background: rgba(255,255,255,.22); }
-.topbar-avatar {
-  width: 26px; height: 26px; background: rgba(255,255,255,.3); border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 0.7rem; font-weight: 700;
-}
-.btn-quick {
-  background: white; color: var(--accent); font-size: 0.82rem; font-weight: 700;
-  padding: 0.45rem 1.1rem; border-radius: var(--radius-lg); border: none;
-  cursor: pointer; transition: all 0.15s; white-space: nowrap;
-  box-shadow: var(--shadow-sm);
-}
-.btn-quick:hover { background: var(--accent-lighter); }
+    table { width:100%; border-collapse:collapse; }
+    th, td { border-bottom:1px solid var(--line); padding:10px; font-size:13px; text-align:left; }
+    th { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.4px; background:#f9fafb; }
+    .badge { display:inline-block; border-radius:999px; padding:3px 8px; font-size:11px; font-weight:700; }
+    .b-g { background:#dcfce7; color:#166534; }
+    .b-y { background:#fef3c7; color:#92400e; }
+    .b-r { background:#fee2e2; color:#991b1b; }
+    .b-b { background:#dbeafe; color:#1e3a8a; }
+    .empty { color:var(--muted); text-align:center; padding:24px; }
 
-/* ── Content ────────────────────────────────────────────────────────────────── */
-#content {
-  margin-left: var(--sidebar-w);
-  padding-top: var(--topbar-h);
-  flex: 1; min-height: 100vh; overflow-x: hidden;
-}
-.page-wrap {
-  padding: 1.75rem 2rem; max-width: 1400px;
-}
+    .toggles { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .toggle { border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:#fafafa; display:flex; gap:10px; align-items:flex-start; cursor:pointer; }
+    .toggle input[type=checkbox] { margin-top:2px; width:16px; height:16px; flex-shrink:0; cursor:pointer; accent-color:var(--blue2); }
+    .toggle-text .tl { font-size:13px; font-weight:600; display:block; margin-bottom:2px; }
+    .toggle-text .th { font-size:12px; color:var(--muted); }
 
-.page { display: none; }
-.page.active { display: block; }
+    .result-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
+    .rf { }
+    .rf .rf-label { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:700; margin-bottom:3px; }
+    .rf .rf-value { font-size:14px; font-weight:500; }
 
-/* ── Page header ────────────────────────────────────────────────────────────── */
-.page-header {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  margin-bottom: 1.5rem; gap: 1rem;
-}
-.page-header-text {}
-.page-title { font-size: 1.4rem; font-weight: 700; color: var(--text); line-height: 1.2; }
-.page-sub   { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; }
-.page-actions { display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0; }
+    details summary { cursor:pointer; font-weight:700; color:#374151; padding:4px 0; }
+    details[open] summary { margin-bottom:8px; }
 
-/* ── KPI cards ──────────────────────────────────────────────────────────────── */
-.kpi-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr);
-  gap: 1rem; margin-bottom: 1.5rem;
-}
-.kpi-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); padding: 1.25rem 1.5rem;
-  box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 0.5rem;
-  position: relative; overflow: hidden;
-}
-.kpi-card::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  background: var(--accent);
-}
-.kpi-card.success::before { background: var(--success); }
-.kpi-card.warning::before { background: var(--warning); }
-.kpi-card.info::before    { background: var(--info); }
-.kpi-header { display: flex; justify-content: space-between; align-items: flex-start; }
-.kpi-label { font-size: 0.72rem; font-weight: 600; color: var(--muted);
-             text-transform: uppercase; letter-spacing: 0.5px; }
-.kpi-icon  { font-size: 1.2rem; opacity: 0.6; }
-.kpi-value { font-size: 2rem; font-weight: 800; color: var(--text); line-height: 1; }
-.kpi-value.accent  { color: var(--accent); }
-.kpi-value.success { color: var(--success); }
-.kpi-trend { font-size: 0.72rem; color: var(--muted); }
-
-/* ── Cards ──────────────────────────────────────────────────────────────────── */
-.card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); padding: 1.5rem;
-  box-shadow: var(--shadow-sm); margin-bottom: 1.25rem;
-}
-.card-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 1.25rem;
-}
-.card-title {
-  font-size: 0.9rem; font-weight: 700; color: var(--text);
-  display: flex; align-items: center; gap: 0.5rem;
-}
-.card-title-icon {
-  width: 28px; height: 28px; border-radius: var(--radius);
-  display: flex; align-items: center; justify-content: center; font-size: 0.85rem;
-  background: var(--accent-lighter); color: var(--accent);
-}
-.card-subtitle { font-size: 0.78rem; color: var(--muted); margin-top: 0.15rem; }
-.card-actions  { display: flex; gap: 0.4rem; }
-
-/* ── 2-col grid ─────────────────────────────────────────────────────────────── */
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
-.grid-3 { display: grid; grid-template-columns: 2fr 1fr; gap: 1.25rem; }
-
-/* ── Buttons ────────────────────────────────────────────────────────────────── */
-.btn {
-  display: inline-flex; align-items: center; gap: 0.45rem;
-  font-family: var(--font); font-size: 0.85rem; font-weight: 600;
-  padding: 0.55rem 1.2rem; border-radius: var(--radius); border: none;
-  cursor: pointer; transition: all 0.15s; text-decoration: none; white-space: nowrap;
-}
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--accent); color: white; box-shadow: var(--shadow-sm); }
-.btn-primary:hover:not(:disabled) { background: var(--accent-hover); box-shadow: var(--shadow); }
-.btn-secondary {
-  background: var(--surface); color: var(--text-2);
-  border: 1px solid var(--border); box-shadow: var(--shadow-sm);
-}
-.btn-secondary:hover:not(:disabled) { border-color: var(--border-2); color: var(--text); background: var(--surface-2); }
-.btn-ghost {
-  background: transparent; color: var(--text-2); border: 1px solid var(--border);
-}
-.btn-ghost:hover { background: var(--surface-2); color: var(--text); }
-.btn-sm { padding: 0.4rem 0.85rem; font-size: 0.8rem; }
-.btn-success { background: var(--success); color: white; }
-.btn-success:hover:not(:disabled) { background: #15803d; }
-
-/* ── Chips ──────────────────────────────────────────────────────────────────── */
-.chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.chip {
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  background: var(--surface-2); border: 1px solid var(--border);
-  color: var(--text-2); font-size: 0.78rem; font-weight: 500;
-  padding: 0.3rem 0.7rem; border-radius: 999px; cursor: pointer;
-  transition: all 0.15s;
-}
-.chip:hover { background: var(--accent-lighter); border-color: var(--accent-light); color: var(--accent); }
-
-/* ── Toggle switches ────────────────────────────────────────────────────────── */
-.toggle-group { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
-.toggle-item {
-  display: flex; align-items: center; gap: 0.75rem;
-  padding: 0.75rem 1rem; background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: var(--radius); cursor: pointer; transition: all 0.15s;
-}
-.toggle-item:hover { border-color: var(--accent-light); background: var(--accent-lighter); }
-.toggle-item input { display: none; }
-.toggle-switch {
-  width: 36px; height: 20px; background: var(--border-2); border-radius: 999px;
-  position: relative; flex-shrink: 0; transition: background 0.2s;
-}
-.toggle-switch::after {
-  content: ''; position: absolute; top: 2px; left: 2px;
-  width: 16px; height: 16px; background: white; border-radius: 50%;
-  transition: transform 0.2s; box-shadow: var(--shadow-sm);
-}
-.toggle-item input:checked ~ .toggle-switch { background: var(--accent); }
-.toggle-item input:checked ~ .toggle-switch::after { transform: translateX(16px); }
-.toggle-body { min-width: 0; }
-.toggle-label { font-size: 0.82rem; font-weight: 600; color: var(--text); }
-.toggle-sub   { font-size: 0.7rem; color: var(--muted); margin-top: 0.05rem; }
-
-/* ── Forms ──────────────────────────────────────────────────────────────────── */
-.form-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.form-single { grid-template-columns: 1fr; }
-.form-span   { grid-column: 1 / -1; }
-.field { display: flex; flex-direction: column; gap: 0.35rem; }
-.field label { font-size: 0.78rem; font-weight: 600; color: var(--text-2); }
-.hint { font-size: 0.72rem; color: var(--muted); }
-
-input[type=text], input[type=number], input[type=email], textarea, select {
-  background: var(--surface); border: 1px solid var(--border-2);
-  border-radius: var(--radius); color: var(--text);
-  padding: 0.6rem 0.85rem; font-family: var(--font); font-size: 0.875rem;
-  width: 100%; transition: border-color 0.15s, box-shadow 0.15s;
-  box-shadow: var(--shadow-sm);
-}
-input:focus, textarea:focus, select:focus {
-  outline: none; border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(37,99,235,.1);
-}
-textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
-select   { appearance: none; cursor: pointer; background-image:
-           url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2394a3b8'/%3E%3C/svg%3E");
-           background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2rem; }
-
-/* ── Tables ─────────────────────────────────────────────────────────────────── */
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
-thead { background: var(--surface-2); }
-th {
-  text-align: left; padding: 0.65rem 1rem; font-size: 0.7rem;
-  color: var(--muted); font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.5px; border-bottom: 1px solid var(--border); white-space: nowrap;
-}
-td {
-  padding: 0.85rem 1rem; font-size: 0.85rem; border-bottom: 1px solid var(--border);
-  color: var(--text-2); vertical-align: middle;
-}
-tr:last-child td { border-bottom: none; }
-tr.clickable { cursor: pointer; }
-tr.clickable:hover td { background: var(--accent-lighter); }
-.td-name { font-weight: 600; color: var(--text) !important; }
-
-/* ── Badges ─────────────────────────────────────────────────────────────────── */
-.badge {
-  display: inline-flex; align-items: center; gap: 0.2rem;
-  padding: 0.2rem 0.6rem; border-radius: 999px;
-  font-size: 0.68rem; font-weight: 700; white-space: nowrap;
-}
-.badge::before { content: '●'; font-size: 0.5rem; }
-.badge-green  { background: var(--success-bg);  color: var(--success);  border: 1px solid var(--success-border); }
-.badge-yellow { background: var(--warning-bg);  color: var(--warning);  border: 1px solid var(--warning-border); }
-.badge-red    { background: var(--danger-bg);   color: var(--danger);   border: 1px solid var(--danger-border); }
-.badge-blue   { background: var(--accent-light); color: var(--accent);  border: 1px solid #bfdbfe; }
-.badge-gray   { background: var(--surface-2);   color: var(--muted);    border: 1px solid var(--border); }
-.badge-gray::before { color: var(--border-2); }
-
-/* ── Empty state ────────────────────────────────────────────────────────────── */
-.empty-state {
-  display: flex; flex-direction: column; align-items: center;
-  padding: 3.5rem 1.5rem; color: var(--muted);
-}
-.empty-icon { font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.4; }
-.empty-title { font-size: 0.95rem; font-weight: 600; color: var(--text-2); margin-bottom: 0.35rem; }
-.empty-msg   { font-size: 0.82rem; text-align: center; max-width: 280px; }
-
-/* ── Notices ────────────────────────────────────────────────────────────────── */
-.notice {
-  display: flex; align-items: flex-start; gap: 0.75rem;
-  padding: 0.85rem 1rem; border-radius: var(--radius);
-  font-size: 0.85rem; margin-bottom: 1rem; border: 1px solid;
-}
-.notice-icon { font-size: 1rem; flex-shrink: 0; margin-top: 0.05rem; }
-.notice-err  { background: var(--danger-bg);  border-color: var(--danger-border);  color: var(--danger); }
-.notice-ok   { background: var(--success-bg); border-color: var(--success-border); color: var(--success); }
-.notice-info { background: var(--info-bg);    border-color: #bae6fd;               color: var(--info); }
-
-/* ── Spinner ────────────────────────────────────────────────────────────────── */
-.spin {
-  display: inline-block; width: 16px; height: 16px;
-  border: 2px solid var(--border-2); border-top-color: var(--accent);
-  border-radius: 50%; animation: rotate 0.7s linear infinite; flex-shrink: 0;
-}
-.spin-sm { width: 12px; height: 12px; }
-@keyframes rotate { to { transform: rotate(360deg); } }
-.loading-row {
-  display: flex; align-items: center; gap: 0.6rem;
-  color: var(--muted); font-size: 0.85rem; padding: 2rem; justify-content: center;
-}
-
-/* ── Evaluation result ──────────────────────────────────────────────────────── */
-#evalResult { display: none; }
-#evalResult.visible { display: block; }
-.result-card {
-  border: 1px solid var(--accent-light); background: var(--accent-lighter);
-  border-radius: var(--radius-lg); padding: 1.5rem;
-}
-.result-top { display: flex; align-items: flex-start; gap: 1.5rem; margin-bottom: 1.25rem; }
-.result-score-ring {
-  width: 72px; height: 72px; flex-shrink: 0;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  background: white; border: 3px solid var(--accent); border-radius: 50%;
-}
-.result-score-num  { font-size: 1.4rem; font-weight: 800; color: var(--accent); line-height: 1; }
-.result-score-sub  { font-size: 0.6rem; color: var(--muted); }
-.result-meta       { flex: 1; min-width: 0; }
-.result-name       { font-size: 1.05rem; font-weight: 700; color: var(--text); }
-.result-pos        { font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.5rem; }
-.result-pills      { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.result-text-wrap  {
-  background: white; border: 1px solid var(--accent-light); border-radius: var(--radius);
-  padding: 1rem; font-size: 0.875rem; white-space: pre-wrap; line-height: 1.7;
-  color: var(--text-2); max-height: 300px; overflow-y: auto;
-}
-
-/* ── CV Upload ──────────────────────────────────────────────────────────────── */
-.upload-zone {
-  border: 2px dashed var(--border-2); border-radius: var(--radius-lg);
-  padding: 2rem; text-align: center; transition: all 0.2s; cursor: pointer;
-  background: var(--surface-2);
-}
-.upload-zone:hover, .upload-zone.dragover {
-  border-color: var(--accent); background: var(--accent-lighter);
-}
-.upload-icon { font-size: 2rem; margin-bottom: 0.65rem; color: var(--muted); }
-.upload-label { font-size: 0.85rem; color: var(--text-2); }
-.upload-hint  { font-size: 0.72rem; color: var(--muted); margin-top: 0.25rem; }
-.upload-btn-label {
-  display: inline-block; margin-top: 0.75rem;
-  background: var(--accent); color: white; font-size: 0.78rem; font-weight: 600;
-  padding: 0.4rem 1rem; border-radius: var(--radius); cursor: pointer;
-  transition: background 0.15s;
-}
-.upload-btn-label:hover { background: var(--accent-hover); }
-.upload-file-list { margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
-.upload-file-item {
-  display: flex; align-items: center; gap: 0.65rem;
-  padding: 0.6rem 0.85rem; background: white; border: 1px solid var(--border);
-  border-radius: var(--radius); font-size: 0.82rem;
-}
-.upload-file-icon { color: var(--accent); font-size: 1rem; flex-shrink: 0; }
-.upload-file-name { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.upload-file-tag  { font-size: 0.65rem; background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); padding: 0.1rem 0.4rem; border-radius: 999px; }
-.upload-file-del  { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 0.1rem; line-height: 1; }
-.upload-file-del:hover { color: var(--danger); }
-
-/* ── Modal ──────────────────────────────────────────────────────────────────── */
-.modal-overlay {
-  display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45);
-  z-index: 50; align-items: center; justify-content: center; padding: 1.5rem;
-  backdrop-filter: blur(2px);
-}
-.modal-overlay.open { display: flex; }
-.modal-box {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-xl); width: 100%; max-width: 540px;
-  max-height: 85vh; overflow-y: auto; padding: 1.75rem;
-  position: relative; box-shadow: var(--shadow-md);
-  animation: modalIn 0.15s ease;
-}
-@keyframes modalIn { from { opacity: 0; transform: scale(.97) translateY(-8px); } }
-.modal-close {
-  position: absolute; top: 1rem; right: 1rem; background: var(--surface-2);
-  border: 1px solid var(--border); color: var(--muted); font-size: 1rem;
-  cursor: pointer; line-height: 1; padding: 0.3rem 0.5rem; border-radius: var(--radius);
-}
-.modal-close:hover { color: var(--text); }
-.modal-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 1.25rem; color: var(--text); }
-.modal-dl { display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem 1rem; font-size: 0.85rem; }
-.modal-dt { color: var(--muted); padding: 0.3rem 0; }
-.modal-dd { color: var(--text-2); padding: 0.3rem 0; }
-
-/* ── Donut chart ────────────────────────────────────────────────────────────── */
-.donut-wrap { display: flex; align-items: center; gap: 1.5rem; }
-.donut-svg  { flex-shrink: 0; }
-.donut-legend { display: flex; flex-direction: column; gap: 0.6rem; flex: 1; min-width: 0; }
-.donut-legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
-.donut-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.donut-legend-label { color: var(--text-2); flex: 1; }
-.donut-legend-val   { font-weight: 700; color: var(--text); }
-
-/* ── Placeholder pages ──────────────────────────────────────────────────────── */
-.placeholder-page {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; padding: 5rem 2rem; text-align: center;
-}
-.placeholder-icon { font-size: 3.5rem; margin-bottom: 1.25rem; opacity: 0.25; }
-.placeholder-title { font-size: 1.2rem; font-weight: 700; color: var(--text-2); margin-bottom: 0.5rem; }
-.placeholder-sub   { font-size: 0.875rem; color: var(--muted); max-width: 300px; }
-.placeholder-badge {
-  margin-top: 1rem; background: var(--warning-bg); color: var(--warning);
-  border: 1px solid var(--warning-border); font-size: 0.72rem; font-weight: 700;
-  padding: 0.3rem 0.85rem; border-radius: 999px;
-}
-
-/* ── Details / Advanced ─────────────────────────────────────────────────────── */
-details { margin-top: 1.5rem; }
-summary {
-  cursor: pointer; font-size: 0.8rem; color: var(--muted); font-weight: 600;
-  list-style: none; display: flex; align-items: center; gap: 0.4rem;
-  padding: 0.6rem 0; border-top: 1px solid var(--border); user-select: none;
-}
-summary::-webkit-details-marker { display: none; }
-summary::before { content: '▸'; transition: transform 0.2s; font-size: 0.65rem; }
-details[open] summary::before { transform: rotate(90deg); }
-.adv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
-
-/* ── Responsive ─────────────────────────────────────────────────────────────── */
-@media (max-width: 1024px) {
-  .kpi-grid    { grid-template-columns: repeat(2, 1fr); }
-  .toggle-group { grid-template-columns: 1fr; }
-}
-@media (max-width: 768px) {
-  :root { --sidebar-w: 0px; }
-  #sidebar { display: none; }
-  #topbar  { left: 0; }
-  .grid-2, .grid-3 { grid-template-columns: 1fr; }
-  .kpi-grid { grid-template-columns: 1fr 1fr; }
-  .page-wrap { padding: 1.25rem; }
-}
+    @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,1fr);} .grid2,.grid3,.toggles,.result-grid{grid-template-columns:1fr;} }
+    @media (max-width:820px){ #sidebar{display:none;} #topbar{left:0;} #content{margin-left:0; width:100%;} }
   </style>
 </head>
 <body>
-
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     SIDEBAR
-══════════════════════════════════════════════════════════════════════════════ -->
-<nav id="sidebar">
-  <div class="sidebar-brand">
-    <div class="brand-icon">İK</div>
-    <div class="brand-text">
-      <div class="brand-name">CogniTwin İK</div>
-      <div class="brand-sub">İşe Alım Platformu</div>
+  <aside id="sidebar">
+    <div class="brand"><div class="brand-badge">İK</div><div><h1>CogniTwin İK</h1><p>Kişisel İK Çalışma Alanı</p></div></div>
+    <div class="profile"><div class="avatar" id="sidebarAvatar">?</div><div><div class="name" id="sidebarUserName">Yükleniyor</div><div class="role">İK Uzmanı · Çevrimiçi</div></div></div>
+    <div class="menu">
+      <button class="nav-btn active" data-target="dashboard" onclick="nav('dashboard')">Anasayfa</button>
+      <button class="nav-btn" data-target="evaluation" onclick="nav('evaluation')">Yeni Değerlendirme</button>
+      <button class="nav-btn" data-target="candidates" onclick="nav('candidates')">Adaylar</button>
+      <button class="nav-btn" data-target="automations" onclick="nav('automations')">İşlem Geçmişi</button>
+      <button class="nav-btn" data-target="reports" onclick="nav('reports')">Raporlar</button>
+      <button class="nav-btn" data-target="calendar" onclick="nav('calendar')">Takvim</button>
+      <button class="nav-btn" data-target="settings" onclick="nav('settings')">Ayarlar</button>
     </div>
-  </div>
+  </aside>
 
-  <div class="sidebar-user-card">
-    <div class="user-avatar" id="sidebarAvatar">?</div>
-    <div class="user-info">
-      <div class="user-name" id="sidebarUserName">Yükleniyor…</div>
-      <div class="user-role">İK Uzmanı · Çevrimiçi</div>
-    </div>
-  </div>
+  <header id="topbar">
+    <div id="topbarTitle">Anasayfa</div>
+    <div class="search"><i>🔍</i><input id="topbarSearch" type="text" placeholder="Ara (aday, pozisyon...)"/></div>
+    <button class="icon-btn" title="Bildirimler">🔔</button>
+    <button class="icon-btn" title="Kullanıcı">👤</button>
+    <button class="quick" onclick="nav('evaluation')">+ Yeni Değerlendirme</button>
+  </header>
 
-  <div class="nav-section" style="flex:1;overflow-y:auto">
-    <div class="nav-section-label">Ana Menü</div>
-    <ul class="nav-list">
-      <li><button class="nav-btn active" data-target="dashboard" onclick="nav('dashboard')">
-        <span class="nav-icon">🏠</span> Anasayfa
-      </button></li>
-      <li><button class="nav-btn" data-target="evaluation" onclick="nav('evaluation')">
-        <span class="nav-icon">✨</span> Yeni Değerlendirme
-      </button></li>
-      <li><button class="nav-btn" data-target="candidates" onclick="nav('candidates')">
-        <span class="nav-icon">👤</span> Adaylar
-      </button></li>
-      <li><button class="nav-btn" data-target="automations" onclick="nav('automations')">
-        <span class="nav-icon">⚡</span> Otomasyonlar
-      </button></li>
-    </ul>
-    <div class="nav-section-label" style="margin-top:1rem">Araçlar</div>
-    <ul class="nav-list">
-      <li><button class="nav-btn" data-target="reports" onclick="nav('reports')">
-        <span class="nav-icon">📊</span> Raporlar
-      </button></li>
-      <li><button class="nav-btn" data-target="calendar" onclick="nav('calendar')">
-        <span class="nav-icon">📅</span> Takvim
-      </button></li>
-      <li><button class="nav-btn" data-target="settings" onclick="nav('settings')">
-        <span class="nav-icon">⚙️</span> Ayarlar
-      </button></li>
-    </ul>
-  </div>
+  <main id="content">
 
-  <div class="sidebar-footer">
-    CogniTwin v1.0 · İK Modülü
-  </div>
-</nav>
-
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     TOP BAR
-══════════════════════════════════════════════════════════════════════════════ -->
-<header id="topbar">
-  <div class="topbar-title" id="topbarTitle">Anasayfa</div>
-  <div class="topbar-search">
-    <span class="topbar-search-icon">🔍</span>
-    <input type="text" placeholder="Ara (aday, pozisyon, rapor…)" id="topbarSearch" />
-  </div>
-  <div class="topbar-actions">
-    <button class="topbar-icon-btn" title="Bildirimler">
-      🔔<span class="notif-dot"></span>
-    </button>
-    <button class="topbar-icon-btn" title="Yardım">❓</button>
-    <button class="topbar-user-btn" onclick="nav('settings')">
-      <div class="topbar-avatar" id="topbarAvatar">?</div>
-      <span id="topbarName">Profil</span>
-    </button>
-    <button class="btn-quick" onclick="nav('evaluation')">+ Hızlı İşlem</button>
-  </div>
-</header>
-
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     MAIN CONTENT
-══════════════════════════════════════════════════════════════════════════════ -->
-<main id="content">
-
-  <!-- ══ ANASAYFA ══════════════════════════════════════════════════════════ -->
-  <section class="page active" data-page="dashboard">
-    <div class="page-wrap">
-      <div class="page-header">
-        <div class="page-header-text">
-          <div class="page-title" id="dashGreeting">Merhaba 👋</div>
-          <div class="page-sub">İşte bugünkü işe alım özetiniz.</div>
-        </div>
-        <div class="page-actions">
-          <button class="btn btn-secondary btn-sm" onclick="initDashboard()">↺ Yenile</button>
-          <button class="btn btn-primary btn-sm" onclick="nav('evaluation')">+ Yeni Değerlendirme</button>
-        </div>
-      </div>
-
+    <!-- DASHBOARD -->
+    <section class="page active" data-page="dashboard"><div class="wrap">
+      <div class="head"><div><h2 id="dashGreeting">Merhaba</h2><div class="sub">Genel bakış ve son aktiviteler.</div></div><button class="btn s" onclick="initDashboard()">Yenile</button></div>
       <div id="dashError"></div>
-
-      <!-- KPI Cards -->
-      <div class="kpi-grid">
-        <div class="kpi-card">
-          <div class="kpi-header">
-            <div class="kpi-label">Toplam Aday</div>
-            <div class="kpi-icon">👤</div>
-          </div>
-          <div class="kpi-value" id="kpiTotal">—</div>
-          <div class="kpi-trend" id="kpiTotalTrend">Değerlendirilen</div>
-        </div>
-        <div class="kpi-card success">
-          <div class="kpi-header">
-            <div class="kpi-label">Önerilen Aday</div>
-            <div class="kpi-icon">✅</div>
-          </div>
-          <div class="kpi-value success" id="kpiRec">—</div>
-          <div class="kpi-trend">Uygun profil</div>
-        </div>
-        <div class="kpi-card info">
-          <div class="kpi-header">
-            <div class="kpi-label">Otomasyon</div>
-            <div class="kpi-icon">⚡</div>
-          </div>
-          <div class="kpi-value" id="kpiAuto">—</div>
-          <div class="kpi-trend">Çalıştırılan işlem</div>
-        </div>
-        <div class="kpi-card warning">
-          <div class="kpi-header">
-            <div class="kpi-label">Kalan Bütçe</div>
-            <div class="kpi-icon">💰</div>
-          </div>
-          <div class="kpi-value accent" id="kpiBudget">—</div>
-          <div class="kpi-trend" id="kpiBudgetSub">Token</div>
-        </div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Toplam Aday</div><div class="v" id="kpiTotal">—</div></div>
+        <div class="kpi"><div class="l">Önerilen Aday</div><div class="v" id="kpiRec">—</div></div>
+        <div class="kpi"><div class="l">Başlatılan İşlem</div><div class="v" id="kpiAuto">—</div></div>
+        <div class="kpi"><div class="l">Kalan Bütçe</div><div class="v" id="kpiBudget">—</div><div class="hint" id="kpiBudgetSub"></div></div>
       </div>
-
-      <!-- Middle row: AI Assistant + Donut -->
-      <div class="grid-3" style="margin-bottom:1.25rem">
-        <div class="card" style="margin-bottom:0">
-          <div class="card-header">
-            <div>
-              <div class="card-title">
-                <div class="card-title-icon">✨</div>
-                İK Asistanı
-              </div>
-              <div class="card-subtitle">Doğal dilde görev verin — AI analiz eder ve otomasyonları tetikler.</div>
-            </div>
-          </div>
-          <div class="chip-row" style="margin-bottom:0.85rem">
-            <button class="chip" onclick="fillChip('Adayları karşılaştır ve en iyi 3 kişiyi öner.')">⚖️ Adayları karşılaştır</button>
-            <button class="chip" onclick="fillChip('Mülakat özeti çıkar ve güçlü/zayıf yönleri listele.')">📋 Mülakat özeti</button>
-            <button class="chip" onclick="fillChip('Kısa liste oluştur, uygun adayları Google Sheets\'e aktar.')">📋 Kısa liste oluştur</button>
-            <button class="chip" onclick="fillChip('En son değerlendirilen aday için Slack bildirimi gönder.')">💬 Slack bildirimi</button>
-          </div>
-          <div class="field">
-            <textarea id="dashCmd" style="min-height:90px;font-size:0.875rem"
-              placeholder="Örn: Ahmet Yılmaz'ın CV'sini değerlendir, uygunsa kısa listeye ekle ve Slack'e bildir."></textarea>
-          </div>
-          <div style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center">
-            <button class="btn btn-primary" id="dashEvalBtn" onclick="submitDashEval()">▶ Görevi Çalıştır</button>
-            <button class="btn btn-secondary" onclick="nav('evaluation')">Detaylı Giriş</button>
-            <span id="dashEvalSpinner" style="display:none;color:var(--muted);font-size:0.82rem;display:none;align-items:center;gap:0.4rem">
-              <span class="spin spin-sm"></span> Analiz ediliyor…
-            </span>
-          </div>
-          <div id="dashEvalNotice" style="margin-top:0.75rem"></div>
-        </div>
-
-        <div class="card" style="margin-bottom:0">
-          <div class="card-header">
-            <div class="card-title">
-              <div class="card-title-icon">📊</div>
-              Aday Dağılımı
-            </div>
-          </div>
-          <div class="donut-wrap" id="donutWrap">
-            <svg class="donut-svg" id="donutSvg" viewBox="0 0 120 120" width="110" height="110">
-              <circle cx="60" cy="60" r="44" fill="none" stroke="#e2e8f0" stroke-width="18"/>
-              <circle id="donutGreen"  cx="60" cy="60" r="44" fill="none" stroke="#16a34a" stroke-width="18" stroke-dasharray="0 276.5" transform="rotate(-90 60 60)"/>
-              <circle id="donutYellow" cx="60" cy="60" r="44" fill="none" stroke="#d97706" stroke-width="18" stroke-dasharray="0 276.5" transform="rotate(-90 60 60)"/>
-              <circle id="donutRed"    cx="60" cy="60" r="44" fill="none" stroke="#dc2626" stroke-width="18" stroke-dasharray="0 276.5" transform="rotate(-90 60 60)"/>
-              <text x="60" y="55" text-anchor="middle" font-size="16" font-weight="800" fill="#1e293b" id="donutNum">0</text>
-              <text x="60" y="68" text-anchor="middle" font-size="7" fill="#94a3b8">Aday</text>
-            </svg>
-            <div class="donut-legend" id="donutLegend">
-              <div class="donut-legend-item">
-                <div class="donut-dot" style="background:#16a34a"></div>
-                <span class="donut-legend-label">Önerilen</span>
-                <span class="donut-legend-val" id="donutGreenVal">0</span>
-              </div>
-              <div class="donut-legend-item">
-                <div class="donut-dot" style="background:#d97706"></div>
-                <span class="donut-legend-label">Şartlı</span>
-                <span class="donut-legend-val" id="donutYellowVal">0</span>
-              </div>
-              <div class="donut-legend-item">
-                <div class="donut-dot" style="background:#dc2626"></div>
-                <span class="donut-legend-label">Önerilmez</span>
-                <span class="donut-legend-val" id="donutRedVal">0</span>
-              </div>
-              <div class="donut-legend-item">
-                <div class="donut-dot" style="background:#94a3b8"></div>
-                <span class="donut-legend-label">Diğer</span>
-                <span class="donut-legend-val" id="donutGrayVal">0</span>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div class="card">
+        <div class="ct">Hızlı Başlangıç</div>
+        <div class="hint" style="margin-bottom:10px">Yeni bir aday değerlendirmesi başlatmak için tıklayın.</div>
+        <button class="btn p" onclick="nav('evaluation')">Yeni Değerlendirme Başlat</button>
       </div>
-
-      <!-- Bottom row: Recent tables -->
-      <div class="grid-2">
-        <div class="card" style="margin-bottom:0">
-          <div class="card-header">
-            <div class="card-title">
-              <div class="card-title-icon">🕐</div>
-              Son Değerlendirmeler
-            </div>
-            <button class="btn btn-ghost btn-sm" onclick="nav('candidates')">Tümü →</button>
-          </div>
-          <div id="dashCandidates"><div class="loading-row"><span class="spin"></span></div></div>
-        </div>
-        <div class="card" style="margin-bottom:0">
-          <div class="card-header">
-            <div class="card-title">
-              <div class="card-title-icon">⚡</div>
-              Son Otomasyonlar
-            </div>
-            <button class="btn btn-ghost btn-sm" onclick="nav('automations')">Tümü →</button>
-          </div>
-          <div id="dashAutomations"><div class="loading-row"><span class="spin"></span></div></div>
-        </div>
+      <div class="grid3">
+        <div class="card"><div class="ct">Son Değerlendirmeler</div><div id="dashCandidates"></div></div>
+        <div class="card"><div class="ct">Son İşlem Geçmişi</div><div id="dashAutomations"></div></div>
+        <div class="card"><div class="ct">Aday Dağılımı</div><div class="hint" style="line-height:2">Önerilen: <strong id="donutGreenVal">0</strong><br>Şartlı: <strong id="donutYellowVal">0</strong><br>Önerilmez: <strong id="donutRedVal">0</strong><br>Diğer: <strong id="donutGrayVal">0</strong></div></div>
       </div>
-    </div>
-  </section>
+    </div></section>
 
-  <!-- ══ YENİ DEĞERLENDİRME ════════════════════════════════════════════════ -->
-  <section class="page" data-page="evaluation">
-    <div class="page-wrap">
-      <div class="page-header">
-        <div class="page-header-text">
-          <div class="page-title">Yeni Değerlendirme</div>
-          <div class="page-sub">Adayı doğal dilde tanımlayın — ajan analiz eder ve isteğe bağlı aksiyonları gerçekleştirir.</div>
-        </div>
-      </div>
-
+    <!-- NEW EVALUATION -->
+    <section class="page" data-page="evaluation"><div class="wrap">
+      <div class="head"><div><h2>Yeni Değerlendirme</h2><div class="sub">CV yükle · görevi yaz · agentı çalıştır.</div></div></div>
       <div id="evalError"></div>
 
-      <!-- AI Assistant Card -->
+      <!-- A: CV Upload -->
       <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title"><div class="card-title-icon">✨</div>İK Asistanı</div>
-            <div class="card-subtitle">Ctrl+Enter ile çalıştırabilirsiniz.</div>
-          </div>
+        <div class="ct">Aday CV'sini Yükle</div>
+        <div id="dropZone" class="upload" onclick="$('cvFileInput').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+          <div style="font-size:15px;font-weight:600;margin-bottom:4px">CV veya belgeyi buraya bırakın</div>
+          <div class="hint">PDF, DOCX veya TXT · Tıklayarak da seçebilirsiniz</div>
         </div>
-
-        <!-- Suggestion chips -->
-        <div style="margin-bottom:1rem">
-          <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem">Hızlı Şablonlar</div>
-          <div class="chip-row">
-            <button class="chip" onclick="fillEvalChip('adayı değerlendir, kısa listeye ekle ve Slack\'e bildir.')">📋 Değerlendir + Kısa Liste + Slack</button>
-            <button class="chip" onclick="fillEvalChip('adayı değerlendir ve mülakat soruları oluştur.')">❓ Değerlendir + Mülakat Soruları</button>
-            <button class="chip" onclick="fillEvalChip('adaya davet e-postası taslağı hazırla.')">✉️ E-posta Taslağı</button>
-            <button class="chip" onclick="fillEvalChip('adaylar arasında karşılaştırmalı analiz yap.')">⚖️ Karşılaştırmalı Analiz</button>
-          </div>
-        </div>
-
-        <div class="field" style="margin-bottom:1rem">
-          <label for="agentCmd">Görev Komutu</label>
-          <textarea id="agentCmd" style="min-height:180px;font-size:0.9rem;line-height:1.65"
-            placeholder="Örnek: Ahmet Yılmaz adayını Backend Developer pozisyonu için değerlendir, uygunsa Slack'e bildir ve kısa listeye ekle.
-
-Aday:
-Python, FastAPI, Docker ve PostgreSQL biliyor.
-3 yıl backend deneyimi var.
-
-İlan:
-Gerekli yetkinlikler: Python, FastAPI, Docker, PostgreSQL"></textarea>
-          <span class="hint">CV metnini buraya yapıştırabilir veya aşağıdan dosya yükleyebilirsiniz.</span>
-        </div>
-
-        <div style="display:flex;gap:0.65rem;align-items:center;flex-wrap:wrap">
-          <button class="btn btn-primary" id="evalBtn" onclick="submitEval()">▶ Görevi Çalıştır</button>
-          <button class="btn btn-secondary" onclick="fillEvalChip('taslak oluştur ve rapor hazırla.')">📄 Taslak Oluştur</button>
-          <button class="btn btn-secondary" onclick="appendEvalAction('Aksiyon: notify_slack')">💬 Slack'e Bildir</button>
-          <span id="evalSpinner" style="display:none;color:var(--muted);font-size:0.82rem;align-items:center;gap:0.4rem">
-            <span class="spin spin-sm"></span> Ajan analiz ediyor…
-          </span>
-        </div>
+        <input id="cvFileInput" type="file" accept=".pdf,.docx,.txt" multiple style="display:none" onchange="handleFileSelect(event)" />
+        <div id="uploadedFiles" class="file-list"></div>
+        <div id="cvStatus"></div>
       </div>
 
-      <!-- Automation toggles -->
+      <!-- B: Agent Task -->
       <div class="card">
-        <div class="card-header">
-          <div class="card-title"><div class="card-title-icon">⚡</div>Otomasyon Aksiyonları</div>
-          <div style="font-size:0.78rem;color:var(--muted)">Seçilenler otomatik tetiklenir</div>
+        <div class="ct">Agent'a Görev Ver</div>
+        <div class="chips" style="margin-bottom:8px">
+          <button class="chip" onclick="fillEvalChip('Bu adayı değerlendir ve uygunsa kısa listeye ekle')">Değerlendir + kısa listeye ekle</button>
+          <button class="chip" onclick="fillEvalChip('Mülakat özeti çıkar ve güçlü/zayıf yönleri listele')">Mülakat özeti çıkar</button>
+          <button class="chip" onclick="fillEvalChip('Adayın teknik yetkinliklerini pozisyon gereksinimleriyle karşılaştır')">Teknik uygunluk karşılaştır</button>
         </div>
-        <div class="toggle-group">
-          <label class="toggle-item">
-            <input type="checkbox" id="togSlack" />
-            <span class="toggle-switch"></span>
-            <span class="toggle-body">
-              <div class="toggle-label">💬 Slack Bildirimi</div>
-              <div class="toggle-sub">Ekibinize anlık bildirim gönderir</div>
-            </span>
-          </label>
-          <label class="toggle-item">
-            <input type="checkbox" id="togSheets" />
-            <span class="toggle-switch"></span>
-            <span class="toggle-body">
-              <div class="toggle-label">📋 Kısa Listeye Ekle</div>
-              <div class="toggle-sub">Aday bilgisini tabloya kaydeder</div>
-            </span>
-          </label>
-          <label class="toggle-item">
-            <input type="checkbox" id="togEmail" />
-            <span class="toggle-switch"></span>
-            <span class="toggle-body">
-              <div class="toggle-label">✉️ E-posta Taslağı</div>
-              <div class="toggle-sub">Adaya özel davet mesajı oluşturur</div>
-            </span>
-          </label>
-          <label class="toggle-item">
-            <input type="checkbox" id="togCalendar" />
-            <span class="toggle-switch"></span>
-            <span class="toggle-body">
-              <div class="toggle-label">📅 Takvim Etkinliği</div>
-              <div class="toggle-sub">Mülakat için takvim oluşturur</div>
-            </span>
-          </label>
+        <textarea id="agentCmd" style="min-height:90px" placeholder="Örn: Bu adayı değerlendir. Uygunsa ekibe bildir ve kısa listeye ekle."></textarea>
+        <div class="btns" style="margin-top:12px">
+          <button class="btn p" id="evalBtn" onclick="submitEval()">Agentı Çalıştır</button>
+          <span id="evalSpinner" class="hint" style="display:none;align-self:center">Çalışıyor, lütfen bekleyin...</span>
         </div>
+        <div class="hint" style="margin-top:6px">Ctrl + Enter ile de başlatabilirsiniz.</div>
       </div>
 
-      <!-- CV Upload card -->
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title"><div class="card-title-icon">📁</div>CV / Dosya Yükleme</div>
-            <div class="card-subtitle">PDF veya DOCX yükleyin — metin içeriğini göreve kopyalayabilirsiniz.</div>
-          </div>
-        </div>
-
-        <div class="upload-zone" id="dropZone"
-             onclick="$('cvFileInput').click()"
-             ondragover="handleDragOver(event)"
-             ondragleave="handleDragLeave(event)"
-             ondrop="handleDrop(event)">
-          <div class="upload-icon">📤</div>
-          <div class="upload-label">Dosyayı sürükleyip bırakın veya seçin</div>
-          <div class="upload-hint">PDF, DOCX, TXT · Maks. 5 MB</div>
-          <label class="upload-btn-label" onclick="event.stopPropagation();$('cvFileInput').click()">
-            Dosya Seç
-          </label>
-          <input type="file" id="cvFileInput" accept=".pdf,.docx,.txt,.doc"
-                 style="display:none" onchange="handleFileSelect(event)" multiple />
-        </div>
-
-        <div id="uploadedFiles" class="upload-file-list"></div>
-
-        <div class="notice notice-info" style="margin-top:1rem;margin-bottom:0">
-          <span class="notice-icon">ℹ️</span>
-          <span>Yüklenen dosyalar <strong>yerel önizleme</strong> olarak gösterilir. CV metnini kopyalayıp yukarıdaki görev alanına yapıştırın.</span>
-        </div>
-      </div>
-
-      <!-- Evaluation result -->
-      <div id="evalResult">
-        <div class="result-card">
-          <div class="card-header" style="margin-bottom:1rem">
-            <div class="card-title"><div class="card-title-icon">📄</div>Değerlendirme Sonucu</div>
-          </div>
-          <div class="result-top">
-            <div class="result-score-ring">
-              <div class="result-score-num" id="rScore">—</div>
-              <div class="result-score-sub">/ 100</div>
-            </div>
-            <div class="result-meta">
-              <div class="result-name" id="rName">—</div>
-              <div class="result-pos" id="rPos">—</div>
-              <div id="rDecision"></div>
-              <div class="result-pills" id="rPills" style="margin-top:0.65rem"></div>
+      <!-- C: Optional details (collapsed) -->
+      <div class="card" style="padding:0">
+        <details>
+          <summary style="padding:14px 16px;font-size:14px;font-weight:600;color:#374151;list-style:none;display:flex;justify-content:space-between">
+            <span>Bilgileri düzenle</span>
+            <span class="hint" style="font-weight:normal;font-size:12px">opsiyonel — agent otomatik çıkarır</span>
+          </summary>
+          <div style="padding:0 16px 16px;border-top:1px solid var(--line)">
+            <div class="hint" style="margin-bottom:10px;margin-top:10px">Agent CV'den çıkarabildiği bilgileri otomatik kullanır. Düzeltmek isterseniz buradan düzenleyin.</div>
+            <label class="field-label" for="candidateName">Aday Adı Soyadı</label>
+            <input id="candidateName" type="text" placeholder="CV'den çıkarılamazsa boş bırakabilirsiniz" style="margin-bottom:8px"/>
+            <label class="field-label" for="candidatePosition">Başvurulan Pozisyon</label>
+            <input id="candidatePosition" type="text" placeholder="CV'den çıkarılamazsa boş bırakabilirsiniz" style="margin-bottom:8px"/>
+            <label class="field-label" for="candidateInfo">CV Özeti / Ek Bilgi</label>
+            <textarea id="candidateInfo" style="min-height:80px" placeholder="Deneyim, yetkinlikler, öne çıkan projeler..."></textarea>
+            <div class="field-label" style="margin-top:14px;margin-bottom:8px">Takip İşlemleri <span class="hint">(görevi yazarak da aktif edilir)</span></div>
+            <div class="toggles">
+              <label class="toggle"><input id="togSlack" type="checkbox"/><div class="toggle-text"><span class="tl">Ekibe bildir</span><span class="th">Sonucu ekip kanalına iletir.</span></div></label>
+              <label class="toggle"><input id="togSheets" type="checkbox"/><div class="toggle-text"><span class="tl">Kısa listeye ekle</span><span class="th">Uygun adayı takip listesine kaydeder.</span></div></label>
+              <label class="toggle"><input id="togEmail" type="checkbox"/><div class="toggle-text"><span class="tl">E-posta taslağı hazırla</span><span class="th">Adaya iletişim metni oluşturur.</span></div></label>
+              <label class="toggle"><input id="togCalendar" type="checkbox"/><div class="toggle-text"><span class="tl">Görüşme planı oluştur</span><span class="th">Mülakat için takvim etkinliği hazırlar.</span></div></label>
+              <label class="toggle"><input id="togAts" type="checkbox"/><div class="toggle-text"><span class="tl">Aday kaydını kaydet</span><span class="th">Sonucu aday takip sistemine ekler.</span></div></label>
             </div>
           </div>
-          <div class="result-text-wrap" id="rText"></div>
-        </div>
+        </details>
       </div>
-    </div>
-  </section>
 
-  <!-- ══ ADAYLAR ═══════════════════════════════════════════════════════════ -->
-  <section class="page" data-page="candidates">
-    <div class="page-wrap">
-      <div class="page-header">
-        <div class="page-header-text">
-          <div class="page-title">Adaylar</div>
-          <div class="page-sub">Tüm değerlendirme geçmişiniz.</div>
+      <!-- D: Result -->
+      <div id="evalResult" class="card" style="display:none">
+        <div class="ct">Değerlendirme Sonucu</div>
+        <div id="rDecision" style="margin-bottom:10px"></div>
+        <div class="result-grid">
+          <div class="rf"><div class="rf-label">Aday</div><div class="rf-value" id="rName">—</div></div>
+          <div class="rf"><div class="rf-label">Pozisyon</div><div class="rf-value" id="rPos">—</div></div>
+          <div class="rf"><div class="rf-label">Uygunluk Puanı</div><div class="rf-value" id="rScore">—</div></div>
+          <div class="rf"><div class="rf-label">Agentın Başlattığı İşlemler</div><div class="rf-value" id="rActions">—</div></div>
         </div>
-        <div class="page-actions">
-          <button class="btn btn-ghost btn-sm" onclick="loadCandidates()">↺ Yenile</button>
-          <button class="btn btn-primary btn-sm" onclick="nav('evaluation')">+ Yeni Değerlendirme</button>
+        <div style="margin-bottom:8px"><div class="rf-label">Güçlü Yönler</div><div id="rStrengths" style="margin-top:4px"></div></div>
+        <div style="margin-bottom:8px"><div class="rf-label">Eksik Yetkinlikler</div><div id="rMissing" style="margin-top:4px"></div></div>
+        <div><div class="rf-label">Değerlendirme Özeti</div><div id="rText" style="white-space:pre-wrap;font-size:13px;color:#374151;line-height:1.6;margin-top:4px"></div></div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)" class="btns">
+          <button class="btn s" onclick="nav('candidates')">Adaylar →</button>
+          <button class="btn s" onclick="nav('automations')">İşlem Geçmişi →</button>
         </div>
       </div>
+    </div></section>
+
+    <!-- CANDIDATES -->
+    <section class="page" data-page="candidates"><div class="wrap">
+      <div class="head"><div><h2>Adaylar</h2><div class="sub">Değerlendirilen adayların kayıtları.</div></div><button class="btn s" onclick="loadCandidates()">Yenile</button></div>
       <div id="candidateError"></div>
-      <div class="card" style="padding:0;overflow:hidden">
-        <div id="candidateContent"><div class="loading-row"><span class="spin"></span></div></div>
-      </div>
-    </div>
-  </section>
+      <div id="candidateHidden" style="display:none" class="notice-warn"></div>
+      <div class="card" style="margin-bottom:0"><div id="candidateContent"></div></div>
+    </div></section>
 
-  <!-- ══ OTOMASYONLAR ══════════════════════════════════════════════════════ -->
-  <section class="page" data-page="automations">
-    <div class="page-wrap">
-      <div class="page-header">
-        <div class="page-header-text">
-          <div class="page-title">Otomasyonlar</div>
-          <div class="page-sub">n8n üzerinden tetiklenen tüm işlemler.</div>
-        </div>
-        <div class="page-actions">
-          <button class="btn btn-ghost btn-sm" onclick="loadAutomations()">↺ Yenile</button>
-        </div>
-      </div>
+    <!-- PROCESS HISTORY -->
+    <section class="page" data-page="automations"><div class="wrap">
+      <div class="head"><div><h2>İşlem Geçmişi</h2><div class="sub">Başlatılan süreçlerin zaman çizelgesi.</div></div><button class="btn s" onclick="loadAutomations()">Yenile</button></div>
       <div id="automationError"></div>
-      <div class="card" style="padding:0;overflow:hidden">
-        <div id="automationContent"><div class="loading-row"><span class="spin"></span></div></div>
-      </div>
-    </div>
-  </section>
+      <div class="card" style="margin-bottom:0"><div id="automationContent"></div></div>
+    </div></section>
 
-  <!-- ══ RAPORLAR ══════════════════════════════════════════════════════════ -->
-  <section class="page" data-page="reports">
-    <div class="page-wrap">
-      <div class="page-header">
-        <div class="page-header-text">
-          <div class="page-title">Raporlar</div>
-          <div class="page-sub">İşe alım süreci analizleri ve dışa aktarma.</div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="placeholder-page">
-          <div class="placeholder-icon">📊</div>
-          <div class="placeholder-title">Raporlar Geliyor</div>
-          <div class="placeholder-sub">Haftalık değerlendirme özetleri, ilan performansı ve otomasyon raporları bu ekranda yer alacak.</div>
-          <div class="placeholder-badge">Yakında</div>
-        </div>
-      </div>
-    </div>
-  </section>
+    <!-- REPORTS -->
+    <section class="page" data-page="reports"><div class="wrap">
+      <div class="head"><div><h2>Raporlar</h2></div></div>
+      <div class="card"><div class="empty">Raporlar yakında bu alanda.</div></div>
+    </div></section>
 
-  <!-- ══ TAKVİM ════════════════════════════════════════════════════════════ -->
-  <section class="page" data-page="calendar">
-    <div class="page-wrap">
-      <div class="page-header">
-        <div class="page-header-text">
-          <div class="page-title">Takvim</div>
-          <div class="page-sub">Mülakat ve etkinlik takvimi.</div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="placeholder-page">
-          <div class="placeholder-icon">📅</div>
-          <div class="placeholder-title">Takvim Entegrasyonu</div>
-          <div class="placeholder-sub">Google Takvim entegrasyonu ile mülakatları planlayın ve hatırlatıcı alın.</div>
-          <div class="placeholder-badge">Yakında</div>
-        </div>
-      </div>
-    </div>
-  </section>
+    <!-- CALENDAR -->
+    <section class="page" data-page="calendar"><div class="wrap">
+      <div class="head"><div><h2>Takvim</h2><div class="sub">Planlanmış görüşmeler.</div></div><button class="btn s" onclick="loadCalendar()">Yenile</button></div>
+      <div id="calendarError"></div>
+      <div class="notice" style="margin-bottom:12px">Görüşme planları, değerlendirme sırasında "Görüşme Planı Oluştur" seçildiğinde burada listelenir. Gerçek zamanlı takvim entegrasyonu yakında eklenecek.</div>
+      <div class="card" style="margin-bottom:0"><div id="calendarContent"><div class="empty">Henüz planlanmış görüşme yok.</div></div></div>
+    </div></section>
 
-  <!-- ══ AYARLAR ═══════════════════════════════════════════════════════════ -->
-  <section class="page" data-page="settings">
-    <div class="page-wrap">
-      <div class="page-header">
-        <div class="page-header-text">
-          <div class="page-title">Ayarlar</div>
-          <div class="page-sub">Kişisel tercihlerinizi ve asistan davranışını yönetin.</div>
-        </div>
-      </div>
-
+    <!-- SETTINGS -->
+    <section class="page" data-page="settings"><div class="wrap">
+      <div class="head"><div><h2>Ayarlar</h2></div></div>
       <div id="profileError"></div>
-
-      <div class="grid-2" style="align-items:start">
-        <!-- Profile card -->
-        <div class="card" style="margin-bottom:0">
-          <div class="card-header">
-            <div class="card-title"><div class="card-title-icon">👤</div>Profil Bilgileri</div>
-          </div>
-          <div class="form-grid">
-            <div class="field">
-              <label for="pName">Ad Soyad</label>
-              <input type="text" id="pName" placeholder="Adınız" />
-            </div>
-            <div class="field">
-              <label for="pCompany">Şirket</label>
-              <input type="text" id="pCompany" placeholder="Şirket adı" />
-            </div>
-            <div class="field">
-              <label for="pTone">İletişim Tonu</label>
-              <select id="pTone">
-                <option value="professional">Profesyonel</option>
-                <option value="formal">Resmi</option>
-                <option value="friendly">Samimi</option>
-                <option value="casual">Rahat</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="pStrictness">Filtreleme Hassasiyeti</label>
-              <select id="pStrictness">
-                <option value="moderate">Dengeli</option>
-                <option value="strict">Katı — tüm kriterler zorunlu</option>
-                <option value="flexible">Esnek — genel uyum yeterli</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="pShortlist">Kısa Liste Boyutu</label>
-              <input type="number" id="pShortlist" min="1" max="20" value="5" />
-              <span class="hint">En fazla 20 aday</span>
-            </div>
-          </div>
-          <div style="margin-top:1.25rem;display:flex;gap:0.65rem;align-items:center">
-            <button class="btn btn-primary btn-sm" onclick="saveProfile()">Kaydet</button>
-            <span id="profileSpinner" style="display:none"><span class="spin spin-sm"></span></span>
-            <div id="profileInline"></div>
-          </div>
+      <div class="grid2">
+        <div class="card">
+          <div class="ct">Profil</div>
+          <label class="field-label" for="pName">Ad Soyad</label>
+          <input id="pName" type="text" placeholder="Ad Soyad" style="margin-bottom:8px"/>
+          <label class="field-label" for="pCompany">Şirket</label>
+          <input id="pCompany" type="text" placeholder="Şirket adı" style="margin-bottom:8px"/>
+          <label class="field-label" for="pTone">İletişim Tonu</label>
+          <select id="pTone" style="margin-bottom:8px"><option value="professional">Profesyonel</option><option value="formal">Resmi</option><option value="friendly">Samimi</option></select>
+          <label class="field-label" for="pStrictness">Değerlendirme Hassasiyeti</label>
+          <select id="pStrictness" style="margin-bottom:8px"><option value="moderate">Dengeli</option><option value="strict">Katı</option><option value="flexible">Esnek</option></select>
+          <label class="field-label" for="pShortlist">Kısa Liste Boyutu</label>
+          <input id="pShortlist" type="number" min="1" max="20" value="5" style="margin-bottom:8px"/>
+          <div class="btns"><button class="btn p" onclick="saveProfile()">Kaydet</button><span id="profileSpinner" style="display:none" class="hint">Kaydediliyor...</span><span id="profileInline"></span></div>
         </div>
-
-        <!-- Technical / Advanced settings -->
-        <div class="card" style="margin-bottom:0">
-          <div class="card-header">
-            <div class="card-title"><div class="card-title-icon">🔧</div>Bağlantı Ayarları</div>
-          </div>
-          <div class="notice notice-info" style="margin-bottom:1rem">
-            <span class="notice-icon">ℹ️</span>
-            <span>Bu ayarlar sistem entegrasyonu içindir. Değiştirmeden önce yöneticinize danışın.</span>
-          </div>
-          <div class="form-grid form-single">
-            <div class="field">
-              <label for="advApi">API Adresi</label>
-              <input type="text" id="advApi" placeholder="http://localhost:8600" />
-            </div>
-            <div class="field">
-              <label for="advRid">Recruiter ID</label>
-              <input type="text" id="advRid" placeholder="recruiter-id" />
-              <span class="hint">Verilerinizin size özel kalmasını sağlar.</span>
-            </div>
-          </div>
-          <div style="margin-top:1rem;display:flex;gap:0.65rem;align-items:center">
-            <button class="btn btn-secondary btn-sm" onclick="applyAdvanced()">Uygula</button>
-            <div id="advInline"></div>
-          </div>
-
-          <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--border)">
-            <div class="card-title" style="font-size:0.82rem;margin-bottom:0.75rem">
-              <div class="card-title-icon" style="width:22px;height:22px;font-size:0.7rem">💰</div>
-              Token Bütçesi
-            </div>
-            <div id="settingsBudget" style="font-size:0.85rem;color:var(--text-2)">Yükleniyor…</div>
-          </div>
+        <div class="card">
+          <div class="ct">Teknik Kurulum</div>
+          <div id="settingsBudget" class="hint" style="margin-bottom:12px">Yükleniyor...</div>
+          <details>
+            <summary>Geliştirici Ayarları</summary>
+            <div class="hint" style="margin:8px 0">Bu alanlar teknik kurulum içindir. Normal kullanımda değiştirmeniz gerekmez.</div>
+            <label class="field-label" for="advApi">API Adresi</label>
+            <input id="advApi" type="text" placeholder="http://localhost:8600" style="margin-bottom:8px"/>
+            <label class="field-label" for="advRid">Kullanıcı Kimliği</label>
+            <input id="advRid" type="text" placeholder="recruiter-id" style="margin-bottom:8px"/>
+            <div class="btns"><button class="btn s" onclick="applyAdvanced()">Uygula</button><span id="advInline"></span></div>
+          </details>
         </div>
       </div>
-    </div>
-  </section>
+    </div></section>
 
-</main><!-- end #content -->
-
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     CANDIDATE DETAIL MODAL
-══════════════════════════════════════════════════════════════════════════════ -->
-<div id="modal" class="modal-overlay" onclick="closeModal(event)">
-  <div class="modal-box">
-    <button class="modal-close" onclick="closeModal()">✕</button>
-    <div id="modalContent"></div>
-  </div>
-</div>
+  </main>
 
 <script>
-/* ── State ─────────────────────────────────────────────────────────────────── */
-const S = {
-  api: localStorage.getItem('hr_api_base') || 'http://localhost:8600',
-  rid: localStorage.getItem('hr_recruiter_id') || 'demo-recruiter',
-};
+const S={api:localStorage.getItem('hr_api_base')||'http://localhost:8600',rid:localStorage.getItem('hr_recruiter_id')||'demo-recruiter'};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const PAGE_TITLES={dashboard:'Anasayfa',evaluation:'Yeni Değerlendirme',candidates:'Adaylar',automations:'İşlem Geçmişi',reports:'Raporlar',calendar:'Takvim',settings:'Ayarlar'};
 
-/* ── DOM helpers ───────────────────────────────────────────────────────────── */
-const $ = id => document.getElementById(id);
-const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-const PAGE_TITLES = {
-  dashboard:   'Anasayfa',
-  evaluation:  'Yeni Değerlendirme',
-  candidates:  'Adaylar',
-  automations: 'Otomasyonlar',
-  reports:     'Raporlar',
-  calendar:    'Takvim',
-  settings:    'Ayarlar',
-};
-
-/* ── Navigation ────────────────────────────────────────────────────────────── */
-function nav(page) {
-  document.querySelectorAll('.page').forEach(el =>
-    el.classList.toggle('active', el.dataset.page === page));
-  document.querySelectorAll('.nav-btn').forEach(el =>
-    el.classList.toggle('active', el.dataset.target === page));
-  $('topbarTitle').textContent = PAGE_TITLES[page] || page;
-
-  if (page === 'dashboard')   initDashboard();
-  if (page === 'candidates')  loadCandidates();
-  if (page === 'automations') loadAutomations();
-  if (page === 'settings')    loadProfile();
+function nav(page){
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.dataset.page===page));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.target===page));
+  $('topbarTitle').textContent=PAGE_TITLES[page]||page;
+  if(page==='dashboard')initDashboard();
+  if(page==='candidates')loadCandidates();
+  if(page==='automations')loadAutomations();
+  if(page==='settings')loadProfile();
+  if(page==='calendar')loadCalendar();
 }
 
-/* ── API helpers ───────────────────────────────────────────────────────────── */
-function hdrs() {
-  return { 'Content-Type': 'application/json', 'X-Recruiter-ID': S.rid };
-}
+function hdrs(){return{'Content-Type':'application/json','X-Recruiter-ID':S.rid};}
 
-async function apiFetch(method, path, body) {
-  try {
-    const opts = { method, headers: hdrs() };
-    if (body !== undefined) opts.body = JSON.stringify(body);
-    const r = await fetch(S.api + path, opts);
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      throw new Error(j.detail || `Sunucu hatası (${r.status})`);
-    }
+async function apiFetch(method,path,body){
+  try{
+    const o={method,headers:hdrs()};
+    if(body!==undefined)o.body=JSON.stringify(body);
+    const r=await fetch(S.api+path,o);
+    if(!r.ok){const j=await r.json().catch(()=>({})); throw new Error(j.detail||`Sunucu hatası (${r.status})`);}
     return r.json();
-  } catch (e) {
-    if (e.message === 'Failed to fetch' || e.name === 'TypeError') {
-      throw new Error('Veriler şu anda yüklenemiyor. Bağlantıyı kontrol edip tekrar deneyin.');
-    }
+  }catch(e){
+    if(e.message==='Failed to fetch'||e.name==='TypeError') throw new Error('Veriler şu anda yüklenemiyor. Lütfen bağlantıyı kontrol edip tekrar deneyin.');
     throw e;
   }
 }
 
-/* ── Notice helpers ────────────────────────────────────────────────────────── */
-function showErr(elId, msg) {
-  $(elId).innerHTML = `<div class="notice notice-err"><span class="notice-icon">⚠️</span><span>${esc(msg)}</span></div>`;
-}
-function showOk(elId, msg) {
-  $(elId).innerHTML = `<div class="notice notice-ok"><span class="notice-icon">✅</span><span>${esc(msg)}</span></div>`;
-}
-function clearNotice(elId) { if ($(elId)) $(elId).innerHTML = ''; }
-function loading(elId) {
-  $(elId).innerHTML = `<div class="loading-row"><span class="spin"></span> Yükleniyor…</div>`;
+function showErr(id,msg){$(id).innerHTML=`<div class="error">${esc(msg)}</div>`;}
+function clearNotice(id){if($(id))$(id).innerHTML='';}
+
+function decBadge(d){
+  if(!d)return '';
+  const l=d.toLowerCase();
+  if(l.includes('şartlı'))return '<span class="badge b-y">Şartlı Önerilir</span>';
+  if(l.includes('önerilmez'))return '<span class="badge b-r">Önerilmez</span>';
+  if(l.includes('önerilir'))return '<span class="badge b-g">Önerilir</span>';
+  return `<span class="badge b-b">${esc(d)}</span>`;
 }
 
-/* ── Badge helpers ─────────────────────────────────────────────────────────── */
-function decBadge(d) {
-  if (!d) return '';
-  const l = d.toLowerCase();
-  if (l.includes('şartlı'))   return `<span class="badge badge-yellow">${esc(d)}</span>`;
-  if (l.includes('önerilmez')) return `<span class="badge badge-red">${esc(d)}</span>`;
-  if (l.includes('önerilir'))  return `<span class="badge badge-green">${esc(d)}</span>`;
-  return `<span class="badge badge-gray">${esc(d)}</span>`;
+function statusBadge(s){
+  if(!s||s==='none')return '<span class="badge b-b">Beklemede</span>';
+  if(s==='dispatched'||s==='triggered')return '<span class="badge b-g">Tamamlandı</span>';
+  if(s==='skipped')return '<span class="badge b-y">Planlandı</span>';
+  return '<span class="badge b-b">Başlatıldı</span>';
 }
 
-function statusBadge(s) {
-  if (!s || s === 'none') return '<span class="badge badge-gray">—</span>';
-  if (s === 'dispatched' || s === 'triggered')
-    return `<span class="badge badge-green">${esc(s)}</span>`;
-  if (s === 'skipped') return `<span class="badge badge-yellow">${esc(s)}</span>`;
-  return `<span class="badge badge-blue">${esc(s)}</span>`;
-}
-
-const ACTION_LABELS = {
-  notify_slack:         '💬 Slack Bildirimi',
-  shortlist_to_sheets:  '📋 Kısa Liste',
-  send_outreach_email:  '✉️ E-posta',
-  create_calendar_event:'📅 Takvim',
-  log_to_ats:           '🗂 ATS Kaydı',
+const ACTION_LABELS={
+  notify_slack:'Ekip Bildirimi',
+  shortlist_to_sheets:'Kısa Listeye Eklendi',
+  send_outreach_email:'E-posta Taslağı',
+  create_calendar_event:'Görüşme Planı',
+  log_to_ats:'Aday Kaydı'
 };
-function actionLabel(t) { return ACTION_LABELS[t] || esc(t); }
+function actionLabel(t){return ACTION_LABELS[t]||'İşlem';}
+function fmtDate(iso){return iso?iso.replace('T',' ').slice(0,16):'—';}
+function emptyState(msg){return `<div class="empty">${esc(msg)}</div>`;}
+function fillEvalChip(t){const ta=$('agentCmd'); ta.value=ta.value?ta.value+'\n'+t:t; ta.focus();}
 
-function fmtDate(iso) {
-  if (!iso) return '—';
-  return iso.replace('T',' ').slice(0,16);
-}
-
-function emptyState(icon, title, msg, btnLabel, btnTarget) {
-  const btn = btnLabel
-    ? `<button class="btn btn-primary btn-sm" style="margin-top:1rem" onclick="nav('${btnTarget}')">${btnLabel}</button>`
-    : '';
-  return `<div class="empty-state">
-    <div class="empty-icon">${icon}</div>
-    <div class="empty-title">${esc(title)}</div>
-    <div class="empty-msg">${esc(msg)}</div>
-    ${btn}
-  </div>`;
-}
-
-/* ── Donut chart ───────────────────────────────────────────────────────────── */
-function updateDonut(rows) {
-  const total = rows.length;
-  $('donutNum').textContent = total;
-
-  const green  = rows.filter(c => c.decision && c.decision.toLowerCase().includes('önerilir') && !c.decision.toLowerCase().includes('şartlı') && !c.decision.toLowerCase().includes('önerilmez')).length;
-  const yellow = rows.filter(c => c.decision && c.decision.toLowerCase().includes('şartlı')).length;
-  const red    = rows.filter(c => c.decision && c.decision.toLowerCase().includes('önerilmez')).length;
-  const gray   = total - green - yellow - red;
-
-  $('donutGreenVal').textContent  = green;
-  $('donutYellowVal').textContent = yellow;
-  $('donutRedVal').textContent    = red;
-  $('donutGrayVal').textContent   = gray;
-
-  const circ = 2 * Math.PI * 44; // ≈ 276.5
-  let offset = 0;
-  function seg(el, count) {
-    const portion = total > 0 ? (count / total) * circ : 0;
-    el.setAttribute('stroke-dasharray', `${portion} ${circ}`);
-    el.setAttribute('stroke-dashoffset', -offset);
-    offset += portion;
-  }
-  seg($('donutGreen'),  green);
-  seg($('donutYellow'), yellow);
-  seg($('donutRed'),    red);
-}
-
-/* ── Dashboard ─────────────────────────────────────────────────────────────── */
-async function initDashboard() {
-  clearNotice('dashError');
-  try {
-    const [dash, cands, autos, profile] = await Promise.all([
-      apiFetch('GET', '/api/hr/dashboard/me'),
-      apiFetch('GET', '/api/hr/candidates/me'),
-      apiFetch('GET', '/api/hr/automation-history/me'),
-      apiFetch('GET', '/api/hr/recruiter-profile/me'),
-    ]);
-
-    const rows     = cands.candidates || [];
-    const autoRows = autos.automation_history || [];
-    const recommended = rows.filter(c =>
-      c.decision && c.decision.toLowerCase().includes('önerilir') &&
-      !c.decision.toLowerCase().includes('şartlı') &&
-      !c.decision.toLowerCase().includes('önerilmez')
-    ).length;
-
-    // KPIs
-    $('kpiTotal').textContent  = rows.length;
-    $('kpiRec').textContent    = recommended;
-    $('kpiAuto').textContent   = autoRows.length;
-    $('kpiBudget').textContent = dash.token_remaining ?? '—';
-    $('kpiBudgetSub').textContent = dash.token_budget
-      ? `/ ${dash.token_budget} token`  : 'Token';
-
-    // Greeting + avatar
-    const displayName = profile.name || S.rid;
-    const initials = displayName.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
-    $('dashGreeting').textContent      = `Merhaba, ${displayName} 👋`;
-    $('sidebarUserName').textContent   = displayName;
-    $('sidebarAvatar').textContent     = initials;
-    $('topbarAvatar').textContent      = initials;
-    $('topbarName').textContent        = displayName.split(' ')[0];
-
-    // Donut
-    updateDonut(rows);
-
-    // Recent candidates table
-    const recCands = rows.slice(-5).reverse();
-    $('dashCandidates').innerHTML = recCands.length
-      ? `<div class="table-wrap"><table>
-          <thead><tr><th>Aday</th><th>Pozisyon</th><th>Karar</th><th>Puan</th></tr></thead>
-          <tbody>${recCands.map(c => `
-            <tr class="clickable" onclick='openModal(${JSON.stringify(c)})'>
-              <td class="td-name">${esc(c.candidate_name || '—')}</td>
-              <td>${esc(c.job_title || '—')}</td>
-              <td>${decBadge(c.decision)}</td>
-              <td>${c.score > 0 ? Math.round(c.score) : '—'}</td>
-            </tr>`).join('')}
-          </tbody></table></div>`
-      : emptyState('👤', 'Henüz aday yok', 'Yeni bir değerlendirme başlatın.', '+ Değerlendirme', 'evaluation');
-
-    // Recent automations table
-    const recAutos = autoRows.slice(-5).reverse();
-    $('dashAutomations').innerHTML = recAutos.length
-      ? `<div class="table-wrap"><table>
-          <thead><tr><th>İşlem</th><th>Aday</th><th>Durum</th></tr></thead>
-          <tbody>${recAutos.map(a => `
-            <tr>
-              <td class="td-name">${actionLabel(a.action_type)}</td>
-              <td>${esc(a.candidate_name || '—')}</td>
-              <td>${statusBadge(a.status)}</td>
-            </tr>`).join('')}
-          </tbody></table></div>`
-      : emptyState('⚡', 'Otomasyon yok', 'Değerlendirme sırasında bir otomasyon etkinleştirin.', '', '');
-
-  } catch(e) {
-    showErr('dashError', e.message);
-    $('dashCandidates').innerHTML  = '';
-    $('dashAutomations').innerHTML = '';
-  }
-}
-const loadDashboard = initDashboard;
-
-/* ── Dashboard quick-eval ──────────────────────────────────────────────────── */
-function fillChip(text) {
-  $('dashCmd').value = text;
-  $('dashCmd').focus();
-}
-
-async function submitDashEval() {
-  clearNotice('dashEvalNotice');
-  const prompt = $('dashCmd').value.trim();
-  if (!prompt) { showErr('dashEvalNotice', 'Lütfen bir görev girin.'); return; }
-
-  $('dashEvalBtn').disabled = true;
-  $('dashEvalSpinner').style.display = 'inline-flex';
-  try {
-    const data = await apiFetch('POST', '/api/hr/agent/run', { prompt });
-    const sr   = (data.metadata || {}).structured_response || {};
-    const name = sr.candidate_name || 'Aday';
-    const dec  = sr.decision || '';
-    showOk('dashEvalNotice', `✓ ${name} değerlendirmesi tamamlandı.${dec ? ' Karar: ' + dec : ''}`);
-    initDashboard();
-  } catch(e) {
-    showErr('dashEvalNotice', e.message);
-  } finally {
-    $('dashEvalBtn').disabled = false;
-    $('dashEvalSpinner').style.display = 'none';
-  }
-}
-
-/* ── Evaluation page ───────────────────────────────────────────────────────── */
-function fillEvalChip(suffix) {
-  const cur = $('agentCmd').value.trim();
-  if (cur) {
-    $('agentCmd').value = cur + '\n\n' + suffix;
-  } else {
-    $('agentCmd').value = 'Aday ' + suffix;
-  }
-  $('agentCmd').focus();
-}
-
-function appendEvalAction(action) {
-  const cur = $('agentCmd').value;
-  $('agentCmd').value = cur + (cur ? '\n' : '') + action;
-  $('agentCmd').focus();
-}
-
-function buildPrompt() {
-  const lines = [$('agentCmd').value.trim()];
-  if ($('togSlack').checked)    lines.push('Aksiyon: notify_slack');
-  if ($('togSheets').checked)   lines.push('Aksiyon: shortlist_to_sheets');
-  if ($('togEmail').checked)    lines.push('Aksiyon: send_outreach_email');
-  if ($('togCalendar').checked) lines.push('Aksiyon: create_calendar_event');
+function buildPrompt(baseText){
+  const lines=[(baseText??$('agentCmd').value).trim()];
+  if($('togSlack').checked)lines.push('Aksiyon: notify_slack');
+  if($('togSheets').checked)lines.push('Aksiyon: shortlist_to_sheets');
+  if($('togEmail').checked)lines.push('Aksiyon: send_outreach_email');
+  if($('togCalendar').checked)lines.push('Aksiyon: create_calendar_event');
+  if($('togAts').checked)lines.push('Aksiyon: log_to_ats');
   return lines.join('\n');
 }
 
-async function submitEval() {
-  clearNotice('evalError');
-  $('evalResult').classList.remove('visible');
-  if (!$('agentCmd').value.trim()) {
-    showErr('evalError', 'Lütfen görev komutunu girin.');
-    return;
-  }
-  const prompt = buildPrompt();
-  $('evalBtn').disabled = true;
-  $('evalSpinner').style.display = 'inline-flex';
-  try {
-    const data = await apiFetch('POST', '/api/hr/agent/run', { prompt });
-    const meta = data.metadata || {};
-    const sr   = meta.structured_response || {};
+async function initDashboard(){
+  clearNotice('dashError');
+  try{
+    const [dash,cands,autos,p]=await Promise.all([
+      apiFetch('GET','/api/hr/dashboard/me'),
+      apiFetch('GET','/api/hr/candidates/me'),
+      apiFetch('GET','/api/hr/automation-history/me'),
+      apiFetch('GET','/api/hr/recruiter-profile/me')
+    ]);
+    const rows=cands.candidates||[];
+    const arows=autos.automation_history||[];
+    const rec=rows.filter(c=>(c.decision||'').toLowerCase().includes('önerilir')&&!(c.decision||'').toLowerCase().includes('şartlı')&&!(c.decision||'').toLowerCase().includes('önerilmez')).length;
+    $('kpiTotal').textContent=rows.length;
+    $('kpiRec').textContent=rec;
+    $('kpiAuto').textContent=arows.length;
+    $('kpiBudget').textContent=dash.token_remaining??'—';
+    $('kpiBudgetSub').textContent=dash.token_budget?`/ ${dash.token_budget}`:'';
+    const name=p.name||S.rid;
+    const initials=name.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();
+    $('dashGreeting').textContent=`Merhaba, ${name}`;
+    $('sidebarUserName').textContent=name;
+    $('sidebarAvatar').textContent=initials;
+    $('donutGreenVal').textContent=rec;
+    $('donutYellowVal').textContent=rows.filter(c=>(c.decision||'').toLowerCase().includes('şartlı')).length;
+    $('donutRedVal').textContent=rows.filter(c=>(c.decision||'').toLowerCase().includes('önerilmez')).length;
+    $('donutGrayVal').textContent=Math.max(0,rows.length-rec-Number($('donutYellowVal').textContent)-Number($('donutRedVal').textContent));
+    const rc=rows.slice().reverse().slice(0,5);
+    $('dashCandidates').innerHTML=rc.length?`<table><thead><tr><th>Aday</th><th>Pozisyon</th><th>Karar</th></tr></thead><tbody>${rc.map(c=>`<tr><td>${esc(c.candidate_name||'Aday adı çıkarılamadı')}</td><td>${esc(c.job_title||'Pozisyon belirtilmedi')}</td><td>${decBadge(c.decision)}</td></tr>`).join('')}</tbody></table>`:emptyState('Henüz değerlendirme yok.');
+    const ra=arows.slice().reverse().slice(0,5);
+    $('dashAutomations').innerHTML=ra.length?`<table><thead><tr><th>İşlem</th><th>Aday</th><th>Durum</th></tr></thead><tbody>${ra.map(a=>`<tr><td>${actionLabel(a.action_type)}</td><td>${esc(a.candidate_name||'—')}</td><td>${statusBadge(a.status)}</td></tr>`).join('')}</tbody></table>`:emptyState('Henüz işlem yok.');
+  }catch(e){showErr('dashError',e.message);}
+}
 
-    $('rName').textContent  = sr.candidate_name || '—';
-    $('rPos').textContent   = sr.job_title      || '—';
-    $('rScore').textContent = sr.score > 0 ? Math.round(sr.score) : '—';
-    $('rDecision').innerHTML = decBadge(sr.decision);
-    $('rPills').innerHTML = [
-      ...(sr.strengths || []).slice(0,5).map(s => `<span class="badge badge-green">${esc(s)}</span>`),
-      ...(sr.missing_skills || []).slice(0,4).map(s => `<span class="badge badge-red">✕ ${esc(s)}</span>`),
-    ].join('');
-    $('rText').textContent = data.response || '(Yanıt alınamadı)';
-    $('evalResult').classList.add('visible');
+function hasOnlyShortGenericInput(text){
+  return /^(değerlendir|bu adayı değerlendir|degerlendir|incele|analiz et)$/i.test((text||'').trim());
+}
+
+function mergePromptWithCv(userText){
+  const name=($('candidateName')?.value||'').trim();
+  const position=($('candidatePosition')?.value||'').trim();
+  const extra=($('candidateInfo')?.value||'').trim();
+  const cvText=(S.cvExtractedText||'').trim();
+  let merged=`Kullanıcı talebi:\n${(userText||'').trim()}`;
+  if(name)merged+=`\n\nAday adı: ${name}`;
+  if(position)merged+=`\nPozisyon: ${position}`;
+  if(extra)merged+=`\n\nAday bilgileri:\n${extra}`;
+  if(cvText)merged+=`\n\nYüklenen CV içeriği:\n${cvText}`;
+  return buildPrompt(merged);
+}
+
+async function submitEval(){
+  clearNotice('evalError');
+  $('evalResult').style.display='none';
+  const candidateName=($('candidateName')?.value||'').trim();
+  const candidatePosition=($('candidatePosition')?.value||'').trim();
+  const userCmd=($('agentCmd').value||'').trim();
+  const extra=($('candidateInfo')?.value||'').trim();
+  if(!userCmd){showErr('evalError','Lütfen agent\'a bir görev yazın.'); return;}
+  if(!S.cvExtractedText&&!extra&&!candidateName){showErr('evalError','Değerlendirme için lütfen bir CV yükleyin veya aday bilgisi girin.'); return;}
+  $('evalBtn').disabled=true;
+  $('evalSpinner').style.display='inline';
+  try{
+    const d=await apiFetch('POST','/api/hr/agent/run',{prompt:mergePromptWithCv(userCmd)});
+    const sr=(d.metadata||{}).structured_response||{};
+    $('rName').textContent=sr.candidate_name||candidateName||(S.cvExtractedText?'Yüklenen CV':'Aday adı çıkarılamadı');
+    $('rPos').textContent=sr.job_title||candidatePosition||'Pozisyon belirtilmedi';
+    $('rScore').textContent=sr.score>0?`${Math.round(sr.score)} / 100`:'—';
+    $('rDecision').innerHTML=decBadge(sr.decision);
+    $('rStrengths').innerHTML=(sr.strengths||[]).length?(sr.strengths||[]).map(x=>`<span class="badge b-g">${esc(x)}</span> `).join(''):'<span class="hint">—</span>';
+    $('rMissing').innerHTML=(sr.missing_skills||[]).length?(sr.missing_skills||[]).map(x=>`<span class="badge b-r">${esc(x)}</span> `).join(''):'<span class="hint">—</span>';
+    const triggered=[];
+    if($('togSlack').checked)triggered.push('Ekip Bildirimi');
+    if($('togSheets').checked)triggered.push('Kısa Listeye Eklendi');
+    if($('togEmail').checked)triggered.push('E-posta Taslağı');
+    if($('togCalendar').checked)triggered.push('Görüşme Planı');
+    if($('togAts').checked)triggered.push('Aday Kaydı');
+    $('rActions').textContent=triggered.length?triggered.join(', '):'Takip işlemi seçilmedi.';
+    $('rText').textContent=d.response||'';
+    $('evalResult').style.display='block';
+    $('evalResult').scrollIntoView({behavior:'smooth',block:'start'});
     loadCandidates();
     loadAutomations();
-  } catch(e) {
-    showErr('evalError', e.message);
-  } finally {
-    $('evalBtn').disabled = false;
-    $('evalSpinner').style.display = 'none';
-  }
+  }catch(e){showErr('evalError',e.message);}
+  finally{$('evalBtn').disabled=false; $('evalSpinner').style.display='none';}
 }
 
-/* ── Candidates ────────────────────────────────────────────────────────────── */
-async function loadCandidates() {
+async function loadCandidates(){
   clearNotice('candidateError');
-  loading('candidateContent');
-  try {
-    const d = await apiFetch('GET', '/api/hr/candidates/me');
-    const rows = (d.candidates || []).slice().reverse();
-    if (!rows.length) {
-      $('candidateContent').innerHTML = emptyState('👤', 'Henüz aday yok',
-        'Yeni bir değerlendirme başlatmak için soldaki menüyü kullanın.', '+ Değerlendirme', 'evaluation');
-      return;
-    }
-    $('candidateContent').innerHTML = `<div class="table-wrap"><table>
-      <thead><tr>
-        <th>Aday</th><th>Pozisyon</th><th>Karar</th>
-        <th>Puan</th><th>Durum</th><th>Tarih</th><th>Detay</th>
-      </tr></thead>
-      <tbody>${rows.map(c => `
-        <tr class="clickable" onclick='openModal(${JSON.stringify(c)})'>
-          <td class="td-name">${esc(c.candidate_name || '—')}</td>
-          <td>${esc(c.job_title || '—')}</td>
-          <td>${decBadge(c.decision)}</td>
-          <td>${c.score > 0 ? `<strong>${Math.round(c.score)}</strong><span style="color:var(--muted)">/100</span>` : '—'}</td>
-          <td>${statusBadge(c.automation_status)}</td>
-          <td style="color:var(--muted)">${fmtDate(c.created_at)}</td>
-          <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openModal(${JSON.stringify(c)})">→</button></td>
-        </tr>`).join('')}
-      </tbody></table></div>`;
-  } catch(e) {
-    showErr('candidateError', e.message);
-    $('candidateContent').innerHTML = '';
-  }
+  $('candidateContent').innerHTML='';
+  try{
+    const d=await apiFetch('GET','/api/hr/candidates/me');
+    const rows=(d.candidates||[]).slice().reverse();
+    if(!rows.length){$('candidateContent').innerHTML=emptyState('Henüz aday kaydı yok.'); return;}
+    $('candidateContent').innerHTML=`<table><thead><tr><th>Aday</th><th>Pozisyon</th><th>Karar</th><th>Puan</th><th>Tarih</th><th>Son İşlem</th></tr></thead><tbody>${rows.map(c=>`<tr><td>${esc(c.candidate_name||'Aday adı çıkarılamadı')}</td><td>${esc(c.job_title||'Pozisyon belirtilmedi')}</td><td>${decBadge(c.decision)}</td><td>${c.score>0?Math.round(c.score):'—'}</td><td>${fmtDate(c.created_at)}</td><td>${actionLabel(c.action_type)}</td></tr>`).join('')}</tbody></table>`;
+  }catch(e){showErr('candidateError',e.message);}
 }
 
-/* ── Automations ───────────────────────────────────────────────────────────── */
-async function loadAutomations() {
+async function loadAutomations(){
   clearNotice('automationError');
-  loading('automationContent');
-  try {
-    const d = await apiFetch('GET', '/api/hr/automation-history/me');
-    const rows = (d.automation_history || []).slice().reverse();
-    if (!rows.length) {
-      $('automationContent').innerHTML = emptyState('⚡', 'Otomasyon yok',
-        'Değerlendirme sırasında bir otomasyon etkinleştirdiğinizde burada görünür.', '', '');
-      return;
-    }
-    $('automationContent').innerHTML = `<div class="table-wrap"><table>
-      <thead><tr>
-        <th>Otomasyon</th><th>Aday</th><th>Pozisyon</th>
-        <th>Durum</th><th>n8n</th><th>Tarih</th>
-      </tr></thead>
-      <tbody>${rows.map(a => `
-        <tr>
-          <td class="td-name">${actionLabel(a.action_type)}</td>
-          <td>${esc(a.candidate_name || '—')}</td>
-          <td>${esc(a.job_title || '—')}</td>
-          <td>${statusBadge(a.status)}</td>
-          <td style="color:var(--muted);font-size:0.78rem">${esc(a.n8n_status || '—')}</td>
-          <td style="color:var(--muted)">${fmtDate(a.created_at)}</td>
-        </tr>`).join('')}
-      </tbody></table></div>`;
-  } catch(e) {
-    showErr('automationError', e.message);
-    $('automationContent').innerHTML = '';
-  }
+  $('automationContent').innerHTML='';
+  try{
+    const d=await apiFetch('GET','/api/hr/automation-history/me');
+    const rows=(d.automation_history||[]).slice().reverse();
+    if(!rows.length){$('automationContent').innerHTML=emptyState('Henüz başlatılan işlem yok.'); return;}
+    $('automationContent').innerHTML=`<table><thead><tr><th>İşlem</th><th>Aday</th><th>Durum</th><th>Zaman</th><th>Pozisyon</th></tr></thead><tbody>${rows.map(a=>`<tr><td>${actionLabel(a.action_type)}</td><td>${esc(a.candidate_name||'—')}</td><td>${statusBadge(a.status)}</td><td>${fmtDate(a.created_at)}</td><td>${esc(a.job_title||'—')}</td></tr>`).join('')}</tbody></table>`;
+  }catch(e){showErr('automationError',e.message);}
 }
 
-/* ── Profile / Settings ────────────────────────────────────────────────────── */
-async function loadProfile() {
+async function loadCalendar(){
+  clearNotice('calendarError');
+  try{
+    const d=await apiFetch('GET','/api/hr/automation-history/me');
+    const rows=(d.automation_history||[]).filter(a=>a.action_type==='create_calendar_event').slice().reverse();
+    if(!rows.length){$('calendarContent').innerHTML=emptyState('Henüz planlanmış görüşme yok.'); return;}
+    $('calendarContent').innerHTML=`<table><thead><tr><th>Aday</th><th>Pozisyon</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>${rows.map(a=>`<tr><td>${esc(a.candidate_name||'—')}</td><td>${esc(a.job_title||'—')}</td><td>${statusBadge(a.status)}</td><td>${fmtDate(a.created_at)}</td></tr>`).join('')}</tbody></table>`;
+  }catch(e){showErr('calendarError',e.message);}
+}
+
+async function loadProfile(){
   clearNotice('profileError');
-  $('advApi').value = S.api;
-  $('advRid').value = S.rid;
-  try {
-    const [p, dash] = await Promise.all([
-      apiFetch('GET', '/api/hr/recruiter-profile/me'),
-      apiFetch('GET', '/api/hr/dashboard/me'),
-    ]);
-    $('pName').value       = p.name || '';
-    $('pCompany').value    = p.company || '';
-    $('pTone').value       = p.tone_preference || 'professional';
-    $('pStrictness').value = p.filter_strictness || 'moderate';
-    $('pShortlist').value  = p.shortlist_size ?? 5;
-
-    const rem = dash.token_remaining ?? '—';
-    const tot = dash.token_budget ?? '—';
-    $('settingsBudget').innerHTML =
-      `<strong style="font-size:1.2rem;color:var(--accent)">${rem}</strong>
-       <span style="color:var(--muted)"> / ${tot} token kaldı</span>`;
-  } catch(e) {
-    showErr('profileError', e.message);
-    $('settingsBudget').textContent = 'Bütçe alınamadı.';
-  }
+  $('advApi').value=S.api;
+  $('advRid').value=S.rid;
+  try{
+    const [p,d]=await Promise.all([apiFetch('GET','/api/hr/recruiter-profile/me'),apiFetch('GET','/api/hr/dashboard/me')]);
+    $('pName').value=p.name||'';
+    $('pCompany').value=p.company||'';
+    $('pTone').value=p.tone_preference||'professional';
+    $('pStrictness').value=p.filter_strictness||'moderate';
+    $('pShortlist').value=p.shortlist_size??5;
+    $('settingsBudget').textContent=`Kalan bütçe: ${d.token_remaining??'—'} / ${d.token_budget??'—'}`;
+  }catch(e){showErr('profileError',e.message);}
 }
 
-async function saveProfile() {
+async function saveProfile(){
   clearNotice('profileError');
-  $('profileInline').innerHTML = '';
-  $('profileSpinner').style.display = 'inline-block';
-  try {
-    await apiFetch('PUT', '/api/hr/recruiter-profile/me', {
-      name:           $('pName').value || null,
-      company:        $('pCompany').value || null,
-      tone:           $('pTone').value,
-      strictness:     $('pStrictness').value,
-      shortlist_size: parseInt($('pShortlist').value) || 5,
-    });
-    $('profileInline').innerHTML = '<span style="color:var(--success);font-size:0.82rem">✅ Kaydedildi</span>';
-    const n = $('pName').value.trim();
-    if (n) {
-      const initials = n.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
-      $('sidebarUserName').textContent = n;
-      $('sidebarAvatar').textContent   = initials;
-      $('topbarAvatar').textContent    = initials;
-      $('topbarName').textContent      = n.split(' ')[0];
+  $('profileSpinner').style.display='inline';
+  $('profileInline').textContent='';
+  try{
+    await apiFetch('PUT','/api/hr/recruiter-profile/me',{name:$('pName').value||null,company:$('pCompany').value||null,tone:$('pTone').value,strictness:$('pStrictness').value,shortlist_size:parseInt($('pShortlist').value)||5});
+    $('profileInline').textContent='Kaydedildi';
+    initDashboard();
+  }catch(e){showErr('profileError',e.message);}
+  finally{$('profileSpinner').style.display='none';}
+}
+
+function applyAdvanced(){
+  const api=$('advApi').value.trim().replace(/\/$/,'');
+  const rid=$('advRid').value.trim();
+  if(api){S.api=api; localStorage.setItem('hr_api_base',api);}
+  if(rid){S.rid=rid; localStorage.setItem('hr_recruiter_id',rid);}
+  $('advInline').textContent='Uygulandı';
+}
+
+S.cvExtractedText='';
+let uploadedFiles=[];
+
+function handleDragOver(e){e.preventDefault();$('dropZone').classList.add('dragover');}
+function handleDragLeave(){$('dropZone').classList.remove('dragover');}
+function handleDrop(e){e.preventDefault();$('dropZone').classList.remove('dragover'); addFiles(Array.from(e.dataTransfer.files||[]));}
+function handleFileSelect(e){addFiles(Array.from(e.target.files||[])); e.target.value='';}
+
+async function extractCv(file){
+  const form=new FormData();
+  form.append('file',file);
+  const res=await fetch(S.api+'/api/hr/cv/extract',{method:'POST',headers:{'X-Recruiter-ID':S.rid},body:form});
+  const data=await res.json().catch(()=>({status:'error'}));
+  if(!res.ok||data.status==='error') throw new Error(data.message||'Dosya okunamadı');
+  return data;
+}
+
+function setCvStatus(html){$('cvStatus').innerHTML=html;}
+
+async function addFiles(files){
+  for(const f of files){
+    if(!/\.(pdf|docx|txt)$/i.test(f.name)){
+      uploadedFiles.push({name:f.name,status:'Desteklenmiyor'});
+      setCvStatus('<div class="notice-warn">Bu dosya türü desteklenmiyor. PDF, DOCX veya TXT yükleyin.</div>');
+      renderUploadedFiles();
+      continue;
     }
-  } catch(e) {
-    showErr('profileError', e.message);
-  } finally {
-    $('profileSpinner').style.display = 'none';
+    const item={name:f.name,status:'Okunuyor...'};
+    uploadedFiles.push(item);
+    renderUploadedFiles();
+    setCvStatus('<div class="notice">CV okunuyor, lütfen bekleyin...</div>');
+    try{
+      const data=await extractCv(f);
+      S.cvExtractedText=data.extracted_text||'';
+      item.status='İçerik okundu ✓';
+
+      // Auto-fill Step 2 fields from inferred metadata
+      const nameField=$('candidateName');
+      const posField=$('candidatePosition');
+      const infoField=$('candidateInfo');
+      if(data.candidate_name&&!(nameField.value||'').trim()) nameField.value=data.candidate_name;
+      if(data.likely_position&&!(posField.value||'').trim()) posField.value=data.likely_position;
+      if(!(infoField.value||'').trim()){
+        const parts=[];
+        if(data.experience_summary) parts.push(data.experience_summary);
+        if(data.skills&&data.skills.length) parts.push('Yetkinlikler: '+data.skills.join(', '));
+        if(parts.length) infoField.value=parts.join('\n');
+      }
+
+      const filledName=!!(nameField.value||'').trim();
+      const filledPos=!!(posField.value||'').trim();
+      const note=(!filledName||!filledPos)?'<div class="hint" style="margin-top:4px">Bazı bilgiler net çıkarılamadı; isterseniz Adım 2\'den düzeltebilirsiniz.</div>':'';
+      setCvStatus('<div class="notice-ok">CV içeriği okundu. Agent değerlendirme için hazır.</div>'+note);
+    }catch(_e){
+      item.status='Okunamadı';
+      setCvStatus('<div class="notice-warn">Dosya içeriği okunamadı. Aday bilgilerini Adım 2\'ye manuel olarak girebilirsiniz.</div>');
+    }
+    renderUploadedFiles();
   }
 }
 
-function applyAdvanced() {
-  const api = $('advApi').value.trim().replace(/\/$/, '');
-  const rid = $('advRid').value.trim();
-  if (api) { S.api = api; localStorage.setItem('hr_api_base', api); }
-  if (rid) { S.rid = rid; localStorage.setItem('hr_recruiter_id', rid); }
-  $('advInline').innerHTML = '<span style="color:var(--success);font-size:0.82rem">✅ Uygulandı</span>';
-  const active = document.querySelector('.page.active');
-  if (active) nav(active.dataset.page);
-}
-
-/* ── Modal ─────────────────────────────────────────────────────────────────── */
-function openModal(c) {
-  $('modalContent').innerHTML = `
-    <div class="modal-title">${esc(c.candidate_name || 'Aday Detayı')}</div>
-    <div style="margin-bottom:1rem;display:flex;gap:0.5rem">
-      ${decBadge(c.decision)}
-      ${c.score > 0 ? `<span class="badge badge-blue">${Math.round(c.score)}/100</span>` : ''}
-    </div>
-    <dl class="modal-dl">
-      <dt class="modal-dt">Pozisyon</dt>
-      <dd class="modal-dd">${esc(c.job_title || '—')}</dd>
-      <dt class="modal-dt">İşlem Türü</dt>
-      <dd class="modal-dd">${esc(c.action_type || '—')}</dd>
-      <dt class="modal-dt">Otomasyon</dt>
-      <dd class="modal-dd">${statusBadge(c.automation_status)}</dd>
-      <dt class="modal-dt">Token</dt>
-      <dd class="modal-dd">${c.token_cost ?? '—'} kullanıldı · ${c.remaining_budget ?? '—'} kaldı</dd>
-      <dt class="modal-dt">Tarih</dt>
-      <dd class="modal-dd">${fmtDate(c.created_at)}</dd>
-    </dl>
-    <div style="margin-top:1.25rem;display:flex;gap:0.5rem;justify-content:flex-end">
-      <button class="btn btn-secondary btn-sm" onclick="closeModal()">Kapat</button>
-    </div>`;
-  $('modal').classList.add('open');
-}
-
-function closeModal(e) {
-  if (!e || e.target === $('modal')) $('modal').classList.remove('open');
-}
-
-/* ── CV Upload ─────────────────────────────────────────────────────────────── */
-let uploadedFiles = [];
-
-function handleDragOver(e) {
-  e.preventDefault();
-  $('dropZone').classList.add('dragover');
-}
-function handleDragLeave(e) {
-  $('dropZone').classList.remove('dragover');
-}
-function handleDrop(e) {
-  e.preventDefault();
-  $('dropZone').classList.remove('dragover');
-  addFiles(Array.from(e.dataTransfer.files));
-}
-function handleFileSelect(e) {
-  addFiles(Array.from(e.target.files));
-  e.target.value = '';
-}
-function addFiles(files) {
-  files.forEach(f => {
-    if (!uploadedFiles.find(x => x.name === f.name)) {
-      uploadedFiles.push(f);
-    }
-  });
+function removeFile(n){
+  uploadedFiles=uploadedFiles.filter(f=>f.name!==n);
+  if(!uploadedFiles.length){S.cvExtractedText=''; setCvStatus('');}
   renderUploadedFiles();
 }
-function removeFile(name) {
-  uploadedFiles = uploadedFiles.filter(f => f.name !== name);
-  renderUploadedFiles();
-}
-function renderUploadedFiles() {
-  if (!uploadedFiles.length) { $('uploadedFiles').innerHTML = ''; return; }
-  $('uploadedFiles').innerHTML = uploadedFiles.map(f => `
-    <div class="upload-file-item">
-      <span class="upload-file-icon">📄</span>
-      <span class="upload-file-name">${esc(f.name)}</span>
-      <span class="upload-file-tag">Yerel Önizleme</span>
-      <button class="upload-file-del" onclick="removeFile('${esc(f.name)}')" title="Kaldır">✕</button>
-    </div>`).join('');
+
+function renderUploadedFiles(){
+  const colorOf=s=>s.includes('✓')?'var(--green)':s==='Okunuyor...'?'var(--amber)':'var(--red)';
+  $('uploadedFiles').innerHTML=uploadedFiles.map(f=>`<div class="file-item"><span>${esc(f.name)} · <span style="color:${colorOf(f.status)}">${esc(f.status)}</span></span><button class="btn s" style="padding:4px 8px" onclick="removeFile('${esc(f.name)}')">Kaldır</button></div>`).join('');
 }
 
-/* ── Search (frontend filter) ──────────────────────────────────────────────── */
-$('topbarSearch').addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    const q = e.target.value.trim().toLowerCase();
-    if (q) { nav('candidates'); }
+$('candidateName').addEventListener('input',()=>{
+  if(S.cvExtractedText&&($('candidateName').value||'').trim()){
+    setCvStatus('<div class="notice-ok">CV içeriği okundu ve değerlendirmeye hazır.</div>');
   }
 });
 
-/* ── Keyboard shortcuts ────────────────────────────────────────────────────── */
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') $('modal').classList.remove('open');
-  if (e.key === 'Enter' && e.ctrlKey) {
-    const active = document.activeElement;
-    if (active === $('agentCmd')) submitEval();
-    if (active === $('dashCmd'))  submitDashEval();
+$('topbarSearch').addEventListener('keydown',e=>{if(e.key==='Enter')nav('candidates');});
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&e.key==='Enter'){
+    const el=document.activeElement;
+    if(el===$('agentCmd')||el===$('candidateInfo')||el===$('candidateName')||el===$('candidatePosition'))submitEval();
   }
 });
 
-/* ── Boot ──────────────────────────────────────────────────────────────────── */
 initDashboard();
 </script>
 </body>

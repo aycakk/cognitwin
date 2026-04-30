@@ -94,6 +94,10 @@ _SKILLS_IN_TEXT_RE = re.compile(
     r"(?:yetkinlik(?:ler)?|beceri(?:ler)?|teknoloji(?:ler)?)\s*[:\-]\s*([^\n]+)",
     re.I | re.U,
 )
+_SKILL_TOKEN_RE = re.compile(
+    r"\b(python|fastapi|docker|kubernetes|postgresql|postgres|java|c#|javascript|typescript|react|node\.?js|aws|azure|gcp)\b",
+    re.I,
+)
 
 
 def _extract_first(text: str, patterns: list[re.Pattern]) -> str:
@@ -106,9 +110,10 @@ def _extract_first(text: str, patterns: list[re.Pattern]) -> str:
 
 def _extract_skills_from_text(text: str) -> list[str]:
     m = _SKILLS_IN_TEXT_RE.search(text)
-    if not m:
-        return []
-    return [s.strip() for s in re.split(r"[,;/]", m.group(1)) if s.strip()]
+    if m:
+        return [s.strip() for s in re.split(r"[,;/]", m.group(1)) if s.strip()]
+    # Free-form CV fallback
+    return sorted({x.group(1).strip() for x in _SKILL_TOKEN_RE.finditer(text)}, key=str.lower)
 
 
 def _skill_match_score(candidate_skills: list[str], required_skills: list[str]) -> float:
@@ -487,6 +492,8 @@ def _build_structured_response(
     job_title = session.current_req.title if session.current_req else ""
     if not job_title:
         job_title = _extract_first(user_input, _JOB_TITLE_RES)
+    if not job_title:
+        job_title = "Belirtilmedi"
 
     score = _extract_score(draft)
     strengths = _split_list(strengths_raw)
@@ -496,6 +503,8 @@ def _build_structured_response(
     req_skills = list(session.current_req.required_skills) if session.current_req else []
     if score == 0.0 and candidate_skills:
         score = _skill_match_score(candidate_skills, req_skills or candidate_skills)
+    if score == 0.0 and len(candidate_skills) >= 2:
+        score = 60.0
     if not strengths and candidate_skills:
         strengths = candidate_skills
     if not decision and candidate_skills:

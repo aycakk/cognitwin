@@ -26,6 +26,9 @@ filelock==3.16.1
 python-dotenv==1.0.1
 pandas
 numpy
+pypdf
+python-docx
+python-multipart
 
 # Google API integration (Gmail & Drive)
 google-api-python-client

@@ -7,12 +7,13 @@ LibreChat /chat is untouched — this router is additive only.
 """
 from __future__ import annotations
 
+import io
 import re
 import uuid
 from dataclasses import asdict
 from typing import List, Optional
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, File, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from src.core.schemas import AgentRole, AgentTask
@@ -30,6 +31,7 @@ from src.pipeline.hr_runner import run_hr_pipeline
 hr_router = APIRouter(tags=["hr"])
 
 _SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+_MAX_CV_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
 def _require_recruiter_id(x_recruiter_id: Optional[str]) -> str:
@@ -80,17 +82,24 @@ async def agent_run(
     automation_targets = structured.get("automation_targets", [])
     should_trigger  = structured.get("should_trigger_automation", False)
 
-    log_candidate_event(
-        recruiter_id,
-        candidate_name=candidate_name,
-        job_title=job_title,
-        decision=decision,
-        score=score,
-        action_type=action_type,
-        automation_status="triggered" if should_trigger else "none",
-        token_cost=token_cost,
-        remaining_budget=remaining,
-    )
+    has_candidate_signal = any([
+        str(candidate_name or "").strip(),
+        str(job_title or "").strip() and str(job_title).strip().lower() != "belirtilmedi",
+        str(decision or "").strip(),
+        float(score or 0) > 0,
+    ])
+    if has_candidate_signal:
+        log_candidate_event(
+            recruiter_id,
+            candidate_name=candidate_name,
+            job_title=job_title,
+            decision=decision,
+            score=score,
+            action_type=action_type,
+            automation_status="triggered" if should_trigger else "none",
+            token_cost=token_cost,
+            remaining_budget=remaining,
+        )
 
     if should_trigger and automation_targets:
         for at in automation_targets:
@@ -109,6 +118,183 @@ async def agent_run(
         "response": response.draft,
         "status": response.status,
         "metadata": response.metadata,
+    }
+
+
+def _friendly_cv_error() -> dict:
+    return {
+        "status": "error",
+        "message": "CV içeriği okunamadı. Lütfen farklı bir dosya deneyin veya metni manuel ekleyin.",
+    }
+
+
+# ── CV metadata extraction helpers ───────────────────────────────────────────
+
+_NAME_PREFIXES = re.compile(
+    r"^(Aday|Ad Soyad|Ad ve Soyad|İsim|Name|Full Name)\s*[:：]\s*(.+)$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_POSITION_PREFIXES = re.compile(
+    r"^(Pozisyon|Başvurulan Pozisyon|Hedef Pozisyon|Position|Role|Unvan|Görev)\s*[:：]\s*(.+)$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_EXPERIENCE_RE = re.compile(
+    r"[^\n.]*\d+\s*(?:yıl|year)[^\n.]*(?:deneyim|experience)[^\n.]*",
+    re.IGNORECASE,
+)
+_NAME_WORD = re.compile(r"^[A-ZÇĞİÖŞÜ][a-zçğışöü]+$")
+_NOT_NAME = re.compile(
+    r"\b(developer|engineer|manager|analyst|designer|intern|stajyer|"
+    r"pozisyon|position|role|experience|deneyim|yıl|year|university|üniversite)\b",
+    re.IGNORECASE,
+)
+_KNOWN_POSITIONS = [
+    "Backend Developer", "Frontend Developer", "Full Stack Developer",
+    "Full-Stack Developer", "Data Analyst", "Data Scientist",
+    "Product Manager", "QA Engineer", "DevOps Engineer",
+    "Mobile Developer", "Software Engineer", "Yazılım Mühendisi",
+    "Yazılım Stajyeri", "Stajyer", "Intern", "Machine Learning Engineer",
+    "Cloud Engineer", "Security Engineer", "Android Developer", "iOS Developer",
+]
+_KNOWN_SKILLS = [
+    "Python", "FastAPI", "Django", "Flask", "JavaScript", "TypeScript",
+    "React", "Vue", "Angular", "Node.js", "Java", "Spring", "Kotlin",
+    "Swift", "Go", "Rust", "C#", ".NET", "PHP", "Ruby",
+    "Docker", "Kubernetes", "AWS", "Azure", "GCP", "PostgreSQL",
+    "MySQL", "MongoDB", "Redis", "Elasticsearch", "Kafka", "RabbitMQ",
+    "Git", "Linux", "Terraform", "SQL", "GraphQL", "REST", "gRPC",
+    "pandas", "NumPy", "scikit-learn", "TensorFlow", "PyTorch",
+]
+
+
+def _skill_in_text(skill: str, text_lower: str) -> bool:
+    s = skill.lower()
+    if re.search(r"[^a-zA-Z]", s):
+        return s in text_lower
+    return bool(re.search(r"\b" + re.escape(s) + r"\b", text_lower))
+
+
+def _parse_cv_metadata(text: str) -> dict:
+    candidate_name = ""
+    likely_position = ""
+    skills: list[str] = []
+    experience_summary = ""
+
+    m = _NAME_PREFIXES.search(text)
+    if m:
+        candidate_name = m.group(2).strip()
+    else:
+        for line in text.splitlines():
+            line = line.strip()
+            words = line.split()
+            if (
+                2 <= len(words) <= 4
+                and all(_NAME_WORD.match(w) for w in words)
+                and not _NOT_NAME.search(line)
+            ):
+                candidate_name = line
+                break
+
+    m = _POSITION_PREFIXES.search(text)
+    if m:
+        likely_position = m.group(2).strip()
+    else:
+        text_lower = text.lower()
+        for pos in _KNOWN_POSITIONS:
+            if pos.lower() in text_lower:
+                likely_position = pos
+                break
+
+    text_lower = text.lower()
+    skills = [s for s in _KNOWN_SKILLS if _skill_in_text(s, text_lower)]
+
+    m = _EXPERIENCE_RE.search(text)
+    if m:
+        experience_summary = m.group(0).strip()
+
+    return {
+        "candidate_name": candidate_name,
+        "likely_position": likely_position,
+        "skills": skills,
+        "experience_summary": experience_summary,
+    }
+
+
+def _extract_txt(data: bytes) -> str:
+    return data.decode("utf-8", errors="ignore")
+
+
+def _extract_pdf(data: bytes) -> str:
+    try:
+        from pypdf import PdfReader
+    except Exception:
+        return ""
+    try:
+        reader = PdfReader(io.BytesIO(data))
+        pages: list[str] = []
+        for page in reader.pages:
+            pages.append(page.extract_text() or "")
+        return "\n".join(pages)
+    except Exception:
+        return ""
+
+
+def _extract_docx(data: bytes) -> str:
+    try:
+        from docx import Document
+    except Exception:
+        return ""
+    try:
+        doc = Document(io.BytesIO(data))
+        return "\n".join(p.text for p in doc.paragraphs if p.text)
+    except Exception:
+        return ""
+
+
+@hr_router.post("/cv/extract")
+async def cv_extract(
+    file: UploadFile = File(...),
+    x_recruiter_id: Optional[str] = Header(default=None),
+):
+    recruiter_id = _require_recruiter_id(x_recruiter_id)
+    _ = recruiter_id  # recruiter scope validation only
+
+    filename = file.filename or "dosya"
+    content_type = file.content_type or "application/octet-stream"
+    raw = await file.read()
+    size_bytes = len(raw)
+
+    if size_bytes <= 0:
+        return _friendly_cv_error()
+    if size_bytes > _MAX_CV_SIZE:
+        raise HTTPException(status_code=413, detail="Dosya boyutu sınırı aşıldı (10 MB).")
+
+    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+    extracted = ""
+    if ext == "txt":
+        extracted = _extract_txt(raw)
+    elif ext == "pdf":
+        extracted = _extract_pdf(raw)
+    elif ext == "docx":
+        extracted = _extract_docx(raw)
+
+    extracted = (extracted or "").strip()
+    if not extracted:
+        return _friendly_cv_error()
+
+    preview = extracted[:400]
+    meta = _parse_cv_metadata(extracted)
+    return {
+        "filename": filename,
+        "size_bytes": size_bytes,
+        "content_type": content_type,
+        "extracted_text": extracted,
+        "text_preview": preview,
+        "candidate_name": meta["candidate_name"],
+        "likely_position": meta["likely_position"],
+        "skills": meta["skills"],
+        "experience_summary": meta["experience_summary"],
+        "status": "ok",
     }
 
 
