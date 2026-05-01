@@ -6,6 +6,9 @@ from fastapi import FastAPI, HTTPException
 from src.services.api.routes import router
 from src.services.api.openai_routes import openai_router
 from src.services.api.cockpit_routes import cockpit_router
+from src.services.api.project_routes import project_router
+from src.services.api.product_backlog_routes import product_backlog_router
+from src.services.api.student_routes import student_router
 from src.core.session_store import SESSION_STORE
 
 logger = logging.getLogger("cognitwin.bootstrap")
@@ -99,3 +102,6 @@ async def list_sessions(n: int = 20):
 app.include_router(router)
 app.include_router(openai_router)
 app.include_router(cockpit_router)
+app.include_router(project_router)
+app.include_router(product_backlog_router)
+app.include_router(student_router)

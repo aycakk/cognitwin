@@ -21,7 +21,11 @@ class SprintRunEntry:
     sprint_id: str
     goal: str
     status: str          # "started" | "running" | "complete" | "blocked" | "error"
-    phase: str           # "planning" | "executing" | "complete" | "blocked"
+    # phase: one of the canonical phases in src.loop.sprint_phase.PHASES.
+    # Notably "waiting_sprint_review" / "reviewed_partial" are terminal phases
+    # used when a sprint finishes with blocked or unaccepted tasks — the run
+    # itself is over but a human still needs to make a Sprint Review decision.
+    phase: str           # "planning" | "executing" | "running" | "waiting_sprint_review" | "reviewed_partial" | "complete" | "blocked"
     events: list         # list[dict] — event stream
     started_at: str      # ISO timestamp
 
@@ -100,10 +104,17 @@ def append_event(
                 if entry.phase not in ("complete", "blocked"):
                     entry.phase = "executing"
             elif agent == "system" and event_type == "status":
-                if "complete" in message.lower():
-                    entry.phase = "complete"
-                elif "blocked" in message.lower():
+                msg_l = message.lower()
+                # Order matters — "review required" must win over "complete"
+                # because the partial-increment message contains both words.
+                if "review required" in msg_l or "partial increment" in msg_l:
+                    entry.phase = "waiting_sprint_review"
+                elif "reviewed partial" in msg_l:
+                    entry.phase = "reviewed_partial"
+                elif "blocked" in msg_l:
                     entry.phase = "blocked"
+                elif "complete" in msg_l:
+                    entry.phase = "complete"
 
 
 def set_status(sprint_id: str, status: str, phase: Optional[str] = None) -> None:

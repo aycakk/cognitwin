@@ -1,0 +1,11 @@
+{
+  "sprint_id": "sprint-auto-po-test",
+  "goal": "Create a simple user registration form",
+  "accepted_stories": [
+    {
+      "title": "Registration form",
+      "story_id": "S-001"
+    }
+  ],
+  "note": "Fallback artefact generated because developer output contained no parsable code blocks."
+}

@@ -43,7 +43,7 @@
     .logo .sub { font-family: 'JetBrains Mono', monospace; font-size: 9px;
       color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.15em;
       margin-left: 8px; font-weight: 400; }
-    .sys-status { margin-left: auto; display: flex; align-items: center; gap: 8px;
+    .sys-status { display: flex; align-items: center; gap: 8px;
       font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; }
     .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
     .pulse.live { background: var(--accent); animation: blink 1.6s infinite; }
@@ -281,6 +281,414 @@
       color: var(--accent); font-weight: 600; margin-bottom: 2px; }
     .ev-ceremony-name { font-family: 'Fraunces', serif; font-size: 13px; font-weight: 500; }
 
+    /* ── REVIEW MODAL ─────────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 800;
+      background: rgba(0,0,0,.65); backdrop-filter: blur(3px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px; opacity: 0; pointer-events: none;
+      transition: opacity 0.18s ease;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: auto; }
+    .modal {
+      background: var(--bg-elev); border: 1px solid var(--border-strong);
+      border-radius: 8px; width: 100%; max-width: 460px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04);
+      transform: translateY(8px); transition: transform 0.18s ease;
+    }
+    .modal-overlay.open .modal { transform: translateY(0); }
+    .modal-header {
+      padding: 16px 18px 14px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    }
+    .modal-header-left { min-width: 0; }
+    .modal-decision-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em;
+      padding: 2px 8px; border-radius: 4px; margin-bottom: 6px;
+      border: 1px solid; font-weight: 600;
+    }
+    .modal-decision-badge.approve        { color: #5fd49a; border-color: rgba(95,212,154,.35); background: rgba(95,212,154,.08); }
+    .modal-decision-badge.request_changes{ color: #f3a64b; border-color: rgba(243,166,75,.35);  background: rgba(243,166,75,.08); }
+    .modal-decision-badge.reject         { color: #ef6f6f; border-color: rgba(239,111,111,.35); background: rgba(239,111,111,.08); }
+    .modal-task-id { font-size: 10px; color: var(--text-faint); margin-bottom: 2px; }
+    .modal-task-title {
+      font-family: 'Fraunces', serif; font-size: 15px; font-weight: 500;
+      line-height: 1.35; color: var(--text); word-break: break-word;
+    }
+    .modal-close {
+      background: none; border: none; color: var(--text-faint); font-size: 18px;
+      cursor: pointer; line-height: 1; padding: 2px 4px; flex-shrink: 0;
+    }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 16px 18px; }
+    .modal-label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-faint); margin-bottom: 6px; display: block;
+    }
+    .modal-label span { color: var(--danger); margin-left: 2px; }
+    .modal-textarea {
+      width: 100%; background: var(--bg); border: 1px solid var(--border-strong);
+      color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      line-height: 1.55; padding: 10px 12px; border-radius: 5px;
+      resize: vertical; min-height: 88px; outline: none;
+    }
+    .modal-textarea:focus { border-color: var(--accent); }
+    .modal-textarea.error { border-color: var(--danger); }
+    .modal-error {
+      font-size: 10.5px; color: var(--danger); margin-top: 5px;
+      display: none;
+    }
+    .modal-error.show { display: block; }
+    .modal-footer {
+      padding: 12px 18px 16px; display: flex; justify-content: flex-end; gap: 8px;
+    }
+    .modal-btn {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      padding: 7px 18px; border-radius: 5px; cursor: pointer;
+      text-transform: uppercase; letter-spacing: 0.07em; border: 1px solid;
+      transition: opacity 0.1s;
+    }
+    .modal-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .modal-btn.cancel  { background: transparent; color: var(--text-dim); border-color: var(--border-strong); }
+    .modal-btn.cancel:hover:not(:disabled) { color: var(--text); }
+    .modal-btn.submit.approve         { background: rgba(95,212,154,.12); color: #5fd49a; border-color: rgba(95,212,154,.35); }
+    .modal-btn.submit.request_changes { background: rgba(243,166,75,.12);  color: #f3a64b; border-color: rgba(243,166,75,.35); }
+    .modal-btn.submit.reject          { background: rgba(239,111,111,.12); color: #ef6f6f; border-color: rgba(239,111,111,.35); }
+    .modal-btn.submit:hover:not(:disabled) { filter: brightness(1.12); }
+
+    /* ── LOGIN VIEW ─────────────────────────────────────────────── */
+    .view-login { position:fixed; inset:0; z-index:600; display:none; align-items:center;
+      justify-content:center; padding:24px; overflow-y:auto;
+      background: radial-gradient(circle at 25% 35%,rgba(212,255,58,.06),transparent 45%),
+                  radial-gradient(circle at 75% 65%,rgba(93,184,255,.04),transparent 45%), var(--bg); }
+    .view-login.active { display:flex; }
+    .login-card { width:100%; max-width:380px; }
+    .login-logo-mark { font-family:'Fraunces',serif; font-weight:600; font-size:18px; margin-bottom:28px; }
+    .login-logo-mark .dot { color:var(--accent); }
+    .login-h { font-family:'Fraunces',serif; font-size:26px; font-weight:500; line-height:1.2; margin-bottom:6px; }
+    .login-sub { font-size:11.5px; color:var(--text-dim); margin-bottom:26px; line-height:1.6; }
+    .login-field { margin-bottom:14px; }
+    .login-lbl { display:block; font-size:10px; text-transform:uppercase; letter-spacing:.1em;
+      color:var(--text-faint); margin-bottom:5px; }
+    .login-inp { width:100%; background:var(--bg-elev); border:1px solid var(--border-strong);
+      color:var(--text); font-family:'JetBrains Mono',monospace; font-size:13px;
+      padding:10px 12px; border-radius:5px; outline:none; }
+    .login-inp:focus { border-color:var(--accent); }
+    .login-inp.error { border-color:var(--danger); }
+    .login-err { font-size:10.5px; color:var(--danger); min-height:16px; margin-top:8px; }
+    .login-btn { width:100%; background:var(--accent); color:var(--bg); border:none;
+      padding:11px; border-radius:5px; font-family:inherit; font-size:12px; font-weight:600;
+      cursor:pointer; text-transform:uppercase; letter-spacing:.08em; margin-top:8px; }
+    .login-btn:hover:not(:disabled) { background:#c4ef2a; }
+    .login-btn:disabled { opacity:.5; cursor:not-allowed; }
+    .login-hint { margin-top:20px; padding:12px 14px; background:var(--bg-elev);
+      border:1px solid var(--border); border-radius:5px; font-size:10px;
+      color:var(--text-faint); line-height:1.9; }
+    .login-hint b { color:var(--text-dim); }
+
+    /* ── SHARED USER STRIP ───────────────────────────────────────── */
+    .user-strip { height:44px; flex-shrink:0; border-bottom:1px solid var(--border);
+      display:flex; align-items:center; padding:0 18px; gap:12px; background:var(--bg); }
+    .us-logo { font-family:'Fraunces',serif; font-weight:600; font-size:15px; }
+    .us-logo .dot { color:var(--accent); }
+    .us-logo .sub { font-family:'JetBrains Mono',monospace; font-size:8.5px;
+      color:var(--text-faint); text-transform:uppercase; letter-spacing:.15em; margin-left:6px; }
+    .us-pill { margin-left:auto; display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
+    .us-name { font-size:11.5px; color:var(--text); white-space:nowrap; }
+    .us-role { font-size:9px; padding:2px 7px; border-radius:8px;
+      background:rgba(212,255,58,.1); color:var(--accent); border:1px solid rgba(212,255,58,.25);
+      text-transform:uppercase; letter-spacing:.07em; white-space:nowrap; }
+    .us-ws { font-size:10px; color:var(--text-faint); padding-left:10px;
+      border-left:1px solid var(--border); white-space:nowrap; max-width:160px;
+      overflow:hidden; text-overflow:ellipsis; }
+    .us-btn { background:var(--bg-elev); border:1px solid var(--border-strong);
+      color:var(--text-dim); font-family:inherit; font-size:10px; padding:4px 10px;
+      border-radius:4px; cursor:pointer; text-transform:uppercase; letter-spacing:.07em; }
+    .us-btn:hover { color:var(--text); }
+
+    /* ── WORKSPACE VIEW ──────────────────────────────────────────── */
+    .view-workspace { position:fixed; inset:0; z-index:400; display:none; flex-direction:column;
+      background: radial-gradient(circle at 20% 30%,rgba(212,255,58,.05),transparent 50%),
+                  radial-gradient(circle at 80% 70%,rgba(255,138,61,.04),transparent 50%), var(--bg); }
+    .view-workspace.active { display:flex; }
+    .ws-body { flex:1; display:flex; align-items:center; justify-content:center;
+      padding:32px; overflow-y:auto; }
+
+    /* ── DASHBOARD VIEW ──────────────────────────────────────────── */
+    .view-dashboard { position:fixed; inset:0; z-index:300; display:none;
+      flex-direction:column; background:var(--bg); }
+    .view-dashboard.active { display:flex; }
+    .dash-body { flex:1; overflow-y:auto; padding:24px 32px; }
+    .dash-header { display:flex; align-items:flex-start; justify-content:space-between;
+      margin-bottom:28px; gap:16px; }
+    .dash-title { font-family:'Fraunces',serif; font-size:22px; font-weight:500; }
+    .dash-ws-label { font-size:10px; color:var(--text-faint); text-transform:uppercase;
+      letter-spacing:.1em; margin-top:2px; }
+    .dash-new-btn { background:var(--accent); color:var(--bg); border:none;
+      padding:9px 18px; border-radius:5px; font-family:inherit; font-size:11px;
+      font-weight:600; cursor:pointer; text-transform:uppercase; letter-spacing:.07em;
+      white-space:nowrap; flex-shrink:0; }
+    .dash-new-btn:hover { background:#c4ef2a; }
+    .dash-section { margin-bottom:28px; }
+    .dash-section-hd { font-size:9.5px; text-transform:uppercase; letter-spacing:.15em;
+      color:var(--text-faint); font-weight:600; margin-bottom:10px;
+      display:flex; align-items:center; gap:8px; }
+    .dash-cnt { background:var(--bg-elev); color:var(--text-dim); font-size:9px;
+      padding:1px 7px; border-radius:8px; }
+    .dash-empty { color:var(--text-faint); font-size:11px; font-style:italic; padding:8px 0; }
+    .sprint-tbl { width:100%; border-collapse:collapse; }
+    .sprint-tbl th { font-size:9px; text-transform:uppercase; letter-spacing:.1em;
+      color:var(--text-faint); padding:0 12px 8px 0; text-align:left; font-weight:500; }
+    .sprint-tbl td { padding:10px 12px 10px 0; border-top:1px solid var(--border);
+      font-size:11.5px; vertical-align:middle; }
+    .sprint-tbl tr:hover td { background:rgba(255,255,255,.013); }
+    .sprint-goal-txt { font-size:12px; color:var(--text); word-break:break-word;
+      max-width:240px; line-height:1.4; }
+    .sprint-sid-txt { font-size:9px; color:var(--text-faint); margin-top:2px; }
+    .ph-badge { display:inline-flex; font-size:8.5px; padding:2px 7px; border-radius:4px;
+      text-transform:uppercase; letter-spacing:.07em; border:1px solid; white-space:nowrap; }
+    .ph-badge.complete { color:#5fd49a; border-color:rgba(95,212,154,.35); background:rgba(95,212,154,.08); }
+    .ph-badge.waiting_sprint_review,.ph-badge.reviewed_partial {
+      color:#f3a64b; border-color:rgba(243,166,75,.35); background:rgba(243,166,75,.08); }
+    .ph-badge.blocked,.ph-badge.error {
+      color:#ef6f6f; border-color:rgba(239,111,111,.35); background:rgba(239,111,111,.08); }
+    .ph-badge.executing,.ph-badge.planning,.ph-badge.running,.ph-badge.started {
+      color:var(--sm); border-color:rgba(93,184,255,.35); background:rgba(93,184,255,.08); }
+    .ph-badge.archived { color:var(--text-faint); border-color:var(--border); }
+    .conf-cell { display:flex; align-items:center; gap:6px; }
+    .conf-val { font-size:12px; font-weight:600; min-width:30px; }
+    .conf-track { width:50px; height:3px; background:var(--border); border-radius:2px; }
+    .conf-fill { height:100%; border-radius:2px; background:var(--done); transition:width .4s; }
+    .sa { display:flex; gap:5px; flex-wrap:wrap; }
+    .sa-btn { font-family:inherit; font-size:9px; padding:4px 9px; border-radius:4px;
+      cursor:pointer; border:1px solid; background:transparent;
+      text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; }
+    .sa-btn.open { color:var(--sm); border-color:rgba(93,184,255,.35); }
+    .sa-btn.open:hover { background:rgba(93,184,255,.08); }
+    .sa-btn.rev { color:#f3a64b; border-color:rgba(243,166,75,.35); }
+    .sa-btn.rev:hover { background:rgba(243,166,75,.08); }
+    .sa-btn.rec { color:#d4a0d4; border-color:rgba(212,160,212,.35); }
+    .sa-btn.rec:hover { background:rgba(212,160,212,.08); }
+    .sa-btn.arc { color:var(--text-faint); border-color:var(--border); }
+    .sa-btn.arc:hover { color:var(--text); }
+
+    /* ── PROJECTS VIEW ──────────────────────────────────────────── */
+    .view-projects { position:fixed; inset:0; z-index:350; display:none;
+      flex-direction:column; background:var(--bg); }
+    .view-projects.active { display:flex; }
+    .proj-body { flex:1; overflow-y:auto; padding:24px 32px; }
+    .proj-header { display:flex; align-items:flex-start; justify-content:space-between;
+      margin-bottom:24px; gap:16px; }
+    .proj-title { font-family:'Fraunces',serif; font-size:22px; font-weight:500; }
+    .proj-sub { font-size:10px; color:var(--text-faint); text-transform:uppercase;
+      letter-spacing:.1em; margin-top:2px; }
+    .proj-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr));
+      gap:14px; }
+    .proj-card { background:var(--bg-elev); border:1px solid var(--border);
+      border-radius:8px; padding:16px 18px; display:flex; flex-direction:column;
+      gap:10px; transition:border-color .2s; }
+    .proj-card:hover { border-color:var(--border-strong); }
+    .proj-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+    .proj-card-title { font-family:'Fraunces',serif; font-size:16px; font-weight:500;
+      color:var(--text); line-height:1.25; word-break:break-word; }
+    .proj-card-goal { font-size:11px; color:var(--text-dim); line-height:1.55;
+      min-height:34px; word-break:break-word; }
+    .proj-card-counters { display:flex; flex-wrap:wrap; gap:6px; font-size:9.5px;
+      color:var(--text-faint); text-transform:uppercase; letter-spacing:.06em; }
+    .proj-counter { padding:3px 7px; border-radius:4px; background:var(--bg);
+      border:1px solid var(--border); }
+    .proj-counter.act { color:var(--sm); border-color:rgba(93,184,255,.35); }
+    .proj-counter.cmp { color:var(--done); border-color:rgba(95,212,154,.35); }
+    .proj-counter.par { color:#f3a64b; border-color:rgba(243,166,75,.35); }
+    .proj-counter.blk { color:#ef6f6f; border-color:rgba(239,111,111,.35); }
+    .proj-card-meta { font-size:9.5px; color:var(--text-faint); display:flex; gap:10px;
+      flex-wrap:wrap; }
+    .proj-card-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
+    .proj-status-badge { font-size:8.5px; padding:2px 7px; border-radius:4px;
+      text-transform:uppercase; letter-spacing:.07em; border:1px solid; white-space:nowrap; }
+    .proj-status-badge.active   { color:var(--accent); border-color:rgba(212,255,58,.35); background:rgba(212,255,58,.08); }
+    .proj-status-badge.archived { color:var(--text-faint); border-color:var(--border); }
+
+    .proj-empty-hero { max-width:560px; margin:60px auto 0; background:var(--bg-elev);
+      border:1px solid var(--border); border-radius:10px; padding:32px 36px; }
+    .proj-empty-eyebrow { font-size:10px; text-transform:uppercase; letter-spacing:.2em;
+      color:var(--accent); margin-bottom:12px; }
+    .proj-empty-title { font-family:'Fraunces',serif; font-size:28px; font-weight:500;
+      line-height:1.2; margin-bottom:8px; }
+    .proj-empty-sub { color:var(--text-dim); font-size:12px; line-height:1.6;
+      margin-bottom:18px; }
+    .proj-form-label { font-size:10px; text-transform:uppercase; letter-spacing:.1em;
+      color:var(--text-faint); margin-bottom:6px; display:block; }
+    .proj-form-inp { width:100%; background:var(--bg); border:1px solid var(--border-strong);
+      color:var(--text); font-family:'JetBrains Mono',monospace; font-size:12.5px;
+      padding:9px 12px; border-radius:5px; outline:none; margin-bottom:12px; }
+    .proj-form-inp:focus { border-color:var(--accent); }
+    .proj-form-inp.error { border-color:var(--danger); }
+    textarea.proj-form-inp { resize:vertical; min-height:60px; line-height:1.5; }
+    .proj-form-err { font-size:10.5px; color:var(--danger); min-height:14px; margin-bottom:8px; }
+    .proj-create-btn { background:var(--accent); color:var(--bg); border:none;
+      padding:10px 20px; border-radius:5px; font-family:inherit; font-size:11px;
+      font-weight:600; cursor:pointer; text-transform:uppercase; letter-spacing:.07em; }
+    .proj-create-btn:disabled { opacity:.5; cursor:not-allowed; }
+    .proj-create-btn:hover:not(:disabled) { background:#c4ef2a; }
+
+    .proj-add-card { background:transparent; border:1.5px dashed var(--border-strong);
+      border-radius:8px; padding:16px 18px; display:flex; flex-direction:column; gap:10px;
+      cursor:pointer; transition:border-color .2s,background .2s; }
+    .proj-add-card:hover { border-color:var(--accent); background:rgba(212,255,58,.04); }
+    .proj-add-icon { font-size:24px; color:var(--accent); line-height:1; }
+    .proj-add-title { font-family:'Fraunces',serif; font-size:14px; color:var(--text); }
+    .proj-add-sub { font-size:10.5px; color:var(--text-dim); }
+
+    /* ── PROJECT DETAIL VIEW ─────────────────────────────────────── */
+    .view-project-detail { position:fixed; inset:0; z-index:340; display:none;
+      flex-direction:column; background:var(--bg); }
+    .view-project-detail.active { display:flex; }
+    .pd-body { flex:1; overflow-y:auto; padding:24px 32px; }
+    .pd-back { background:transparent; border:none; color:var(--text-dim);
+      font-family:inherit; font-size:11px; cursor:pointer; padding:0; margin-bottom:14px;
+      letter-spacing:.05em; }
+    .pd-back:hover { color:var(--accent); }
+    .pd-head { display:flex; align-items:flex-start; justify-content:space-between;
+      gap:16px; margin-bottom:18px; }
+    .pd-title { font-family:'Fraunces',serif; font-size:24px; font-weight:500; line-height:1.2; }
+    .pd-goal { font-size:12.5px; color:var(--text-dim); margin-top:6px; line-height:1.5;
+      max-width:720px; }
+    .pd-meta-row { display:flex; gap:14px; flex-wrap:wrap; font-size:10px;
+      color:var(--text-faint); margin-top:8px; }
+    .pd-meta-row b { color:var(--text-dim); font-weight:500; }
+    .pd-actions { display:flex; gap:8px; flex-shrink:0; flex-wrap:wrap; }
+    .pd-counters { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:24px; }
+    .pd-err { color:var(--danger); padding:14px 16px; border:1px solid rgba(239,111,111,.35);
+      border-radius:6px; background:rgba(239,111,111,.06); font-size:11.5px; margin-bottom:18px; }
+
+    /* ── PRODUCT BACKLOG PANEL ───────────────────────────────────── */
+    .pb-panel { border:1px solid var(--border); border-radius:8px;
+      background:var(--bg-elev); padding:16px 18px; margin-bottom:24px; }
+    .pb-hd { display:flex; justify-content:space-between; align-items:center;
+      margin-bottom:12px; gap:12px; flex-wrap:wrap; }
+    .pb-title { font-family:'Fraunces',serif; font-size:16px; font-weight:500; }
+    .pb-sub { font-size:10.5px; color:var(--text-dim); margin-top:2px;
+      text-transform:uppercase; letter-spacing:0.1em; }
+    .pb-actions { display:flex; gap:6px; flex-wrap:wrap; }
+    .pb-btn { background:var(--bg-elev-2); border:1px solid var(--border-strong);
+      color:var(--text); font-family:inherit; font-size:10.5px; cursor:pointer;
+      padding:6px 12px; border-radius:4px; }
+    .pb-btn:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+    .pb-btn.primary { background:var(--accent); color:var(--bg); border-color:var(--accent); }
+    .pb-btn:disabled { opacity:0.4; cursor:not-allowed; }
+    .pb-empty { text-align:center; padding:24px 8px; color:var(--text-dim); font-size:11px;
+      border:1px dashed var(--border); border-radius:6px; }
+    .pb-err { color:var(--danger); padding:10px; border:1px solid rgba(239,111,111,.3);
+      border-radius:4px; background:rgba(239,111,111,.06); font-size:11px; margin-bottom:8px; }
+    .pb-tbl { width:100%; border-collapse:collapse; font-size:11.5px; }
+    .pb-tbl th, .pb-tbl td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);
+      vertical-align:top; }
+    .pb-tbl th { font-size:10px; text-transform:uppercase; letter-spacing:0.1em;
+      color:var(--text-faint); font-weight:500; }
+    .pb-tbl tr:hover { background:var(--bg-elev-2); }
+    .pb-tbl td.pb-id { color:var(--text-faint); font-family:'JetBrains Mono', monospace;
+      font-size:10.5px; white-space:nowrap; }
+    .pb-status { display:inline-block; padding:2px 8px; border-radius:10px;
+      font-size:9.5px; text-transform:uppercase; letter-spacing:0.08em;
+      border:1px solid var(--border-strong); }
+    .pb-status.new      { color:var(--text); }
+    .pb-status.selected { color:var(--accent); border-color:var(--accent); }
+    .pb-status.in_sprint{ color:var(--inprogress); border-color:var(--inprogress); }
+    .pb-status.done     { color:var(--done); border-color:var(--done); }
+    .pb-status.deferred { color:var(--text-dim); }
+    .pb-prio { display:inline-block; font-size:9.5px; padding:1px 6px; border-radius:3px;
+      text-transform:uppercase; letter-spacing:0.08em; }
+    .pb-prio.high   { background:rgba(255,93,93,.18); color:var(--danger); }
+    .pb-prio.medium { background:rgba(93,184,255,.15); color:var(--inprogress); }
+    .pb-prio.low    { background:rgba(136,146,176,.15); color:var(--text-dim); }
+    .pb-add-form { display:grid; grid-template-columns:2fr 1fr 80px 80px 80px;
+      gap:8px; margin-top:12px; padding:12px; background:var(--bg-elev-2);
+      border:1px solid var(--border); border-radius:6px; }
+    .pb-add-form input, .pb-add-form select {
+      background:var(--bg); border:1px solid var(--border-strong); color:var(--text);
+      padding:6px 10px; font-family:inherit; font-size:11px; border-radius:4px; }
+    .pb-cell-acts { display:flex; gap:4px; }
+    .pb-icon-btn { background:transparent; border:1px solid var(--border-strong);
+      color:var(--text-dim); font-family:inherit; font-size:10px; cursor:pointer;
+      padding:3px 8px; border-radius:3px; }
+    .pb-icon-btn:hover:not(:disabled) { color:var(--accent); border-color:var(--accent); }
+    .pb-icon-btn:disabled { opacity:0.3; cursor:not-allowed; }
+    .pb-select-cell { width:30px; }
+    .pb-select-cell input { cursor:pointer; }
+    .pb-plan-bar { margin-top:12px; padding:10px 14px; background:var(--bg-elev-2);
+      border:1px solid var(--border-strong); border-radius:6px;
+      display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .pb-plan-info { font-size:11px; color:var(--text-dim); }
+    .pb-plan-info b { color:var(--accent); }
+
+    /* ── COCKPIT TOPBAR EXTRAS ───────────────────────────────────── */
+    .tb-user-name { font-size:10.5px; color:var(--text-dim); }
+    .tb-user-role { font-size:9px; padding:2px 6px; border-radius:4px;
+      background:rgba(212,255,58,.1); color:var(--accent);
+      border:1px solid rgba(212,255,58,.25); text-transform:uppercase; }
+
+    /* ── PROFILE PANEL ───────────────────────────────────────────── */
+    .profile-panel { position:fixed; top:50px; right:16px; z-index:700;
+      background:var(--bg-elev); border:1px solid var(--border-strong);
+      border-radius:8px; padding:18px; min-width:240px;
+      box-shadow:0 8px 32px rgba(0,0,0,.5); display:none; }
+    .profile-panel.open { display:block; }
+    .pp-name { font-family:'Fraunces',serif; font-size:16px; font-weight:500; margin-bottom:2px; }
+    .pp-email { font-size:10.5px; color:var(--text-dim); margin-bottom:14px; }
+    .pp-row { display:flex; justify-content:space-between; font-size:10.5px;
+      padding:6px 0; border-top:1px solid var(--border); }
+    .pp-lbl { color:var(--text-faint); }
+    .pp-val { color:var(--text-dim); max-width:150px; text-align:right; word-break:break-word; }
+
+    /* ── BOARD GRID (5 columns) ──────────────────────────────────── */
+    .board { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; height:100%; }
+
+    /* ── SPRINT REVIEW / RETRO SECTIONS ──────────────────────────── */
+    .sr-section { border:1px solid var(--border); border-radius:8px; padding:14px 16px; background:var(--bg-elev); }
+    .sr-h { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
+            font-size:12px; color:var(--text-faint); font-weight:600;
+            letter-spacing:.08em; text-transform:uppercase;
+            padding-bottom:8px; margin-bottom:10px; border-bottom:1px solid var(--border); }
+    .sr-body { font-size:13px; color:var(--text); line-height:1.5; }
+    .sr-empty { font-style:italic; color:var(--text-faint); }
+    .sr-pre { white-space:pre-wrap; word-break:break-word; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+              font-size:12px; color:var(--text); background:var(--bg); padding:10px;
+              border:1px solid var(--border); border-radius:6px; max-height:400px; overflow:auto; margin:0; }
+    .sr-textarea { width:100%; box-sizing:border-box; min-height:80px; padding:8px 10px; resize:vertical;
+                   font-family:inherit; font-size:13px; color:var(--text);
+                   background:var(--bg); border:1px solid var(--border); border-radius:6px; }
+    .sr-textarea:focus { outline:none; border-color:#64c8ef; }
+    .sr-select { font-size:12px; padding:5px 8px; background:var(--bg); color:var(--text);
+                 border:1px solid var(--border); border-radius:5px; }
+    .sr-label { font-size:11px; color:var(--text-dim); font-weight:600; margin-top:8px; display:block; }
+    .sr-btn { background:#1a2a3a; color:#64c8ef; border:1px solid #2a4a6a;
+              padding:6px 14px; border-radius:5px; font-size:12px; cursor:pointer; font-family:inherit; }
+    .sr-btn:hover:not(:disabled) { background:#22344a; }
+    .sr-btn:disabled { opacity:.4; cursor:not-allowed; }
+    .sr-err { font-size:11px; color:var(--danger); background:#2a1a1a; border:1px solid #4a2a2a;
+              padding:6px 10px; border-radius:5px; margin-top:6px; word-break:break-word; }
+    .sr-saved { font-size:11px; color:#7ad17a; margin-top:6px; }
+    .sr-lock { font-size:12px; color:#d4a0d4; background:#2a1a2a; border:1px solid #4a2a4a;
+               padding:8px 12px; border-radius:5px; margin-bottom:8px; }
+    .sr-stat { display:inline-block; margin:2px 6px 2px 0; padding:2px 8px;
+               background:var(--bg); border:1px solid var(--border); border-radius:10px; font-size:11px; }
+    .sr-chip { display:inline-block; margin:2px 4px 2px 0; padding:2px 8px;
+               background:#1a2a3a; color:#9cd6f0; border:1px solid #2a4a6a; border-radius:10px; font-size:11px; }
+    .review-btn { background:#1a2a3a; color:#64c8ef; border:1px solid #2a4a6a;
+                  padding:7px 16px; border-radius:5px; font-size:12px; cursor:pointer; font-family:inherit; }
+    .review-btn[data-decision="recovery_sprint"] { background:#2a1a2a; color:#d4a0d4; border-color:#4a2a4a; }
+    .review-btn:disabled { opacity:.4; cursor:not-allowed; }
+
+    /* ── INTRO: previous-sprint suggestion box ──────────────────── */
+    .intro-suggest { margin-bottom:14px; padding:12px 14px; background:var(--bg-elev);
+                     border:1px solid var(--border); border-radius:8px; text-align:left; }
+    .intro-suggest h4 { margin:0 0 6px; font-size:11px; letter-spacing:.08em;
+                        text-transform:uppercase; color:var(--text-faint); font-weight:600; }
+    .intro-suggest .sg { font-size:13px; color:var(--text); margin-bottom:8px; }
+    .intro-suggest .row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; }
+
     /* scrollbars */
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -289,8 +697,132 @@
 </head>
 <body>
 
+<!-- ══ LOGIN ══════════════════════════════════════════════════════════════════ -->
+<div class="view-login" id="view-login">
+  <div class="login-card">
+    <div class="login-logo-mark">CognitWin<span class="dot">.</span></div>
+    <h1 class="login-h">Sign in</h1>
+    <p class="login-sub">Autonomous Scrum Platform — demo environment.</p>
+    <div class="login-field">
+      <label class="login-lbl" for="loginEmail">Email</label>
+      <input class="login-inp" id="loginEmail" type="email" placeholder="your@email.com" autocomplete="username" />
+    </div>
+    <div class="login-field">
+      <label class="login-lbl" for="loginPassword">Password</label>
+      <input class="login-inp" id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <div class="login-err" id="loginErr"></div>
+    <button class="login-btn" id="loginBtn">Sign In →</button>
+    <div class="login-hint">
+      <b>Demo accounts</b> — password: <b>demo</b><br>
+      ayca@cognitwin.ai &nbsp;·&nbsp; admin@cognitwin.ai<br>
+      dev@cognitwin.ai &nbsp;·&nbsp; stakeholder@cognitwin.ai
+    </div>
+  </div>
+</div>
+
+<!-- ══ WORKSPACE ══════════════════════════════════════════════════════════════ -->
+<div class="view-workspace" id="view-workspace">
+  <div class="user-strip">
+    <div class="us-logo">CognitWin<span class="dot">.</span><span class="sub">Autonomous Scrum</span></div>
+    <div class="us-pill">
+      <span class="us-name" id="wsUserName">—</span>
+      <span class="us-role" id="wsUserRole">—</span>
+      <button class="us-btn" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+  <div class="ws-body">
+    <div class="intro-card">
+      <div class="intro-eyebrow">Select Workspace</div>
+      <h2 class="intro-title" style="font-size:30px;">Choose your project<br><em>workspace.</em></h2>
+      <p class="intro-sub">Workspaces group related sprints. Select one to open its dashboard.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">
+        <button style="background:var(--bg-elev);border:1px solid var(--border);border-radius:6px;padding:16px 20px;cursor:pointer;text-align:left;width:100%;transition:border-color .2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor=''" onclick="selectWorkspace('Agile Sprint Demo')">
+          <div style="font-family:'Fraunces',serif;font-size:16px;color:var(--text);margin-bottom:4px;">Agile Sprint Demo</div>
+          <div style="font-size:10.5px;color:var(--text-dim);">Autonomous AI-driven sprint execution workspace</div>
+        </button>
+        <button style="background:var(--bg-elev);border:1px solid var(--border);border-radius:6px;padding:16px 20px;cursor:pointer;text-align:left;width:100%;transition:border-color .2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor=''" onclick="selectWorkspace('Product Innovation Lab')">
+          <div style="font-family:'Fraunces',serif;font-size:16px;color:var(--text);margin-bottom:4px;">Product Innovation Lab</div>
+          <div style="font-size:10.5px;color:var(--text-dim);">Rapid prototyping and product discovery</div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PROJECTS DASHBOARD ═════════════════════════════════════════════════════ -->
+<div class="view-projects" id="view-projects">
+  <div class="user-strip">
+    <div class="us-logo">CognitWin<span class="dot">.</span><span class="sub">Autonomous Scrum</span></div>
+    <div class="us-pill">
+      <span class="us-ws" id="projWorkspaceName">—</span>
+      <span class="us-name" id="projUserName">—</span>
+      <span class="us-role" id="projUserRole">—</span>
+      <button class="us-btn" onclick="showProfilePanel()">Account</button>
+      <button class="us-btn" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+  <div class="proj-body">
+    <div class="proj-header">
+      <div>
+        <div class="proj-title" id="projDashTitle">My Projects</div>
+        <div class="proj-sub" id="projDashSub">—</div>
+      </div>
+    </div>
+    <div id="projContent">
+      <div class="dash-empty" style="padding:40px 0;text-align:center;">Loading projects…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PROJECT DETAIL ═════════════════════════════════════════════════════════ -->
+<div class="view-project-detail" id="view-project-detail">
+  <div class="user-strip">
+    <div class="us-logo">CognitWin<span class="dot">.</span><span class="sub">Autonomous Scrum</span></div>
+    <div class="us-pill">
+      <span class="us-ws" id="pdWorkspaceName">—</span>
+      <span class="us-name" id="pdUserName">—</span>
+      <span class="us-role" id="pdUserRole">—</span>
+      <button class="us-btn" onclick="showProfilePanel()">Account</button>
+      <button class="us-btn" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+  <div class="pd-body">
+    <button class="pd-back" onclick="backToProjects()">← Back to Projects</button>
+    <div id="pdContent">
+      <div class="dash-empty" style="padding:40px 0;text-align:center;">Loading project…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DASHBOARD ══════════════════════════════════════════════════════════════ -->
+<div class="view-dashboard" id="view-dashboard">
+  <div class="user-strip">
+    <div class="us-logo">CognitWin<span class="dot">.</span><span class="sub">Autonomous Scrum</span></div>
+    <div class="us-pill">
+      <span class="us-ws" id="dashWorkspaceName">—</span>
+      <span class="us-name" id="dashUserName">—</span>
+      <span class="us-role" id="dashUserRole">—</span>
+      <button class="us-btn" onclick="showProfilePanel()">Account</button>
+      <button class="us-btn" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+  <div class="dash-body">
+    <div class="dash-header">
+      <div>
+        <div class="dash-title">Sprint Dashboard</div>
+        <div class="dash-ws-label" id="dashWsLabel">—</div>
+      </div>
+      <button class="dash-new-btn" onclick="startNewSprintFlow()">+ New Sprint</button>
+    </div>
+    <div id="dashContent">
+      <div class="dash-empty" style="padding:40px 0;text-align:center;">Loading sprints…</div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ INTRO ═══════════════════════════════════════════════════════════════ -->
-<div class="intro" id="intro">
+<div class="intro" id="intro" style="display:none;">
   <div class="intro-card">
     <div class="intro-eyebrow">CognitWin · Autonomous Scrum</div>
     <h1 class="intro-title">Set a goal.<br><em>Watch the team ship it.</em></h1>
@@ -331,11 +863,17 @@
 
   <!-- Top bar -->
   <div class="topbar">
+    <button class="topbtn" id="backToProjBtn" style="display:none;" onclick="backToProjectFromCockpit()">← Project</button>
+    <button class="topbtn" id="backToDashBtn" style="display:none;" onclick="backToProjects()">← Projects</button>
     <div class="logo">CognitWin<span class="dot">.</span><span class="sub">Scrum Cockpit</span></div>
+    <span id="cockpitProjectLabel" style="font-size:10.5px;color:var(--text-faint);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
     <div class="sys-status">
       <div class="pulse" id="pulse"></div>
       <span id="sysLabel">IDLE</span>
     </div>
+    <span class="tb-user-name" id="tbUserName" style="margin-left:auto;"></span>
+    <span class="tb-user-role" id="tbUserRole" style="margin-left:6px;"></span>
+    <button class="topbtn" id="profileBtn" style="display:none;margin-left:8px;" onclick="showProfilePanel()">Account</button>
     <button class="topbtn" id="resetBtn">↩ New Sprint</button>
   </div>
 
@@ -408,12 +946,14 @@
       </div>
 
       <div class="complete-banner" id="completeBanner">
-        <strong>✓ Sprint Complete.</strong>
+        <strong id="completeTitle">✓ Sprint Complete.</strong>
         <span id="completeText"></span>
       </div>
 
       <div class="tabs">
         <button class="tab active" data-tab="board">Sprint Board</button>
+        <button class="tab" data-tab="review">Sprint Review</button>
+        <button class="tab" data-tab="retro">Retrospective</button>
         <button class="tab" data-tab="preview">Live Preview</button>
         <button class="tab" data-tab="code">Code Output</button>
       </div>
@@ -430,6 +970,10 @@
             <div class="col-head"><div class="col-title">In Progress</div><div class="col-cnt" id="cnt-inprogress">0</div></div>
             <div class="col-body" id="col-inprogress"><div class="col-empty">—</div></div>
           </div>
+          <div class="col" data-status="waiting_review">
+            <div class="col-head"><div class="col-title">Waiting Review</div><div class="col-cnt" id="cnt-waiting_review">0</div></div>
+            <div class="col-body" id="col-waiting_review"><div class="col-empty">—</div></div>
+          </div>
           <div class="col" data-status="done">
             <div class="col-head"><div class="col-title">Done</div><div class="col-cnt" id="cnt-done">0</div></div>
             <div class="col-body" id="col-done"><div class="col-empty">—</div></div>
@@ -438,6 +982,116 @@
             <div class="col-head"><div class="col-title">Blocked</div><div class="col-cnt" id="cnt-blocked">0</div></div>
             <div class="col-body" id="col-blocked"><div class="col-empty">—</div></div>
           </div>
+        </div>
+
+        <!-- Sprint Review -->
+        <div id="tab-review" class="review-panel" style="display:none;flex-direction:column;gap:18px;">
+
+          <!-- PO Agent Story Acceptance log (read-only during execution) -->
+          <section class="sr-section" data-section="story-acceptance">
+            <div class="sr-h">
+              <span>PO Agent Story Acceptance</span>
+              <button id="poRecoveryBtn" class="sr-btn" onclick="runPOAgentRecovery()" title="Run PO Agent review on tasks still in Waiting Review (recovery for old sprints)">Re-run PO Review</button>
+            </div>
+            <div id="poRecoveryError" class="sr-err" style="display:none;"></div>
+            <div id="review-task-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+          </section>
+
+          <!-- System Review -->
+          <section class="sr-section" data-section="system-review">
+            <div class="sr-h">
+              <span>System Review</span>
+              <button id="systemReviewBtn" class="sr-btn" onclick="generateSystemReview()">Generate / Refresh</button>
+            </div>
+            <div id="systemReviewError" class="sr-err" style="display:none;"></div>
+            <div id="systemReviewBody" class="sr-body">
+              <div class="sr-empty">No system review yet. Click Generate.</div>
+            </div>
+          </section>
+
+          <!-- Human Sprint Review Notes — only editable after sprint ends -->
+          <section class="sr-section" data-section="human-review">
+            <div class="sr-h">Human Sprint Review Notes</div>
+            <div id="humanReviewLockHint" class="sr-lock">
+              Sprint still executing — Human Sprint Review Notes unlock after the run ends.
+            </div>
+            <textarea id="humanReviewText" class="sr-textarea"
+              placeholder="Your sprint-level review — what shipped well, what to flag, product quality comments, next sprint suggestions…"></textarea>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;">
+              <label style="font-size:11px;color:var(--text-dim);">Decision:</label>
+              <select id="humanReviewDecision" class="sr-select">
+                <option value="">— optional —</option>
+                <option value="accept_partial">Accept as Partial Increment</option>
+                <option value="recovery_sprint">Recommend Recovery Sprint</option>
+                <option value="reopen_blocked">Reopen Blocked Items</option>
+              </select>
+              <button id="humanReviewBtn" class="sr-btn" onclick="saveHumanReview()">Save Sprint Review Notes</button>
+            </div>
+            <div id="humanReviewError" class="sr-err" style="display:none;"></div>
+            <div id="humanReviewSaved" class="sr-saved" style="display:none;"></div>
+          </section>
+
+          <!-- Final Sprint Notes (synthesized from system + human review) -->
+          <section class="sr-section" data-section="merged-notes">
+            <div class="sr-h">
+              <span>Final Sprint Notes</span>
+              <button id="synthesizeBtn" class="sr-btn" onclick="synthesizeReview()">Synthesize Sprint Notes</button>
+            </div>
+            <div id="synthesizeError" class="sr-err" style="display:none;"></div>
+            <pre id="mergedNotesBody" class="sr-pre"><span class="sr-empty">No final notes yet.</span></pre>
+          </section>
+
+          <!-- Next Sprint Notes -->
+          <section class="sr-section" data-section="next-sprint-notes">
+            <div class="sr-h">Next Sprint Notes</div>
+            <div id="nextSprintNotesBody" class="sr-body">
+              <div class="sr-empty">Synthesize Sprint Notes to generate a next-sprint plan.</div>
+            </div>
+            <div id="nextSprintActions" style="display:none;gap:8px;flex-wrap:wrap;margin-top:8px;">
+              <button id="useNextGoalBtn" class="sr-btn" onclick="startNextSprintFromNotes()">Start Next Sprint from Notes</button>
+              <button id="addNextItemsBtn" class="sr-btn" onclick="addNextItemsToBacklog()">Add Suggested Items to Product Backlog</button>
+            </div>
+          </section>
+
+          <!-- Sprint Review Decision -->
+          <section class="sr-section" data-section="sprint-review-decision">
+            <div class="sr-h">Sprint Review Decision</div>
+            <div id="sprintReviewLockBanner" class="sr-lock" style="display:none;">
+              Sprint still executing — Sprint Review decisions unlock after the run ends.
+            </div>
+            <div id="sprintReviewDecisionButtons" style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="review-btn" data-decision="close_partial" onclick="sprintDecision('close_partial')">Close as Partial Increment</button>
+              <button class="review-btn" data-decision="recovery_sprint" onclick="sprintDecision('recovery_sprint')">Create Recovery Sprint</button>
+            </div>
+          </section>
+        </div>
+
+        <!-- Retrospective -->
+        <div id="tab-retro" class="retro-panel" style="display:none;flex-direction:column;gap:14px;">
+          <section class="sr-section">
+            <div class="sr-h">Retrospective</div>
+            <div id="retroLockBanner" class="sr-lock" style="display:none;">
+              Retrospective unlocks after the Sprint Review is closed.
+            </div>
+            <label class="sr-label">Went well</label>
+            <textarea id="retroWentWell" class="sr-textarea"
+              placeholder="One bullet per line — what worked this sprint?"></textarea>
+            <label class="sr-label">Improve</label>
+            <textarea id="retroImprove" class="sr-textarea"
+              placeholder="One bullet per line — what should we change next time?"></textarea>
+            <label class="sr-label">Action items <span style="color:var(--text-faint);font-weight:400;">(saved as backlog items)</span></label>
+            <textarea id="retroActions" class="sr-textarea"
+              placeholder="One concrete action per line — these become Product Backlog items."></textarea>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">
+              <button id="retroSaveBtn" class="sr-btn" onclick="saveRetro()">Save Retro</button>
+              <span id="retroSavedMsg" style="font-size:11px;color:var(--text-dim);"></span>
+            </div>
+            <div id="retroError" class="sr-err" style="display:none;"></div>
+            <div id="retroSeededBody" style="margin-top:10px;display:none;">
+              <div class="sr-h" style="font-size:12px;border:0;padding:0;">Seeded into Product Backlog</div>
+              <div id="retroSeededList" class="sr-body"></div>
+            </div>
+          </section>
         </div>
 
         <!-- Preview -->
@@ -485,12 +1139,1043 @@
   </div><!-- .cockpit-body -->
 </div><!-- .cockpit -->
 
+<!-- ── PROFILE PANEL ───────────────────────────────────────────────────── -->
+<div class="profile-panel" id="profilePanel">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+    <div>
+      <div class="pp-name" id="ppName">—</div>
+      <div class="pp-email" id="ppEmail">—</div>
+    </div>
+    <button style="background:none;border:none;color:var(--text-faint);font-size:16px;cursor:pointer;line-height:1;padding:2px 4px;" onclick="hideProfilePanel()">✕</button>
+  </div>
+  <div class="pp-row"><span class="pp-lbl">Role</span><span class="pp-val" id="ppRole">—</span></div>
+  <div class="pp-row"><span class="pp-lbl">Workspace</span><span class="pp-val" id="ppWorkspace">—</span></div>
+  <div class="pp-row"><span class="pp-lbl">Session</span><span class="pp-val" id="ppSession">—</span></div>
+  <button style="width:100%;margin-top:14px;background:rgba(239,111,111,.1);color:#ef6f6f;border:1px solid rgba(239,111,111,.3);padding:8px;border-radius:5px;font-family:inherit;font-size:10px;text-transform:uppercase;letter-spacing:.08em;cursor:pointer;" onclick="doLogout()">Sign Out</button>
+</div>
+
+<!-- ── REVIEW MODAL ────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="reviewModalOverlay" role="dialog" aria-modal="true" aria-labelledby="modalTaskTitle">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-header-left">
+        <div class="modal-decision-badge" id="modalDecisionBadge"></div>
+        <div class="modal-task-id" id="modalTaskId"></div>
+        <div class="modal-task-title" id="modalTaskTitle"></div>
+      </div>
+      <button class="modal-close" id="modalCloseBtn" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="modal-label" for="modalFeedback">
+        Feedback<span id="modalFeedbackRequired"></span>
+      </label>
+      <textarea
+        class="modal-textarea"
+        id="modalFeedback"
+        placeholder="Optional notes for the developer…"
+        rows="4"
+      ></textarea>
+      <div class="modal-error" id="modalError">Feedback is required for this decision.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn cancel" id="modalCancelBtn">Cancel</button>
+      <button class="modal-btn submit" id="modalSubmitBtn">Submit</button>
+    </div>
+  </div>
+</div>
+
 <script>
+// ══════════════════════════════════════════════════════════════════════════════
+//  DEMO AUTH — not production security
+// ══════════════════════════════════════════════════════════════════════════════
+/* Demo auth only, not production security. */
+const DEMO_USERS = [
+  { id:'u1', name:'Ayça Kayacalı',  email:'ayca@cognitwin.ai',        password:'demo', role:'Supervisor',     workspace:'Agile Sprint Demo' },
+  { id:'u2', name:'Admin User',     email:'admin@cognitwin.ai',       password:'demo', role:'Administrator',  workspace:'Agile Sprint Demo' },
+  { id:'u3', name:'Dev User',       email:'dev@cognitwin.ai',         password:'demo', role:'Developer',      workspace:'Agile Sprint Demo' },
+  { id:'u4', name:'Stakeholder',    email:'stakeholder@cognitwin.ai', password:'demo', role:'Stakeholder',    workspace:'Agile Sprint Demo' },
+];
+
+function getSession()   { try { return JSON.parse(localStorage.getItem('cognitwin_session')); } catch { return null; } }
+function setSession(u)  { localStorage.setItem('cognitwin_session', JSON.stringify({ ...u, logged_in_at: Date.now() })); }
+function clearSession() { localStorage.removeItem('cognitwin_session'); }
+function getCurrentUser(){ return getSession(); }
+function userHeader()   {
+  const u = getCurrentUser();
+  return u ? { 'X-Cognitwin-User': encodeURIComponent(JSON.stringify(u)) } : {};
+}
+
+// ── View router ───────────────────────────────────────────────────────────────
+function showView(name) {
+  // Guards: redirect away from views that need state we don't have.
+  if (name === 'project-detail' && !state.projectId) {
+    name = 'projects';
+  } else if (name === 'cockpit' && !state.sprintId) {
+    name = state.projectId ? 'project-detail' : 'projects';
+  }
+
+  ['view-login','view-workspace','view-projects','view-project-detail','view-dashboard'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  const introEl = document.getElementById('intro');
+  if (introEl) introEl.style.display = 'none';
+  document.getElementById('cockpit').classList.remove('visible');
+
+  if (name === 'login') {
+    document.getElementById('view-login').classList.add('active');
+  } else if (name === 'workspace') {
+    document.getElementById('view-workspace').classList.add('active');
+    refreshUserStrips();
+  } else if (name === 'projects') {
+    document.getElementById('view-projects').classList.add('active');
+    refreshUserStrips();
+    loadProjects();
+  } else if (name === 'project-detail') {
+    document.getElementById('view-project-detail').classList.add('active');
+    refreshUserStrips();
+    loadProjectDetail(state.projectId);
+  } else if (name === 'dashboard') {
+    document.getElementById('view-dashboard').classList.add('active');
+    refreshUserStrips();
+    loadDashboard();
+  } else if (name === 'intro') {
+    if (introEl) introEl.style.display = 'flex';
+  } else if (name === 'cockpit') {
+    document.getElementById('cockpit').classList.add('visible');
+    const u = getCurrentUser();
+    if (u) {
+      document.getElementById('tbUserName').textContent = u.name;
+      document.getElementById('tbUserRole').textContent = u.role;
+      document.getElementById('backToDashBtn').style.display = '';
+      document.getElementById('backToProjBtn').style.display = state.projectId ? '' : 'none';
+      document.getElementById('profileBtn').style.display    = '';
+      const lbl = document.getElementById('cockpitProjectLabel');
+      if (lbl) lbl.textContent = state.projectTitle ? '· ' + state.projectTitle : '';
+    }
+  }
+
+  state.view = name;
+  persistState();
+}
+
+async function init() {
+  const u = getSession();
+  if (!u) { showView('login'); return; }
+  if (!u.workspace) { showView('workspace'); return; }
+
+  const persistedView = restoreState();
+
+  if (persistedView === 'cockpit' && state.sprintId) {
+    if (!state.projectId) {
+      const recovered = await recoverProjectFromSprint(state.sprintId);
+      if (recovered) state.projectId = recovered;
+    }
+    showView('cockpit');
+    if (state.sprintId) { setPulse('live'); setSysLabel('LOADING'); beginPolling(); }
+    return;
+  }
+  if (persistedView === 'project-detail' && state.projectId) {
+    showView('project-detail');
+    return;
+  }
+  showView('projects');
+}
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+document.getElementById('loginBtn').onclick = doLogin;
+document.getElementById('loginPassword').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+function doLogin() {
+  const email    = document.getElementById('loginEmail').value.trim().toLowerCase();
+  const password = document.getElementById('loginPassword').value;
+  const errEl    = document.getElementById('loginErr');
+  errEl.textContent = '';
+  document.getElementById('loginEmail').classList.remove('error');
+  document.getElementById('loginPassword').classList.remove('error');
+
+  const user = DEMO_USERS.find(u => u.email === email);
+  if (!user || password !== user.password) {
+    errEl.textContent = 'Invalid email or password.';
+    document.getElementById('loginEmail').classList.add('error');
+    return;
+  }
+  setSession(user);
+  showView('workspace');
+}
+
+function doLogout() {
+  if (state && state.polling) { clearInterval(state.polling); state.polling = null; }
+  state.sprintId = null; state.projectId = null; state.projectTitle = '';
+  clearPersistedState();
+  clearSession();
+  hideProfilePanel();
+  showView('login');
+  document.getElementById('loginEmail').value    = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginErr').textContent = '';
+}
+
+// ── Workspace selection ───────────────────────────────────────────────────────
+function selectWorkspace(wsName) {
+  const u = getCurrentUser();
+  if (!u) { showView('login'); return; }
+  setSession({ ...u, workspace: wsName });
+  showView('projects');
+}
+
+// ── User strips ───────────────────────────────────────────────────────────────
+function refreshUserStrips() {
+  const u = getCurrentUser();
+  if (!u) return;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('wsUserName', u.name);   set('wsUserRole', u.role);
+  set('dashUserName', u.name); set('dashUserRole', u.role);
+  set('dashWorkspaceName', u.workspace || '—');
+  set('dashWsLabel', u.workspace || '—');
+  set('projUserName', u.name); set('projUserRole', u.role);
+  set('projWorkspaceName', u.workspace || '—');
+  set('projDashSub', u.workspace || '—');
+  set('pdUserName', u.name); set('pdUserRole', u.role);
+  set('pdWorkspaceName', u.workspace || '—');
+}
+
+// ── Projects ──────────────────────────────────────────────────────────────────
+async function loadProjects() {
+  const container = document.getElementById('projContent');
+  if (container) container.innerHTML = '<div class="dash-empty" style="padding:40px 0;text-align:center;">Loading…</div>';
+  try {
+    const res = await fetch('/api/projects', { headers: userHeader() });
+    if (!res.ok) {
+      renderProjects([], false, `API error ${res.status} — could not load projects.`);
+      return;
+    }
+    const data = await res.json();
+    renderProjects(data.projects || [], data.user_is_admin || false);
+  } catch (e) {
+    renderProjects([], false, 'Could not reach the API. Is cognitwin-api running?');
+  }
+}
+
+function renderProjects(projects, isAdmin, errorMsg) {
+  const container = document.getElementById('projContent');
+  if (!container) return;
+  state.projects = projects;
+  state.userIsAdmin = isAdmin;
+
+  const titleEl = document.getElementById('projDashTitle');
+  if (titleEl) titleEl.textContent = isAdmin ? 'All Projects' : 'My Projects';
+
+  if (errorMsg) {
+    container.innerHTML = `<div class="pd-err">${esc(errorMsg)}</div>` + projectCreateFormHtml();
+    bindProjectCreateForm();
+    return;
+  }
+
+  if (!projects.length) {
+    container.innerHTML = `
+      <div class="proj-empty-hero">
+        <div class="proj-empty-eyebrow">Get started</div>
+        <div class="proj-empty-title">Start your first project.</div>
+        <div class="proj-empty-sub">A project groups related sprints. Give it a title and the goal you want the autonomous Scrum team to deliver.</div>
+        ${projectCreateFormHtml()}
+      </div>`;
+    bindProjectCreateForm();
+    return;
+  }
+
+  let html = '<div class="proj-grid">';
+  for (const p of projects) {
+    const status   = (p.status || 'active').toLowerCase();
+    const sprintCt = p.sprint_count           ?? 0;
+    const actCt    = p.active_sprint_count    ?? 0;
+    const cmpCt    = p.completed_sprint_count ?? 0;
+    const parCt    = p.partial_sprint_count   ?? 0;
+    const blkCt    = p.blocked_sprint_count   ?? 0;
+    const updated  = (p.updated_at || '').slice(0,16).replace('T',' ');
+    const owner    = isAdmin ? (p.owner_user_name || p.owner_user_id || '—') : '';
+    const goal     = p.project_goal || p.description || '';
+    const archiveBtn = status === 'archived'
+      ? `<button class="sa-btn open" onclick="reopenProject('${esc(p.project_id)}', event)">Reopen</button>`
+      : `<button class="sa-btn arc" onclick="archiveProject('${esc(p.project_id)}', event)">Archive</button>`;
+    const startBtn = status === 'archived'
+      ? ''
+      : `<button class="sa-btn rev" onclick="startSprintFlowForProject('${esc(p.project_id)}', event)">Start New Sprint</button>`;
+    html += `
+      <div class="proj-card">
+        <div class="proj-card-head">
+          <div class="proj-card-title">${esc(p.title || '(untitled)')}</div>
+          <span class="proj-status-badge ${status}">${esc(status)}</span>
+        </div>
+        <div class="proj-card-goal">${esc(goal || 'No goal set.')}</div>
+        <div class="proj-card-counters">
+          <span class="proj-counter">${sprintCt} sprint${sprintCt===1?'':'s'}</span>
+          <span class="proj-counter act">${actCt} active</span>
+          <span class="proj-counter cmp">${cmpCt} done</span>
+          <span class="proj-counter par">${parCt} partial</span>
+          <span class="proj-counter blk">${blkCt} blocked</span>
+        </div>
+        <div class="proj-card-meta">
+          ${owner ? `<span><b>Owner</b> ${esc(owner)}</span>` : ''}
+          ${updated ? `<span><b>Updated</b> ${esc(updated)}</span>` : ''}
+        </div>
+        <div class="proj-card-actions">
+          <button class="sa-btn open" onclick="openProject('${esc(p.project_id)}')">Open Project</button>
+          ${startBtn}
+          ${archiveBtn}
+        </div>
+      </div>`;
+  }
+  // "+ New project" tile
+  html += `
+    <div class="proj-add-card" onclick="openProjectCreateModal()">
+      <div class="proj-add-icon">+</div>
+      <div class="proj-add-title">Create another project</div>
+      <div class="proj-add-sub">Group your sprints under a new goal.</div>
+    </div>`;
+  html += '</div>';
+  html += '<div id="projModalSlot"></div>';
+  container.innerHTML = html;
+}
+
+function projectCreateFormHtml(idPrefix) {
+  const p = idPrefix || 'pcNew';
+  return `
+    <label class="proj-form-label" for="${p}Title">Title</label>
+    <input id="${p}Title" class="proj-form-inp" type="text" placeholder="e.g. Notes App MVP" />
+    <label class="proj-form-label" for="${p}Goal">Project goal</label>
+    <textarea id="${p}Goal" class="proj-form-inp" placeholder="What should this project achieve?"></textarea>
+    <label class="proj-form-label" for="${p}Desc">Description (optional)</label>
+    <textarea id="${p}Desc" class="proj-form-inp" placeholder="Any extra context…"></textarea>
+    <div class="proj-form-err" id="${p}Err"></div>
+    <button class="proj-create-btn" id="${p}Btn">Create project →</button>`;
+}
+
+function bindProjectCreateForm(idPrefix) {
+  const p = idPrefix || 'pcNew';
+  const btn = document.getElementById(p + 'Btn');
+  if (!btn) return;
+  btn.onclick = () => createProjectFromForm(p);
+}
+
+async function createProjectFromForm(p) {
+  const titleEl = document.getElementById(p + 'Title');
+  const goalEl  = document.getElementById(p + 'Goal');
+  const descEl  = document.getElementById(p + 'Desc');
+  const errEl   = document.getElementById(p + 'Err');
+  const btn     = document.getElementById(p + 'Btn');
+  const title = (titleEl?.value || '').trim();
+  const goal  = (goalEl?.value  || '').trim();
+  const desc  = (descEl?.value  || '').trim();
+  errEl.textContent = '';
+  titleEl.classList.remove('error');
+  if (!title) {
+    errEl.textContent = 'Title is required.';
+    titleEl.classList.add('error');
+    titleEl.focus();
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try {
+    const u = getCurrentUser();
+    const res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...userHeader() },
+      body: JSON.stringify({ title, project_goal: goal, description: desc, workspace: u?.workspace || '' }),
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      errEl.textContent = `Failed (${res.status}): ${txt.slice(0, 200)}`;
+      btn.disabled = false; btn.textContent = 'Create project →';
+      return;
+    }
+    const proj = await res.json();
+    state.projectId    = proj.project_id;
+    state.projectTitle = proj.title;
+    closeProjectCreateModal();
+    showView('project-detail');
+  } catch (e) {
+    errEl.textContent = 'Network error: ' + (e.message || e);
+    btn.disabled = false; btn.textContent = 'Create project →';
+  }
+}
+
+function openProjectCreateModal() {
+  const slot = document.getElementById('projModalSlot');
+  if (!slot) return;
+  slot.innerHTML = `
+    <div class="modal-overlay open" id="projCreateOverlay" style="display:flex;align-items:center;justify-content:center;opacity:1;pointer-events:auto;">
+      <div class="modal" style="max-width:520px;">
+        <div class="modal-header">
+          <div class="modal-header-left">
+            <div class="modal-task-title">Create a new project</div>
+          </div>
+          <button class="modal-close" onclick="closeProjectCreateModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          ${projectCreateFormHtml('pcModal')}
+        </div>
+      </div>
+    </div>`;
+  bindProjectCreateForm('pcModal');
+}
+
+function closeProjectCreateModal() {
+  const slot = document.getElementById('projModalSlot');
+  if (slot) slot.innerHTML = '';
+}
+
+function openProject(projectId) {
+  state.projectId = projectId;
+  showView('project-detail');
+}
+
+function backToProjects() {
+  if (state.polling) { clearInterval(state.polling); state.polling = null; }
+  state.sprintId = null;
+  state.projectId = null;
+  state.projectTitle = '';
+  showView('projects');
+}
+
+async function backToProjectFromCockpit() {
+  if (state.polling) { clearInterval(state.polling); state.polling = null; }
+  if (!state.projectId && state.sprintId) {
+    const recovered = await recoverProjectFromSprint(state.sprintId);
+    if (recovered) state.projectId = recovered;
+  }
+  state.sprintId = null;
+  if (state.projectId) {
+    showView('project-detail');
+  } else {
+    showView('projects');
+  }
+}
+
+async function archiveProject(projectId, ev) {
+  if (ev) ev.stopPropagation();
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/archive`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...userHeader() },
+    });
+    if (res.ok) loadProjects();
+  } catch { /* ignore */ }
+}
+
+async function reopenProject(projectId, ev) {
+  if (ev) ev.stopPropagation();
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/reopen`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...userHeader() },
+    });
+    if (res.ok) loadProjects();
+  } catch { /* ignore */ }
+}
+
+async function loadProjectDetail(projectId) {
+  const container = document.getElementById('pdContent');
+  if (container) container.innerHTML = '<div class="dash-empty" style="padding:40px 0;text-align:center;">Loading…</div>';
+  try {
+    const [pRes, sRes] = await Promise.all([
+      fetch(`/api/projects/${encodeURIComponent(projectId)}`, { headers: userHeader() }),
+      fetch(`/api/projects/${encodeURIComponent(projectId)}/sprints?archived=true`, { headers: userHeader() }),
+    ]);
+    if (!pRes.ok) {
+      const code = pRes.status;
+      const msg = code === 403 ? 'Access denied: you do not own this project.'
+                : code === 404 ? 'Project not found.'
+                : `API error ${code}.`;
+      container.innerHTML = `<div class="pd-err">${esc(msg)}</div>`;
+      return;
+    }
+    const project = await pRes.json();
+    state.projectId    = project.project_id;
+    state.projectTitle = project.title || '';
+    let sprints = [];
+    if (sRes.ok) {
+      const sd = await sRes.json();
+      sprints = sd.sprints || [];
+    }
+    renderProjectDetail(project, sprints);
+  } catch (e) {
+    container.innerHTML = `<div class="pd-err">Could not reach the API.</div>`;
+  }
+}
+
+function renderProjectDetail(project, sprints) {
+  const container = document.getElementById('pdContent');
+  if (!container) return;
+  const isAdmin = !!state.userIsAdmin;
+  const status  = (project.status || 'active').toLowerCase();
+  const owner   = isAdmin ? (project.owner_user_name || project.owner_user_id || '—') : '';
+  const archiveBtn = status === 'archived'
+    ? `<button class="sa-btn open" onclick="reopenProject('${esc(project.project_id)}'); setTimeout(()=>loadProjectDetail('${esc(project.project_id)}'),200);">Reopen Project</button>`
+    : `<button class="sa-btn arc" onclick="archiveProject('${esc(project.project_id)}'); setTimeout(()=>loadProjectDetail('${esc(project.project_id)}'),200);">Archive Project</button>`;
+  const startBtn = status === 'archived'
+    ? ''
+    : `<button class="dash-new-btn" onclick="startSprintFlowForProject('${esc(project.project_id)}')">+ Start New Sprint</button>`;
+
+  let html = `
+    <div class="pd-head">
+      <div>
+        <div class="pd-title">${esc(project.title || '(untitled)')} <span class="proj-status-badge ${status}" style="vertical-align:middle;margin-left:8px;">${esc(status)}</span></div>
+        <div class="pd-goal">${esc(project.project_goal || project.description || 'No goal set.')}</div>
+        <div class="pd-meta-row">
+          ${owner ? `<span><b>Owner</b> ${esc(owner)}</span>` : ''}
+          <span><b>ID</b> ${esc(project.project_id)}</span>
+          <span><b>Created</b> ${esc((project.created_at||'').slice(0,16).replace('T',' '))}</span>
+          <span><b>Updated</b> ${esc((project.updated_at||'').slice(0,16).replace('T',' '))}</span>
+        </div>
+      </div>
+      <div class="pd-actions">
+        ${startBtn}
+        ${archiveBtn}
+      </div>
+    </div>
+    <div class="pd-counters">
+      <span class="proj-counter">${project.sprint_count || 0} sprint${(project.sprint_count||0)===1?'':'s'}</span>
+      <span class="proj-counter act">${project.active_sprint_count || 0} active</span>
+      <span class="proj-counter cmp">${project.completed_sprint_count || 0} done</span>
+      <span class="proj-counter par">${project.partial_sprint_count || 0} partial</span>
+      <span class="proj-counter blk">${project.blocked_sprint_count || 0} blocked</span>
+    </div>
+    <div class="pb-panel" id="backlogPanel" data-project-id="${esc(project.project_id)}">
+      <div class="pb-hd">
+        <div>
+          <div class="pb-title">Product Backlog</div>
+          <div class="pb-sub">Plan sprints from these items</div>
+        </div>
+        <div class="pb-actions" id="backlogActions"></div>
+      </div>
+      <div id="backlogBody"><div class="dash-empty">Loading backlog…</div></div>
+    </div>`;
+
+  const sections = [
+    { key:'active',   label:'Active / Running',  phases:['planning','executing','running','started','waiting_backlog_approval'] },
+    { key:'review',   label:'Waiting Review',    phases:['waiting_sprint_review','waiting_story_acceptance'] },
+    { key:'partial',  label:'Partial / Blocked', phases:['reviewed_partial','blocked'] },
+    { key:'complete', label:'Completed',         phases:['complete','reviewed_complete'] },
+    { key:'archived', label:'Archived',          phases:[], archivedOnly:true },
+  ];
+
+  for (const sec of sections) {
+    const list = sec.archivedOnly
+      ? sprints.filter(s => s.archived === true)
+      : sprints.filter(s => !s.archived && sec.phases.includes((s.phase || s.status || '').toLowerCase()));
+    html += `<div class="dash-section">
+      <div class="dash-section-hd">${sec.label} <span class="dash-cnt">${list.length}</span></div>`;
+    if (!list.length) {
+      html += `<div class="dash-empty">—</div>`;
+    } else {
+      html += `<table class="sprint-tbl"><thead><tr>
+        <th>Goal / ID</th><th>Phase</th><th>Tasks</th><th>Actions</th>
+      </tr></thead><tbody>`;
+      for (const s of list) {
+        const ph    = (s.phase || s.status || '—').toLowerCase();
+        const done  = s.summary?.done_tasks  ?? s.done_tasks  ?? 0;
+        const total = s.summary?.total_tasks ?? s.total_tasks ?? 0;
+        const blk   = s.summary?.blocked_tasks ?? s.blocked_tasks ?? 0;
+        const goal  = (s.goal || '—').slice(0,60) + ((s.goal||'').length > 60 ? '…' : '');
+        const sid   = s.sprint_id || s.id || '—';
+        html += `<tr>
+          <td>
+            <div class="sprint-goal-txt">${esc(goal)}</div>
+            <div class="sprint-sid-txt">${esc(sid)}</div>
+          </td>
+          <td><span class="ph-badge ${esc(ph)}">${esc(ph.replace(/_/g,' '))}</span></td>
+          <td style="font-size:11px;color:var(--text-dim)">${done}/${total}${blk>0?` <span style="color:var(--danger)">· ${blk} blk</span>`:''}</td>
+          <td><div class="sa">
+            ${sec.key !== 'archived' ? `<button class="sa-btn open" onclick="openSprintFromDashboard('${esc(sid)}','${esc(s.goal||'')}')">Open Cockpit</button>` : ''}
+            ${['review','partial'].includes(sec.key) ? `<button class="sa-btn rev" onclick="openSprintFromDashboard('${esc(sid)}','${esc(s.goal||'')}')">Sprint Review</button>` : ''}
+            ${sec.key !== 'archived' ? `<button class="sa-btn arc" onclick="archiveSprint('${esc(sid)}'); setTimeout(()=>loadProjectDetail('${esc(project.project_id)}'),200);">Archive</button>` : ''}
+          </div></td>
+        </tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+    html += `</div>`;
+  }
+  container.innerHTML = html;
+  // Lazy-load backlog after main render so the page never blanks on backlog errors.
+  loadBacklog(project.project_id, status === 'archived');
+}
+
+// ── PRODUCT BACKLOG ──────────────────────────────────────────────────
+// Note: state.backlogSelection is initialized lazily inside helpers below;
+// we cannot mutate `state` here because it's declared further down in this script.
+
+async function loadBacklog(projectId, readOnly) {
+  const body = document.getElementById('backlogBody');
+  const acts = document.getElementById('backlogActions');
+  if (!body || !acts) return;
+  try {
+    const r = await fetch(`/api/projects/${encodeURIComponent(projectId)}/backlog`,
+                          { headers: userHeader() });
+    if (!r.ok) {
+      body.innerHTML = `<div class="pb-err">Couldn't load backlog (${r.status}).</div>`;
+      return;
+    }
+    const data = await r.json();
+    renderBacklog(projectId, data.items || [], !!readOnly);
+  } catch (e) {
+    body.innerHTML = `<div class="pb-err">Couldn't reach backlog API.</div>`;
+  }
+}
+
+function renderBacklog(projectId, items, readOnly) {
+  const body = document.getElementById('backlogBody');
+  const acts = document.getElementById('backlogActions');
+  if (!body || !acts) return;
+
+  if (!state.backlogSelection[projectId]) state.backlogSelection[projectId] = new Set();
+  const sel = state.backlogSelection[projectId];
+
+  // Top action buttons.
+  if (readOnly) {
+    acts.innerHTML = `<span class="pb-sub">Project archived — read only</span>`;
+  } else if (!items.length) {
+    acts.innerHTML = `<button class="pb-btn primary" id="pbSeedBtn"
+        onclick="seedBacklog('${esc(projectId)}')">Generate Backlog</button>
+      <button class="pb-btn" onclick="toggleBacklogAdd('${esc(projectId)}')">+ Add Item</button>`;
+  } else {
+    acts.innerHTML = `<button class="pb-btn" onclick="toggleBacklogAdd('${esc(projectId)}')">+ Add Item</button>
+      <button class="pb-btn" id="pbReseedBtn"
+        onclick="seedBacklog('${esc(projectId)}', true)">Regenerate</button>`;
+  }
+
+  if (!items.length) {
+    body.innerHTML = `<div class="pb-empty">No backlog items yet. Click <b>Generate Backlog</b> to seed from the project goal, or add items manually.</div>
+      <div id="pbAddSlot"></div>`;
+    return;
+  }
+
+  // Group: planable (new/deferred) first, then in_sprint, done.
+  const planable = items.filter(it => it.status === 'new' || it.status === 'deferred');
+  const inflight = items.filter(it => it.status === 'in_sprint');
+  const done     = items.filter(it => it.status === 'done');
+  const ordered  = [...planable, ...inflight, ...done];
+
+  let rows = '';
+  for (const it of ordered) {
+    const checkable = !readOnly && (it.status === 'new' || it.status === 'deferred');
+    const checked   = sel.has(it.item_id) ? 'checked' : '';
+    const canDelete = !readOnly && (it.status === 'new' || it.status === 'deferred');
+    rows += `<tr data-item-id="${esc(it.item_id)}">
+      <td class="pb-select-cell">${checkable
+        ? `<input type="checkbox" ${checked} onchange="toggleBacklogSelection('${esc(projectId)}','${esc(it.item_id)}', this.checked)" />`
+        : ''}</td>
+      <td class="pb-id">${esc(it.item_id)}</td>
+      <td>
+        <div>${esc(it.title)}</div>
+        ${it.epic ? `<div style="font-size:10px;color:var(--text-faint);">${esc(it.epic)}</div>` : ''}
+      </td>
+      <td><span class="pb-prio ${esc(it.priority)}">${esc(it.priority)}</span></td>
+      <td style="font-size:10.5px;color:var(--text-dim);">${esc(String(it.story_points))}</td>
+      <td><span class="pb-status ${esc(it.status)}">${esc(it.status.replace('_',' '))}</span></td>
+      <td class="pb-cell-acts">
+        <button class="pb-icon-btn" ${readOnly?'disabled':''} onclick="cycleBacklogPriority('${esc(projectId)}','${esc(it.item_id)}','${esc(it.priority)}')">↻ prio</button>
+        <button class="pb-icon-btn" ${canDelete?'':'disabled'} onclick="deleteBacklogItem('${esc(projectId)}','${esc(it.item_id)}')">✕</button>
+      </td>
+    </tr>`;
+  }
+
+  const planBar = (!readOnly && sel.size > 0) ? `
+    <div class="pb-plan-bar" id="pbPlanBar">
+      <div class="pb-plan-info"><b>${sel.size}</b> item${sel.size===1?'':'s'} selected for next sprint</div>
+      <div>
+        <button class="pb-btn" onclick="clearBacklogSelection('${esc(projectId)}')">Clear</button>
+        <button class="pb-btn primary" onclick="planSprintFromSelection('${esc(projectId)}')">Plan Sprint →</button>
+      </div>
+    </div>` : '';
+
+  body.innerHTML = `
+    <table class="pb-tbl">
+      <thead><tr>
+        <th class="pb-select-cell"></th><th>ID</th><th>Title</th>
+        <th>Priority</th><th>Pts</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${planBar}
+    <div id="pbAddSlot"></div>
+  `;
+}
+
+function toggleBacklogSelection(projectId, itemId, checked) {
+  const sel = state.backlogSelection[projectId] || new Set();
+  if (checked) sel.add(itemId); else sel.delete(itemId);
+  state.backlogSelection[projectId] = sel;
+  loadBacklog(projectId);
+}
+
+function clearBacklogSelection(projectId) {
+  state.backlogSelection[projectId] = new Set();
+  loadBacklog(projectId);
+}
+
+async function seedBacklog(projectId, force) {
+  const btn = document.getElementById('pbSeedBtn') || document.getElementById('pbReseedBtn');
+  const btnOrigText = btn ? btn.textContent : 'Generate Backlog';
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  try {
+    const url = `/api/projects/${encodeURIComponent(projectId)}/backlog/seed${force?'?force=true':''}`;
+    const r = await fetch(url, { method:'POST', headers: userHeader() });
+    if (!r.ok) {
+      const body = document.getElementById('backlogBody');
+      if (body) body.innerHTML = `<div class="pb-err">Seed failed (${r.status}). <a href="#" onclick="seedBacklog('${esc(projectId)}',${!!force});return false;">Retry</a></div>`;
+      if (btn) { btn.disabled = false; btn.textContent = btnOrigText; }
+      return;
+    }
+    await loadBacklog(projectId);
+  } catch (e) {
+    const body = document.getElementById('backlogBody');
+    if (body) body.innerHTML = `<div class="pb-err">Seed request failed. <a href="#" onclick="seedBacklog('${esc(projectId)}',${!!force});return false;">Retry</a></div>`;
+    if (btn) { btn.disabled = false; btn.textContent = btnOrigText; }
+  }
+}
+
+function toggleBacklogAdd(projectId) {
+  const slot = document.getElementById('pbAddSlot');
+  if (!slot) return;
+  if (slot.dataset.open === '1') { slot.innerHTML = ''; slot.dataset.open = '0'; return; }
+  slot.dataset.open = '1';
+  slot.innerHTML = `
+    <div class="pb-add-form">
+      <input id="pbAddTitle" placeholder="Item title" />
+      <select id="pbAddPrio">
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="low">Low</option>
+      </select>
+      <input id="pbAddPoints" type="number" min="1" max="13" value="2" />
+      <button class="pb-btn" onclick="document.getElementById('pbAddSlot').innerHTML='';document.getElementById('pbAddSlot').dataset.open='0';">Cancel</button>
+      <button class="pb-btn primary" onclick="submitBacklogItem('${esc(projectId)}')">Add</button>
+    </div>`;
+  setTimeout(() => { const t = document.getElementById('pbAddTitle'); if (t) t.focus(); }, 30);
+}
+
+async function submitBacklogItem(projectId) {
+  const titleEl = document.getElementById('pbAddTitle');
+  const prioEl  = document.getElementById('pbAddPrio');
+  const ptsEl   = document.getElementById('pbAddPoints');
+  if (!titleEl || !titleEl.value.trim()) return;
+  const payload = {
+    title:        titleEl.value.trim(),
+    priority:     prioEl ? prioEl.value : 'medium',
+    story_points: ptsEl ? parseInt(ptsEl.value, 10) || 2 : 2,
+  };
+  try {
+    const r = await fetch(`/api/projects/${encodeURIComponent(projectId)}/backlog/items`,
+      { method:'POST', headers: { ...userHeader(), 'Content-Type':'application/json' },
+        body: JSON.stringify(payload) });
+    if (!r.ok) return;
+  } catch {}
+  loadBacklog(projectId);
+}
+
+const _PRIO_CYCLE = { high:'medium', medium:'low', low:'high' };
+async function cycleBacklogPriority(projectId, itemId, current) {
+  const next = _PRIO_CYCLE[current] || 'medium';
+  try {
+    await fetch(`/api/projects/${encodeURIComponent(projectId)}/backlog/items/${encodeURIComponent(itemId)}`,
+      { method:'PATCH', headers: { ...userHeader(), 'Content-Type':'application/json' },
+        body: JSON.stringify({ priority: next }) });
+  } catch {}
+  loadBacklog(projectId);
+}
+
+async function deleteBacklogItem(projectId, itemId) {
+  try {
+    const r = await fetch(`/api/projects/${encodeURIComponent(projectId)}/backlog/items/${encodeURIComponent(itemId)}`,
+      { method:'DELETE', headers: userHeader() });
+    if (!r.ok && r.status !== 200) return;
+  } catch {}
+  loadBacklog(projectId);
+}
+
+// Stub used by Phase C — populated when sprint planning lands.
+function planSprintFromSelection(projectId) {
+  const sel = Array.from(state.backlogSelection[projectId] || []);
+  state.pendingSprintSelection = { projectId, itemIds: sel };
+  startSprintFlowForProject(projectId);
+}
+
+function startSprintFlowForProject(projectId, ev) {
+  if (ev) ev.stopPropagation();
+  state.projectId = projectId;
+  const p = (state.projects || []).find(x => x.project_id === projectId);
+  state.projectTitle = p ? p.title : '';
+  showView('intro');
+  const g = document.getElementById('goalInput');
+  if (g) {
+    g.value = (p && p.project_goal) ? p.project_goal : '';
+    g.style.borderColor = '';
+  }
+  const sb = document.getElementById('startBtn');
+  if (sb) { sb.textContent = 'Start Sprint ↵'; sb.disabled = false; }
+  // Inject a header above the intro showing project context.
+  const introCard = document.querySelector('.intro-card');
+  if (introCard && !document.getElementById('introProjectBanner')) {
+    const banner = document.createElement('div');
+    banner.id = 'introProjectBanner';
+    banner.style.cssText = 'margin-bottom:14px;padding:10px 12px;background:var(--bg-elev);border:1px solid var(--border);border-radius:6px;display:flex;justify-content:space-between;align-items:center;';
+    banner.innerHTML = `
+      <div style="font-size:11px;color:var(--text-dim);">
+        Project: <b style="color:var(--text);">${esc(state.projectTitle || projectId)}</b>
+      </div>
+      <button class="sa-btn arc" onclick="cancelSprintFlow()">Cancel</button>`;
+    introCard.insertBefore(banner, introCard.firstChild);
+  } else {
+    const banner = document.getElementById('introProjectBanner');
+    if (banner) banner.querySelector('b').textContent = state.projectTitle || projectId;
+  }
+  loadPrevSprintSuggestion(projectId);
+}
+
+async function loadPrevSprintSuggestion(projectId) {
+  const introCard = document.querySelector('.intro-card');
+  if (!introCard) return;
+  let box = document.getElementById('introSuggestBox');
+  if (box) box.remove();
+  try {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/next-sprint-suggestion`,
+      { headers: userHeader() },
+    );
+    if (!res.ok) {
+      const err = document.createElement('div');
+      err.className = 'intro-suggest';
+      err.id = 'introSuggestBox';
+      err.innerHTML = `<h4>Context from previous sprint</h4>
+        <div class="sr-err">next-sprint-suggestion → HTTP ${res.status} — ${esc((await res.text()).slice(0,160))}</div>`;
+      introCard.insertBefore(err, introCard.querySelector('.intro-label') || introCard.firstChild);
+      return;
+    }
+    const data = await res.json();
+    const notes = data.next_sprint_notes || {};
+    if (!notes.suggested_goal && !(notes.carry_over_item_ids||[]).length && !(notes.recommended_new_item_ids||[]).length) {
+      return; // nothing to surface
+    }
+    box = document.createElement('div');
+    box.className = 'intro-suggest';
+    box.id = 'introSuggestBox';
+    let html = '<h4>Context from previous sprint</h4>';
+    if (notes.suggested_goal) {
+      html += `<div class="sg"><b>Suggested goal:</b> ${esc(notes.suggested_goal)}</div>`;
+    }
+    if ((notes.carry_over_item_ids||[]).length) {
+      html += '<div class="row"><b style="font-size:11px;">Carry-over:</b>' +
+        notes.carry_over_item_ids.map(id => `<span class="sr-chip">${esc(id)}</span>`).join('') + '</div>';
+    }
+    if ((notes.recommended_new_item_ids||[]).length) {
+      html += '<div class="row"><b style="font-size:11px;">Recommended new items:</b>' +
+        notes.recommended_new_item_ids.map(id => `<span class="sr-chip">${esc(id)}</span>`).join('') + '</div>';
+    }
+    html += `<div class="row" style="margin-top:8px;">
+      ${notes.suggested_goal ? '<button class="sr-btn" id="useSuggestedGoalBtn">Use Suggested Goal</button>' : ''}
+      ${(notes.carry_over_item_ids||[]).length || (notes.recommended_new_item_ids||[]).length
+        ? '<button class="sr-btn" id="preselectCarryOverBtn">Preselect Carry-Over Items</button>' : ''}
+    </div>`;
+    box.innerHTML = html;
+    introCard.insertBefore(box, introCard.querySelector('.intro-label') || introCard.firstChild);
+
+    const useBtn = document.getElementById('useSuggestedGoalBtn');
+    if (useBtn) useBtn.onclick = () => {
+      const g = document.getElementById('goalInput');
+      if (g) { g.value = notes.suggested_goal || ''; g.style.borderColor = ''; }
+    };
+    const preBtn = document.getElementById('preselectCarryOverBtn');
+    if (preBtn) preBtn.onclick = () => {
+      const ids = (notes.carry_over_item_ids||[]).concat(notes.recommended_new_item_ids||[]);
+      state.pendingSprintSelection = { projectId, itemIds: ids };
+      preBtn.textContent = `Preselected ${ids.length} item(s) ✓`;
+      preBtn.disabled = true;
+    };
+  } catch (err) {
+    const errEl = document.createElement('div');
+    errEl.className = 'intro-suggest';
+    errEl.id = 'introSuggestBox';
+    errEl.innerHTML = `<h4>Context from previous sprint</h4>
+      <div class="sr-err">next-sprint-suggestion → ${esc(err.message || err)}</div>`;
+    introCard.insertBefore(errEl, introCard.querySelector('.intro-label') || introCard.firstChild);
+  }
+}
+
+function cancelSprintFlow() {
+  const banner = document.getElementById('introProjectBanner');
+  if (banner) banner.remove();
+  if (state.projectId) showView('project-detail');
+  else showView('projects');
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  const container = document.getElementById('dashContent');
+  if (container) container.innerHTML = '<div class="dash-empty" style="padding:40px 0;text-align:center;">Loading…</div>';
+  try {
+    const res = await fetch('/api/sprints', { headers: userHeader() });
+    if (res.ok) {
+      const data = await res.json();
+      renderDashboard(data.sprints || [], data.user_is_admin || false);
+    } else {
+      renderDashboard([], false, `API error ${res.status} — could not load sprints.`);
+    }
+  } catch (e) {
+    renderDashboard([], false, 'Could not reach the API. Is cognitwin-api running?');
+  }
+}
+
+function renderDashboard(sprints, isAdmin, errorMsg) {
+  const container = document.getElementById('dashContent');
+  if (!container) return;
+
+  // Update dashboard title to reflect scope
+  const titleEl = document.querySelector('.dash-title');
+  if (titleEl) titleEl.textContent = isAdmin ? 'Sprint Dashboard — All Sprints' : 'My Sprints';
+
+  if (errorMsg) {
+    container.innerHTML = `<div class="dash-empty" style="color:var(--danger);padding:20px 0;">${esc(errorMsg)}</div>`;
+    return;
+  }
+
+  const sections = [
+    { key:'active',   label:'Active Sprints',    phases:['planning','executing','running','started','waiting_backlog_approval'] },
+    { key:'review',   label:'Waiting Review',    phases:['waiting_sprint_review','waiting_story_acceptance'] },
+    { key:'partial',  label:'Partial / Blocked', phases:['reviewed_partial','blocked'] },
+    { key:'complete', label:'Completed',         phases:['complete'] },
+    { key:'archived', label:'Archived',          phases:['archived'] },
+  ];
+
+  let html = '';
+  for (const sec of sections) {
+    const list = sprints.filter(s => sec.phases.includes(s.phase || s.status || ''));
+    html += `<div class="dash-section">
+      <div class="dash-section-hd">${sec.label} <span class="dash-cnt">${list.length}</span></div>`;
+    if (!list.length) {
+      html += `<div class="dash-empty">No sprints in this category.</div>`;
+    } else {
+      // Admin view gets an extra Owner column
+      const ownerCol = isAdmin ? '<th>Owner</th>' : '';
+      html += `<table class="sprint-tbl"><thead><tr>
+        <th>Goal / ID</th><th>Phase</th><th>Confidence</th><th>Tasks</th>${ownerCol}<th>Actions</th>
+      </tr></thead><tbody>`;
+      for (const s of list) {
+        const ph    = s.phase || s.status || '—';
+        const conf  = s.confidence ?? s.summary?.confidence ?? 0;
+        const cClr  = conf >= 80 ? 'var(--done)' : conf >= 50 ? 'var(--po)' : 'var(--danger)';
+        const done  = s.summary?.done_tasks  ?? s.done_tasks  ?? 0;
+        const total = s.summary?.total_tasks ?? s.total_tasks ?? 0;
+        const blk   = s.summary?.blocked_tasks ?? s.blocked_tasks ?? 0;
+        const goal  = (s.goal || '—').slice(0,60) + ((s.goal||'').length > 60 ? '…' : '');
+        const sid   = s.sprint_id || s.id || '—';
+        const ownerCell = isAdmin
+          ? `<td style="font-size:10px;color:var(--text-faint)">${esc(s.owner_user_name || '—')}</td>`
+          : '';
+        html += `<tr>
+          <td>
+            <div class="sprint-goal-txt">${esc(goal)}</div>
+            <div class="sprint-sid-txt">${esc(sid)}</div>
+          </td>
+          <td><span class="ph-badge ${ph}">${ph.replace(/_/g,' ')}</span></td>
+          <td><div class="conf-cell">
+            <span class="conf-val" style="color:${cClr}">${conf}%</span>
+            <div class="conf-track"><div class="conf-fill" style="width:${conf}%;background:${cClr}"></div></div>
+          </div></td>
+          <td style="font-size:11px;color:var(--text-dim)">${done}/${total}${blk>0?` <span style="color:var(--danger)">· ${blk} blk</span>`:''}</td>
+          ${ownerCell}
+          <td><div class="sa">
+            ${sec.key !== 'archived' ? `<button class="sa-btn open" onclick="openSprintFromDashboard('${esc(sid)}','${esc(s.goal||'')}')">Open Cockpit</button>` : ''}
+            ${['review','partial'].includes(sec.key) ? `<button class="sa-btn rev" onclick="openSprintFromDashboard('${esc(sid)}','${esc(s.goal||'')}')">Sprint Review</button>` : ''}
+            ${sec.key !== 'archived' ? `<button class="sa-btn arc" onclick="archiveSprint('${esc(sid)}')">Archive</button>` : ''}
+          </div></td>
+        </tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+    html += `</div>`;
+  }
+  container.innerHTML = html;
+}
+
+function startNewSprintFlow() {
+  // Sprints can only be started inside a project. Send the user to the project picker.
+  if (state.projectId) {
+    startSprintFlowForProject(state.projectId);
+  } else {
+    showView('projects');
+  }
+}
+
+async function openSprintFromDashboard(sprintId, goal) {
+  if (state.polling) { clearInterval(state.polling); state.polling = null; }
+  state.sprintId = sprintId; state.startTime = Date.now();
+  state.renderedEvents = 0; state.files = []; state.activeFile = null; state.boardTasks = {};
+  ['todo','inprogress','waiting_review','done','blocked'].forEach(s => {
+    const col = document.getElementById('col-' + s);
+    if (col) col.innerHTML = '<div class="col-empty">—</div>';
+    const cnt = document.getElementById('cnt-' + s);
+    if (cnt) cnt.textContent = '0';
+  });
+  document.getElementById('completeBanner').classList.remove('show');
+  document.getElementById('streamBody').innerHTML = `<div class="event"><div class="ev-dot system"></div><div class="ev-content"><div class="ev-meta"><span class="ev-author system">system</span><span class="ev-time">--:--</span></div><div class="ev-text dim">Loaded sprint ${esc(sprintId)}</div></div></div>`;
+  document.getElementById('evCount').textContent  = '0 events';
+  document.getElementById('goalDisplay').textContent = goal || sprintId;
+  document.getElementById('info-id').textContent     = sprintId;
+  showView('cockpit');
+  setPulse('live');
+  setSysLabel('LOADING');
+  beginPolling();
+}
+
+async function archiveSprint(sprintId) {
+  try {
+    const res = await fetch(`/api/sprint/${sprintId}/archive`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...userHeader() },
+    });
+    if (res.ok) loadDashboard();
+  } catch (e) { /* ignore */ }
+}
+
+function backToDashboard() {
+  // Legacy entrypoint — route back to the project the sprint belongs to (or projects list).
+  if (state.polling) { clearInterval(state.polling); state.polling = null; }
+  state.sprintId = null;
+  if (state.projectId) showView('project-detail'); else showView('projects');
+}
+
+// ── Profile panel ─────────────────────────────────────────────────────────────
+function showProfilePanel() {
+  const u = getCurrentUser();
+  if (!u) return;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('ppName', u.name); set('ppEmail', u.email); set('ppRole', u.role); set('ppWorkspace', u.workspace || '—');
+  const mins = Math.round((Date.now() - (u.logged_in_at || Date.now())) / 60000);
+  set('ppSession', mins < 1 ? 'Just now' : `${mins}m ago`);
+  document.getElementById('profilePanel').classList.add('open');
+}
+function hideProfilePanel() {
+  const p = document.getElementById('profilePanel');
+  if (p) p.classList.remove('open');
+}
+document.addEventListener('click', e => {
+  const panel = document.getElementById('profilePanel');
+  if (panel && panel.classList.contains('open') &&
+      !panel.contains(e.target) && e.target.id !== 'profileBtn') {
+    hideProfilePanel();
+  }
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════════════════════════════════════════
 const state = {
   sprintId:       null,
+  projectId:      null,
+  projectTitle:   '',
+  projects:       [],
+  userIsAdmin:    false,
   polling:        null,
   startTime:      null,
   renderedEvents: 0,
@@ -499,7 +2184,55 @@ const state = {
   activeFile:     null,
   boardTasks:     {},   // id → task
   phase:          'planning',
+  view:           null,
+  backlogSelection:       {},   // projectId → Set of item_id (lazy)
+  pendingSprintSelection: null, // { projectId, itemIds }
+  nextSprintNotes:        null,
 };
+
+// ── Navigation persistence ────────────────────────────────────────────────────
+const NAV_STORAGE_KEY = 'cockpit.nav';
+
+function persistState() {
+  try {
+    sessionStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({
+      sprintId:     state.sprintId || null,
+      projectId:    state.projectId || null,
+      projectTitle: state.projectTitle || '',
+      view:         state.view || null,
+    }));
+  } catch (_) { /* sessionStorage unavailable — degrade silently */ }
+}
+
+function restoreState() {
+  try {
+    const raw = sessionStorage.getItem(NAV_STORAGE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (!saved || typeof saved !== 'object') return null;
+    state.sprintId     = saved.sprintId     || null;
+    state.projectId    = saved.projectId    || null;
+    state.projectTitle = saved.projectTitle || '';
+    state.view         = saved.view         || null;
+    return saved.view || null;
+  } catch (_) { return null; }
+}
+
+function clearPersistedState() {
+  try { sessionStorage.removeItem(NAV_STORAGE_KEY); } catch (_) { /* ignore */ }
+}
+
+async function recoverProjectFromSprint(sprintId) {
+  if (!sprintId) return null;
+  try {
+    const res = await fetch('/api/sprints?archived=true', { headers: userHeader() });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const list = (data && data.sprints) || [];
+    const hit = list.find(s => (s.sprint_id || s.id) === sprintId);
+    return (hit && hit.project_id) || null;
+  } catch (_) { return null; }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  INTRO / START
@@ -524,33 +2257,63 @@ async function startSprint() {
     el.focus();
     return;
   }
+  if (!state.projectId) {
+    // Sprints must belong to a project; route back to projects view.
+    showView('projects');
+    return;
+  }
 
-  document.getElementById('startBtn').textContent = 'Starting…';
-  document.getElementById('startBtn').disabled = true;
+  const startBtn = document.getElementById('startBtn');
+  startBtn.textContent = 'Starting…';
+  startBtn.disabled    = true;
 
   try {
-    const res = await fetch('/api/sprint/start', {
+    const u = getCurrentUser();
+    const pending = state.pendingSprintSelection;
+    const selectedIds = (pending && pending.projectId === state.projectId)
+      ? (pending.itemIds || [])
+      : [];
+    const res = await fetch(`/api/projects/${encodeURIComponent(state.projectId)}/sprints`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ goal }),
+      headers: { 'Content-Type': 'application/json', ...userHeader() },
+      body:    JSON.stringify({
+        goal,
+        workspace: u?.workspace || '',
+        selected_backlog_item_ids: selectedIds,
+      }),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`HTTP ${res.status} — ${txt.slice(0, 200)}`);
+    }
     const data = await res.json();
     state.sprintId  = data.sprint_id;
     state.startTime = Date.now();
 
-    // Switch to cockpit view
-    document.getElementById('intro').style.display   = 'none';
-    document.getElementById('cockpit').classList.add('visible');
     document.getElementById('goalDisplay').textContent = goal;
     document.getElementById('info-id').textContent     = data.sprint_id;
+    const banner = document.getElementById('introProjectBanner');
+    if (banner) banner.remove();
+    const sug = document.getElementById('introSuggestBox');
+    if (sug) sug.remove();
+    state.pendingSprintSelection = null;
+    showView('cockpit');
     setPulse('live');
     setSysLabel('RUNNING');
     beginPolling();
   } catch (err) {
-    alert('Failed to start sprint: ' + err.message);
-    document.getElementById('startBtn').textContent = 'Start Sprint ↵';
-    document.getElementById('startBtn').disabled    = false;
+    const errBox = document.getElementById('startBtn');
+    errBox.textContent = 'Start Sprint ↵';
+    errBox.disabled    = false;
+    // Inline error inside the intro card.
+    let errEl = document.getElementById('introErr');
+    if (!errEl) {
+      errEl = document.createElement('div');
+      errEl.id = 'introErr';
+      errEl.style.cssText = 'color:var(--danger);font-size:11px;margin-top:8px;';
+      document.querySelector('.intro-card').appendChild(errEl);
+    }
+    errEl.textContent = 'Failed to start sprint: ' + (err.message || err);
   }
 }
 
@@ -568,18 +2331,19 @@ async function poll() {
 
   try {
     const [boardRes, eventsRes, filesRes] = await Promise.all([
-      fetch(`/api/sprint/${id}/board`),
-      fetch(`/api/sprint/${id}/events`),
-      fetch(`/api/sprint/${id}/files`),
+      fetch(`/api/sprint/${id}/board`,  { headers: userHeader() }),
+      fetch(`/api/sprint/${id}/events`, { headers: userHeader() }),
+      fetch(`/api/sprint/${id}/files`,  { headers: userHeader() }),
     ]);
 
     if (boardRes.ok)  renderBoard(await boardRes.json());
     if (eventsRes.ok) renderEvents(await eventsRes.json());
     if (filesRes.ok)  renderFiles(await filesRes.json());
 
-    // Stop polling when done/blocked
+    // Stop polling on any terminal phase (the run is done).
     const phase = state.phase;
-    if (phase === 'complete' || phase === 'blocked') {
+    const terminal = ['complete','blocked','waiting_sprint_review','reviewed_partial'];
+    if (terminal.includes(phase)) {
       stopPolling(phase);
     }
   } catch (_) { /* network hiccup — retry next tick */ }
@@ -587,18 +2351,38 @@ async function poll() {
 
 function stopPolling(phase) {
   if (state.polling) { clearInterval(state.polling); state.polling = null; }
-  const done = phase === 'complete';
-  setPulse(done ? 'done' : 'err');
-  setSysLabel(done ? 'COMPLETE' : 'BLOCKED');
+  const summary = state.lastSummary || {};
+  const conf = (summary.confidence != null) ? summary.confidence : null;
+  const confStr = (conf != null) ? `${conf}%` : '';
+
+  const titleEl = document.getElementById('completeTitle');
+  const textEl  = document.getElementById('completeText');
+  const banner  = document.getElementById('completeBanner');
   const doneCnt = Object.values(state.boardTasks).filter(t => t.status === 'done').length;
-  if (done && doneCnt > 0) {
-    document.getElementById('completeText').textContent =
-      `${doneCnt} task(s) done · ${state.files.length} file(s) generated`;
-    document.getElementById('completeBanner').classList.add('show');
-  } else if (done && doneCnt === 0) {
-    setPulse('err');
-    setSysLabel('NEEDS REFINEMENT');
+  const wrCnt   = Object.values(state.boardTasks).filter(t => t.status === 'waiting_review').length;
+  const blkCnt  = Object.values(state.boardTasks).filter(t => t.status === 'blocked').length;
+
+  let title, sub, pulse, sys;
+  if (phase === 'complete') {
+    title = '✓ Sprint Complete.';
+    sub   = `${doneCnt} task(s) done · ${state.files.length} file(s) generated${confStr ? ' · ' + confStr + ' confidence' : ''}`;
+    pulse = 'done'; sys = 'COMPLETE';
+    if (doneCnt === 0) { pulse = 'err'; sys = 'NEEDS REFINEMENT'; }
+  } else if (phase === 'waiting_sprint_review' || phase === 'reviewed_partial') {
+    title = '⚠ Sprint Review Required · Partial Increment.';
+    sub   = `${doneCnt} done · ${wrCnt} waiting review · ${blkCnt} blocked${confStr ? ' · ' + confStr + ' confidence' : ''}`;
+    pulse = 'warn'; sys = 'REVIEW REQUIRED';
+  } else {
+    title = '✗ Sprint Blocked.';
+    sub   = `${blkCnt} blocked · ${doneCnt} done${confStr ? ' · ' + confStr + ' confidence' : ''}`;
+    pulse = 'err'; sys = 'BLOCKED';
   }
+
+  if (titleEl) titleEl.textContent = title;
+  if (textEl)  textEl.textContent  = sub;
+  if (banner)  banner.classList.add('show');
+  setPulse(pulse);
+  setSysLabel(sys);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -608,23 +2392,26 @@ function renderBoard(data) {
   state.phase = data.phase || 'planning';
   document.getElementById('phaseDisplay').textContent  = state.phase;
   document.getElementById('info-phase').textContent    = state.phase;
+  applySprintReviewLock(state.phase);
+  applyRetroLock(state.phase);
 
-  const columns = { todo: [], inprogress: [], done: [], blocked: [] };
+  const columns = { todo: [], inprogress: [], waiting_review: [], done: [], blocked: [] };
   const normStatus = (raw) => {
     const s = String(raw || '').toLowerCase().replace(/[\s-]+/g, '_');
+    if (s === 'waiting_review') return 'waiting_review';
     if (['in_progress','inprogress','running','active','wip'].includes(s)) return 'inprogress';
     if (['done','completed','complete','accepted','finished'].includes(s)) return 'done';
     if (['blocked','failed','rejected','escalated'].includes(s)) return 'blocked';
-    if (['todo','to_do','pending','planned','ready','draft','new','open'].includes(s)) return 'todo';
+    if (['todo','to_do','pending','planned','ready','draft','new','open','reopened'].includes(s)) return 'todo';
     return 'todo';
   };
   (data.tasks || []).forEach(t => {
     t.status = normStatus(t.status);
     state.boardTasks[t.id] = t;
-    columns[t.status].push(t);
+    (columns[t.status] || columns.todo).push(t);
   });
 
-  ['todo','inprogress','done','blocked'].forEach(st => {
+  ['todo','inprogress','waiting_review','done','blocked'].forEach(st => {
     const col  = document.getElementById('col-' + st);
     const cnt  = document.getElementById('cnt-' + st);
     const tasks = columns[st];
@@ -639,6 +2426,7 @@ function renderBoard(data) {
 
   // Update agent stats from summary
   const s = data.summary || {};
+  state.lastSummary = s;
   document.getElementById('po-stories').textContent = (data.tasks || []).length;
   document.getElementById('po-done').textContent    = s.done || 0;
   document.getElementById('dev-done').textContent   = s.done || 0;
@@ -651,13 +2439,37 @@ function makeTaskCard(t) {
   div.className = 'task-card';
   const prio  = (t.priority || 'medium').toLowerCase();
   const gate  = t.gate_status || 'pending';
+  const retry = Number(t.retry_count || 0);
+  const retryMax = Number(t.retry_max || 3);
+  const retryBadge = retry > 0
+    ? `<span class="retry-badge" style="font-size:10px;padding:1px 5px;border-radius:3px;background:#3a2a14;color:#f3a64b;margin-left:4px;">retry ${retry}/${retryMax}</span>`
+    : '';
+  const src = (t.source || '').toLowerCase();
+  const srcBadge = src && src !== 'inferred'
+    ? `<span class="src-badge" style="font-size:10px;padding:1px 5px;border-radius:3px;background:${src==='user_goal'?'#1a3a2a':'#2a2a3a'};color:${src==='user_goal'?'#5fd49a':'#9b8fd4'};margin-left:4px;">${src.replace('_',' ')}</span>`
+    : '';
+  let detailHtml = '';
+  const details = Array.isArray(t.gate_detail) ? t.gate_detail : [];
+  if (details.length) {
+    const items = details.slice(0, 3).map(d => {
+      if (typeof d === 'string') return `<div style="font-size:11px;color:#ef6f6f;">• ${esc(d)}</div>`;
+      const gid = esc(d.gate_id || '?');
+      const title = esc(d.title || '');
+      const reason = esc(d.reason || '');
+      return `<div style="font-size:11px;color:#ef6f6f;margin-top:2px;"><b>${gid}</b>${title?' — '+title:''}${reason?'<br><span style="color:#a37070;">'+reason+'</span>':''}</div>`;
+    }).join('');
+    detailHtml = `<div class="task-gate-detail" style="margin-top:6px;border-top:1px dashed #333;padding-top:5px;">${items}</div>`;
+  } else if (t.blocker) {
+    detailHtml = `<div class="task-gate-detail" style="margin-top:6px;font-size:11px;color:#ef6f6f;">${esc(t.blocker)}</div>`;
+  }
   div.innerHTML = `
-    <div class="task-id">${esc(t.id)}</div>
+    <div class="task-id">${esc(t.id)}${retryBadge}${srcBadge}</div>
     <div class="task-title">${esc(t.title)}</div>
     <div class="task-foot">
       <span class="prio ${prio}">${prio}</span>
       <span class="gate-badge ${gate}">${gate}</span>
-    </div>`;
+    </div>
+    ${detailHtml}`;
   return div;
 }
 
@@ -852,11 +2664,535 @@ document.querySelectorAll('.tab').forEach(t => {
     t.classList.add('active');
     state.activeTab = t.dataset.tab;
     document.getElementById('tab-board').style.display   = t.dataset.tab === 'board'   ? 'grid' : 'none';
+    document.getElementById('tab-review').style.display  = t.dataset.tab === 'review'  ? 'flex' : 'none';
+    document.getElementById('tab-retro').style.display   = t.dataset.tab === 'retro'   ? 'flex' : 'none';
     document.getElementById('tab-preview').style.display = t.dataset.tab === 'preview' ? 'flex' : 'none';
     document.getElementById('tab-code').style.display    = t.dataset.tab === 'code'    ? 'flex' : 'none';
     if (t.dataset.tab === 'preview') updatePreview();
+    if (t.dataset.tab === 'review')  { renderReviewPanel(); loadSprintReview(); }
+    if (t.dataset.tab === 'retro')   { applyRetroLock(state.phase); }
   };
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SPRINT REVIEW PANEL
+// ══════════════════════════════════════════════════════════════════════════════
+// renderReviewPanel — PO Agent Story Acceptance log (read-only).
+// Shows all tasks that have a po_agent_review decision recorded by the PO Agent.
+// Human action buttons are NOT shown here; human input is only at Sprint Review stage.
+function renderReviewPanel() {
+  const list = document.getElementById('review-task-list');
+  const reviewed = Object.values(state.boardTasks).filter(t => t.po_agent_review);
+  list.innerHTML = '';
+  if (!reviewed.length) {
+    list.innerHTML = '<div style="color:var(--text-faint);font-size:13px;">No PO Agent decisions recorded yet.</div>';
+    return;
+  }
+  reviewed.forEach(t => {
+    const rev = t.po_agent_review;
+    const decision = rev.decision || '';
+    const isAccept = decision === 'accept';
+    const decColor  = isAccept ? '#5fd49a' : '#ef6f6f';
+    const decBg     = isAccept ? '#1a3a2a' : '#2a1a1a';
+    const decBorder = isAccept ? '#2a5a3a' : '#4a2a2a';
+    const decLabel  = isAccept ? '✓ Accepted' : '✗ Rejected';
+    const conf      = rev.confidence != null ? Math.round(rev.confidence * 100) + '%' : '—';
+    const el = document.createElement('div');
+    el.style.cssText = 'background:#141923;border:1px solid #2a3a4a;border-radius:6px;padding:12px 14px;';
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:#64c8ef;background:#1a2a3a;padding:1px 6px;border-radius:3px;">${esc(t.id)}</span>
+        <span style="font-size:13px;font-weight:600;color:#e2e8f0;">${esc(t.title)}</span>
+        <span style="font-size:11px;background:${decBg};color:${decColor};border:1px solid ${decBorder};padding:1px 8px;border-radius:3px;margin-left:auto;">${decLabel}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-dim);line-height:1.5;">
+        <span style="color:var(--text-faint);">Confidence:</span> ${conf} &nbsp;
+        <span style="color:var(--text-faint);">Reason:</span> ${esc((rev.reason || '').slice(0, 120))}
+      </div>`;
+    list.appendChild(el);
+  });
+}
+
+// ── Review Modal ─────────────────────────────────────────────────────────────
+const _modal = {
+  overlay:   () => document.getElementById('reviewModalOverlay'),
+  badge:     () => document.getElementById('modalDecisionBadge'),
+  taskId:    () => document.getElementById('modalTaskId'),
+  taskTitle: () => document.getElementById('modalTaskTitle'),
+  textarea:  () => document.getElementById('modalFeedback'),
+  required:  () => document.getElementById('modalFeedbackRequired'),
+  error:     () => document.getElementById('modalError'),
+  submitBtn: () => document.getElementById('modalSubmitBtn'),
+};
+
+const _DECISION_LABELS = {
+  approve:         { label: '✓ Approve',          short: 'Approve' },
+  request_changes: { label: '↺ Request Changes',   short: 'Request Changes' },
+  reject:          { label: '✗ Reject',            short: 'Reject' },
+};
+
+let _pendingReview = null; // { type: 'task'|'sprint', taskId?, decision }
+
+function openReviewModal({ type, taskId, taskTitle, decision }) {
+  _pendingReview = { type, taskId, decision };
+  const feedbackRequired = decision !== 'approve';
+  const info = _DECISION_LABELS[decision] || { label: decision, short: decision };
+
+  _modal.badge().textContent = info.label;
+  _modal.badge().className   = `modal-decision-badge ${decision}`;
+
+  if (type === 'task') {
+    _modal.taskId().textContent    = taskId;
+    _modal.taskTitle().textContent = taskTitle || taskId;
+  } else {
+    _modal.taskId().textContent    = 'Sprint decision';
+    _modal.taskTitle().textContent = info.label;
+  }
+
+  _modal.textarea().value       = '';
+  _modal.textarea().placeholder = feedbackRequired
+    ? 'Explain what needs to change…'
+    : 'Optional notes for the developer…';
+  _modal.textarea().classList.remove('error');
+  _modal.required().textContent = feedbackRequired ? ' *' : '';
+  _modal.error().classList.remove('show');
+
+  const btn = _modal.submitBtn();
+  btn.textContent = info.short;
+  btn.className   = `modal-btn submit ${decision}`;
+
+  _modal.overlay().classList.add('open');
+  // Focus textarea for non-approve so the user can type immediately
+  setTimeout(() => {
+    if (feedbackRequired) _modal.textarea().focus();
+    else btn.focus();
+  }, 60);
+}
+
+function closeReviewModal() {
+  _modal.overlay().classList.remove('open');
+  _pendingReview = null;
+}
+
+// Wire close triggers
+document.getElementById('modalCloseBtn').onclick  = closeReviewModal;
+document.getElementById('modalCancelBtn').onclick = closeReviewModal;
+document.getElementById('reviewModalOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeReviewModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && _modal.overlay().classList.contains('open')) closeReviewModal();
+});
+
+// Submit handler
+document.getElementById('modalSubmitBtn').onclick = async () => {
+  if (!_pendingReview || !state.sprintId) return;
+
+  const { type, taskId, decision } = _pendingReview;
+  const feedback = _modal.textarea().value.trim();
+  const feedbackRequired = decision !== 'approve';
+
+  if (feedbackRequired && !feedback) {
+    _modal.textarea().classList.add('error');
+    _modal.error().classList.add('show');
+    _modal.textarea().focus();
+    return;
+  }
+
+  const btn = _modal.submitBtn();
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+
+  try {
+    let res;
+    if (type === 'task') {
+      res = await fetch(`/api/sprint/${state.sprintId}/review`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', ...userHeader() },
+        body:    JSON.stringify({ task_id: taskId, decision, feedback }),
+      });
+    } else {
+      res = await fetch(`/api/sprint/${state.sprintId}/sprint-review`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', ...userHeader() },
+        body:    JSON.stringify({ decision, feedback }),
+      });
+    }
+
+    const data = await res.json();
+    if (!res.ok) {
+      _modal.error().textContent = data.detail || 'Request failed.';
+      _modal.error().classList.add('show');
+      const info = _DECISION_LABELS[decision] || { short: decision };
+      btn.disabled    = false;
+      btn.textContent = info.short;
+      return;
+    }
+
+    closeReviewModal();
+    renderReviewPanel();
+    const boardRes = await fetch(`/api/sprint/${state.sprintId}/board`);
+    if (boardRes.ok) renderBoard(await boardRes.json());
+  } catch (err) {
+    _modal.error().textContent = 'Network error: ' + err.message;
+    _modal.error().classList.add('show');
+    const info = _DECISION_LABELS[decision] || { short: decision };
+    btn.disabled    = false;
+    btn.textContent = info.short;
+  }
+};
+
+// Clear error state when user starts typing
+document.getElementById('modalFeedback').addEventListener('input', () => {
+  _modal.textarea().classList.remove('error');
+  _modal.error().classList.remove('show');
+});
+
+function taskReview(taskId, decision) {
+  const task = state.boardTasks[taskId] || {};
+  openReviewModal({ type: 'task', taskId, taskTitle: task.title || taskId, decision });
+}
+
+async function sprintDecision(decision) {
+  openReviewModal({ type: 'sprint', decision });
+}
+
+function applySprintReviewLock(phase) {
+  const unlocked = ['waiting_sprint_review', 'reviewed_partial', 'blocked', 'complete'];
+  const isUnlocked = unlocked.includes((phase || '').toLowerCase());
+
+  // Sprint Review Decision buttons + lock banner
+  const banner = document.getElementById('sprintReviewLockBanner');
+  const buttons = document.querySelectorAll('#sprintReviewDecisionButtons button[data-decision]');
+  if (banner) banner.style.display = isUnlocked ? 'none' : 'block';
+  buttons.forEach(btn => {
+    btn.disabled = !isUnlocked;
+    btn.style.opacity = isUnlocked ? '1' : '0.5';
+    btn.style.cursor = isUnlocked ? 'pointer' : 'not-allowed';
+  });
+
+  // Synthesize button
+  const synth = document.getElementById('synthesizeBtn');
+  if (synth) synth.disabled = !isUnlocked;
+
+  // Human Sprint Review Notes — only editable after sprint ends
+  const hrText   = document.getElementById('humanReviewText');
+  const hrSelect = document.getElementById('humanReviewDecision');
+  const hrBtn    = document.getElementById('humanReviewBtn');
+  const hrHint   = document.getElementById('humanReviewLockHint');
+  if (hrText)   { hrText.disabled   = !isUnlocked; hrText.style.opacity   = isUnlocked ? '1' : '0.5'; }
+  if (hrSelect) { hrSelect.disabled = !isUnlocked; hrSelect.style.opacity = isUnlocked ? '1' : '0.5'; }
+  if (hrBtn)    { hrBtn.disabled    = !isUnlocked; }
+  if (hrHint)   hrHint.style.display = isUnlocked ? 'none' : 'block';
+
+  // System Review generate button — only active post-sprint
+  const sysBtn = document.getElementById('systemReviewBtn');
+  if (sysBtn) { sysBtn.disabled = !isUnlocked; sysBtn.style.opacity = isUnlocked ? '1' : '0.5'; }
+}
+
+function applyRetroLock(phase) {
+  const closed = ['reviewed_partial', 'complete'];
+  const isOpen = closed.includes((phase || '').toLowerCase());
+  const banner = document.getElementById('retroLockBanner');
+  if (banner) banner.style.display = isOpen ? 'none' : 'block';
+  const btn = document.getElementById('retroSaveBtn');
+  if (btn) btn.disabled = !isOpen;
+  ['retroWentWell', 'retroImprove', 'retroActions'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !isOpen;
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SPRINT REVIEW — System / Human / Merged / Next Sprint Notes
+// ══════════════════════════════════════════════════════════════════════════════
+function _showInlineErr(elId, endpoint, status, message) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.style.display = 'block';
+  el.textContent = `${endpoint} → HTTP ${status} — ${(message || '').slice(0, 240)}`;
+}
+function _clearInlineErr(elId) {
+  const el = document.getElementById(elId);
+  if (el) { el.style.display = 'none'; el.textContent = ''; }
+}
+
+async function _fetchJson(method, url, body) {
+  const opts = { method, headers: { ...userHeader() } };
+  if (body !== undefined) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(url, opts);
+  let data = null;
+  try { data = await res.json(); } catch (_) { /* empty body */ }
+  if (!res.ok) {
+    const detail = data && (data.detail || data.message) || (await Promise.resolve('')).toString();
+    const text = typeof detail === 'object' ? JSON.stringify(detail) : (detail || res.statusText);
+    const err = new Error(text);
+    err.status = res.status;
+    err.endpoint = url;
+    throw err;
+  }
+  return data || {};
+}
+
+function renderSystemReview(payload) {
+  const body = document.getElementById('systemReviewBody');
+  if (!body) return;
+  if (!payload) {
+    body.innerHTML = '<div class="sr-empty">No system review yet. Click Generate.</div>';
+    return;
+  }
+  const s = payload.summary || {};
+  const inc = payload.increment || {};
+  const stat = (label, value) => `<span class="sr-stat"><b>${esc(String(value))}</b> ${esc(label)}</span>`;
+  let html = '';
+  html += '<div style="margin-bottom:8px;">';
+  html += stat('done',          s.done_tasks ?? 0);
+  html += stat('blocked',       s.blocked_tasks ?? 0);
+  html += stat('waiting review',s.waiting_review_tasks ?? 0);
+  html += stat('files',         s.generated_files_count ?? 0);
+  html += stat('confidence',    (s.confidence ?? 0) + '%');
+  if (s.increment_status) html += stat('increment', s.increment_status);
+  html += '</div>';
+  if ((payload.done_titles || []).length) {
+    html += '<div style="margin-top:6px;"><b>Delivered:</b> ' +
+      (payload.done_titles.map(t => `<span class="sr-chip">${esc(t)}</span>`).join('')) + '</div>';
+  }
+  if ((payload.blocked_titles || []).length) {
+    html += '<div style="margin-top:6px;color:#d4a0d4;"><b>Blocked / Risks:</b> ' +
+      (payload.blocked_titles.map(t => `<span class="sr-chip" style="background:#2a1a2a;color:#d4a0d4;border-color:#4a2a4a;">${esc(t)}</span>`).join('')) + '</div>';
+  }
+  if ((payload.waiting_review_titles || []).length) {
+    html += '<div style="margin-top:6px;"><b>Waiting review:</b> ' +
+      (payload.waiting_review_titles.map(t => `<span class="sr-chip">${esc(t)}</span>`).join('')) + '</div>';
+  }
+  if (inc && (inc.app_name || inc.url)) {
+    html += `<div style="margin-top:6px;"><b>Increment:</b> ${esc(inc.app_name || '')} ${inc.url ? `(<a href="${esc(inc.url)}" target="_blank" style="color:#64c8ef;">link</a>)` : ''}</div>`;
+  }
+  if (payload.generated_at) {
+    html += `<div style="margin-top:8px;font-size:11px;color:var(--text-faint);">Generated ${esc(payload.generated_at)}</div>`;
+  }
+  body.innerHTML = html;
+}
+
+function renderHumanReview(payload) {
+  const saved = document.getElementById('humanReviewSaved');
+  if (!saved) return;
+  if (!payload || !payload.text) { saved.style.display = 'none'; saved.textContent = ''; return; }
+  saved.style.display = 'block';
+  saved.textContent = `Saved by ${payload.reviewer_name || 'reviewer'} at ${payload.submitted_at || ''}`;
+}
+
+function renderMergedNotes(text) {
+  const pre = document.getElementById('mergedNotesBody');
+  if (!pre) return;
+  if (!text) { pre.innerHTML = '<span class="sr-empty">No merged notes yet.</span>'; return; }
+  pre.textContent = text;
+}
+
+function renderNextSprintNotes(notes) {
+  const body = document.getElementById('nextSprintNotesBody');
+  const actions = document.getElementById('nextSprintActions');
+  if (!body) return;
+  if (!notes || (!notes.suggested_goal && !(notes.carry_over_item_ids || []).length && !(notes.recommended_new_item_ids || []).length)) {
+    body.innerHTML = '<div class="sr-empty">Synthesize Sprint Notes to generate a next-sprint plan.</div>';
+    if (actions) actions.style.display = 'none';
+    return;
+  }
+  let html = '';
+  if (notes.suggested_goal) {
+    html += `<div style="margin-bottom:6px;"><b>Suggested goal:</b> ${esc(notes.suggested_goal)}</div>`;
+  }
+  if ((notes.carry_over_item_ids || []).length) {
+    html += '<div style="margin-bottom:6px;"><b>Carry-over:</b> ' +
+      notes.carry_over_item_ids.map(id => `<span class="sr-chip">${esc(id)}</span>`).join('') + '</div>';
+  }
+  if ((notes.recommended_new_item_ids || []).length) {
+    html += '<div><b>Recommended new items:</b> ' +
+      notes.recommended_new_item_ids.map(id => `<span class="sr-chip">${esc(id)}</span>`).join('') + '</div>';
+  }
+  body.innerHTML = html;
+  state.nextSprintNotes = notes;
+  if (actions) actions.style.display = 'flex';
+}
+
+async function loadSprintReview() {
+  if (!state.sprintId) return;
+  _clearInlineErr('systemReviewError');
+  try {
+    const data = await _fetchJson('GET', `/api/sprint/${encodeURIComponent(state.sprintId)}/sprint-review`);
+    const review = data.sprint_review || {};
+    renderSystemReview(review.system_review);
+    renderHumanReview(review.human_review);
+    renderMergedNotes(review.merged_notes);
+    renderNextSprintNotes(data.next_sprint_notes);
+  } catch (err) {
+    _showInlineErr('systemReviewError', err.endpoint || 'sprint-review', err.status || 0, err.message || err);
+  }
+}
+
+async function runPOAgentRecovery() {
+  if (!state.sprintId) return;
+  const btn = document.getElementById('poRecoveryBtn');
+  const err = document.getElementById('poRecoveryError');
+  if (btn) { btn.disabled = true; btn.textContent = 'Running PO Review…'; }
+  if (err) err.style.display = 'none';
+  try {
+    const r = await fetch(`/api/sprint/${state.sprintId}/rerun-po-review`, {
+      method: 'POST', headers: userHeader(),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      if (err) { err.textContent = data.detail || 'Recovery failed.'; err.style.display = 'block'; }
+      return;
+    }
+    // Refresh board + review panel
+    const boardRes = await fetch(`/api/sprint/${state.sprintId}/board`);
+    if (boardRes.ok) renderBoard(await boardRes.json());
+    renderReviewPanel();
+  } catch (e) {
+    if (err) { err.textContent = 'Network error: ' + e.message; err.style.display = 'block'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Re-run PO Review'; }
+  }
+}
+
+async function generateSystemReview() {
+  if (!state.sprintId) return;
+  const btn = document.getElementById('systemReviewBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  _clearInlineErr('systemReviewError');
+  try {
+    const data = await _fetchJson('POST', `/api/sprint/${encodeURIComponent(state.sprintId)}/sprint-review/system`);
+    renderSystemReview(data.system_review);
+  } catch (err) {
+    _showInlineErr('systemReviewError', err.endpoint || 'sprint-review/system', err.status || 0, err.message || err);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Generate / Refresh'; }
+  }
+}
+
+async function saveHumanReview() {
+  if (!state.sprintId) return;
+  const text = document.getElementById('humanReviewText').value.trim();
+  const decision = document.getElementById('humanReviewDecision').value;
+  if (!text) {
+    _showInlineErr('humanReviewError', 'sprint-review/human', 422, 'Please write some notes before saving.');
+    return;
+  }
+  const btn = document.getElementById('humanReviewBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  _clearInlineErr('humanReviewError');
+  try {
+    const data = await _fetchJson(
+      'POST',
+      `/api/sprint/${encodeURIComponent(state.sprintId)}/sprint-review/human`,
+      { text, decision: decision || '' },
+    );
+    renderHumanReview(data.human_review);
+  } catch (err) {
+    _showInlineErr('humanReviewError', err.endpoint || 'sprint-review/human', err.status || 0, err.message || err);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Human Review'; }
+  }
+}
+
+async function synthesizeReview() {
+  if (!state.sprintId) return;
+  const btn = document.getElementById('synthesizeBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Synthesizing…'; }
+  _clearInlineErr('synthesizeError');
+  try {
+    const data = await _fetchJson(
+      'POST',
+      `/api/sprint/${encodeURIComponent(state.sprintId)}/sprint-review/synthesize`,
+    );
+    renderMergedNotes(data.merged_notes);
+    renderNextSprintNotes(data.next_sprint_notes);
+  } catch (err) {
+    _showInlineErr('synthesizeError', err.endpoint || 'sprint-review/synthesize', err.status || 0, err.message || err);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Synthesize Sprint Notes'; }
+    applySprintReviewLock(state.phase);
+  }
+}
+
+function startNextSprintFromNotes() {
+  const notes = state.nextSprintNotes || {};
+  const projectId = state.projectId;
+  if (!projectId) return;
+  const goal = notes.suggested_goal || '';
+  const carry = (notes.carry_over_item_ids || []).slice();
+  const recommended = (notes.recommended_new_item_ids || []).slice();
+  state.pendingSprintSelection = { projectId, itemIds: carry.concat(recommended) };
+  startSprintFlowForProject(projectId);
+  setTimeout(() => {
+    const g = document.getElementById('goalInput');
+    if (g && goal) g.value = goal;
+  }, 0);
+}
+
+async function addNextItemsToBacklog() {
+  // Carry-over and recommended items already exist in the backlog; this is a
+  // visual confirmation that they are flagged as candidates for next planning.
+  const notes = state.nextSprintNotes || {};
+  const projectId = state.projectId;
+  if (!projectId) return;
+  const seeded = (notes.recommended_new_item_ids || []).concat(notes.carry_over_item_ids || []);
+  state.pendingSprintSelection = { projectId, itemIds: seeded };
+  // Surface as a small inline message in the next-sprint section.
+  const body = document.getElementById('nextSprintNotesBody');
+  if (body) {
+    const note = document.createElement('div');
+    note.className = 'sr-saved';
+    note.textContent = `Marked ${seeded.length} item(s) for the next sprint planning step.`;
+    body.appendChild(note);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  RETROSPECTIVE
+// ══════════════════════════════════════════════════════════════════════════════
+function _splitLines(s) {
+  return (s || '').split('\n').map(x => x.trim()).filter(x => x.length);
+}
+
+async function saveRetro() {
+  if (!state.sprintId) return;
+  const went   = _splitLines(document.getElementById('retroWentWell').value);
+  const imp    = _splitLines(document.getElementById('retroImprove').value);
+  const acts   = _splitLines(document.getElementById('retroActions').value);
+  const btn    = document.getElementById('retroSaveBtn');
+  const msg    = document.getElementById('retroSavedMsg');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  _clearInlineErr('retroError');
+  try {
+    const data = await _fetchJson(
+      'POST',
+      `/api/sprint/${encodeURIComponent(state.sprintId)}/retro`,
+      { went_well: went, improve: imp, actions: acts },
+    );
+    if (msg) msg.textContent = `Saved at ${new Date().toLocaleTimeString()}`;
+    const seededIds = data.seeded_backlog_item_ids || [];
+    const seededBox = document.getElementById('retroSeededBody');
+    const seededList = document.getElementById('retroSeededList');
+    if (seededIds.length && seededBox && seededList) {
+      seededList.innerHTML = seededIds.map(id => `<span class="sr-chip">${esc(id)}</span>`).join('');
+      seededBox.style.display = 'block';
+    }
+    // If we seeded backlog items in a project context, refresh the panel quietly.
+    if (state.projectId && typeof loadBacklog === 'function') {
+      try { loadBacklog(state.projectId, false); } catch (_) {}
+    }
+  } catch (err) {
+    _showInlineErr('retroError', err.endpoint || 'retro', err.status || 0, err.message || err);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Retro'; }
+    applyRetroLock(state.phase);
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  COPY / RESET
@@ -870,9 +3206,13 @@ document.getElementById('resetBtn').onclick = () => {
   if (state.polling) { clearInterval(state.polling); state.polling = null; }
   state.sprintId = null; state.renderedEvents = 0;
   state.files = []; state.activeFile = null; state.boardTasks = {};
-  // Reset UI
-  document.getElementById('cockpit').classList.remove('visible');
-  document.getElementById('intro').style.display = 'flex';
+  // Reset UI then go back to the project (or projects list / login as fallback).
+  const u = getCurrentUser();
+  if (u) {
+    if (state.projectId) { showView('project-detail'); }
+    else                 { showView('projects'); }
+  } else { showView('login'); }
+  document.getElementById('intro').style.display = 'none';
   document.getElementById('goalInput').value = '';
   document.getElementById('startBtn').textContent = 'Start Sprint ↵';
   document.getElementById('startBtn').disabled    = false;
@@ -893,7 +3233,7 @@ document.getElementById('resetBtn').onclick = () => {
   document.getElementById('fileList').innerHTML   = '<div class="file-empty">No files yet</div>';
   setPulse('');
   setSysLabel('IDLE');
-  ['todo','inprogress','done','blocked'].forEach(s => {
+  ['todo','inprogress','waiting_review','done','blocked'].forEach(s => {
     document.getElementById('col-' + s).innerHTML = '<div class="col-empty">—</div>';
     document.getElementById('cnt-' + s).textContent = '0';
   });
@@ -921,6 +3261,17 @@ function setPulse(cls) {
 function setSysLabel(txt) {
   document.getElementById('sysLabel').textContent = txt;
 }
+
+// Boot — fail-safe: if init throws, fall back to login view rather than a blank page.
+(async () => {
+  try { await init(); }
+  catch (err) {
+    console.error('[cockpit] init failed:', err);
+    try { sessionStorage.removeItem(NAV_STORAGE_KEY); } catch (_) {}
+    try { showView('login'); } catch (e2) { console.error('[cockpit] showView(login) failed:', e2); }
+  }
+})();
 </script>
+
 </body>
 </html>

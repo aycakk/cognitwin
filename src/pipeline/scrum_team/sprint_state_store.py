@@ -218,6 +218,7 @@ class SprintStateStore:
         target_sprint: str = "",
         target_date: str = "",
         deployment_package: str = "",
+        source: str = "inferred",
     ) -> str:
         """Append a new story to the backlog. Returns the story_id.
 
@@ -254,6 +255,7 @@ class SprintStateStore:
                 "target_sprint":       target_sprint[:30] if target_sprint else "",
                 "target_date":         target_date[:10] if target_date else "",
                 "deployment_package":  deployment_package[:80] if deployment_package else "",
+                "source":              source if source in ("user_goal", "inferred", "optional") else "inferred",
             }
             backlog = state.get("backlog", [])
             backlog.append(story)
@@ -291,6 +293,7 @@ class SprintStateStore:
             "title", "description", "priority", "acceptance_criteria", "status",
             "epic", "title_en", "title_tr", "user_story_en", "user_story_tr",
             "story_points", "target_sprint", "target_date", "deployment_package",
+            "source",
         }
         with self.state_lock():
             state = self.load()
@@ -311,12 +314,18 @@ class SprintStateStore:
                     return True
         return False
 
-    def accept_story(self, sid: str) -> bool:
-        """Mark a story as accepted by the Product Owner.
+    def accept_story(self, sid: str, actor_type: str = "agent") -> bool:
+        """Mark a story as accepted.
 
-        Also updates po_status on any linked sprint tasks from
-        'ready_for_review' → 'accepted', closing the review loop.
+        actor_type: "agent" (Product Owner Agent) or "human" (Human Supervisor).
+        Sets po_status on linked tasks to "agent_accepted" or "human_accepted"
+        accordingly (falls back to "accepted" for legacy callers).
         """
+        po_status_value = (
+            "agent_accepted" if actor_type == "agent"
+            else "human_accepted" if actor_type == "human"
+            else "accepted"
+        )
         with self.state_lock():
             state = self.load()
             found = False
@@ -330,9 +339,68 @@ class SprintStateStore:
                 return False
             for t in state.get("tasks", []):
                 if t.get("source_story_id") == sid and t.get("po_status") == "ready_for_review":
-                    t["po_status"] = "accepted"
+                    t["po_status"] = po_status_value
             self.save(state)
         return True
+
+    def apply_agent_review(
+        self,
+        task_id: str,
+        accepted: bool,
+        reason: str = "",
+        confidence: float = 1.0,
+        missing_criteria: list | None = None,
+    ) -> dict:
+        """Record a Product Owner Agent review result on a sprint task.
+
+        When accepted=True:
+          Sets po_status="agent_accepted". Records review metadata in
+          task["review_log"] with actor_type="agent".
+        When accepted=False:
+          Does NOT change po_status (caller handles retry/block).
+          Records the rejection in task["review_log"].
+
+        Returns {"ok": bool, "task": dict | None}
+        """
+        with self.state_lock():
+            state = self.load()
+            task: dict | None = next(
+                (t for t in state.get("tasks", []) if t.get("id") == task_id), None
+            )
+            if task is None:
+                return {"ok": False, "task": None}
+
+            now = datetime.now().isoformat(timespec="seconds")
+            entry = {
+                "actor_type":        "agent",
+                "actor_name":        "Product Owner Agent",
+                "decision":          "accept" if accepted else "reject",
+                "reason":            (reason or "")[:400],
+                "confidence":        round(float(confidence), 3),
+                "missing_criteria":  list(missing_criteria or []),
+                "timestamp":         now,
+            }
+            task.setdefault("review_log", []).append(entry)
+
+            # Top-level po_agent_review for easy board serialization
+            task["po_agent_review"] = {
+                "decision":   "accept" if accepted else "reject",
+                "reason":     (reason or "")[:400],
+                "confidence": round(float(confidence), 3),
+                "created_at": now,
+            }
+
+            if accepted:
+                task["po_status"] = "agent_accepted"
+                if task.get("status") == "done":
+                    increment: list = state.setdefault("increment", [])
+                    if task_id not in increment:
+                        increment.append(task_id)
+
+            task["updated_at"] = datetime.now().isoformat(timespec="seconds")
+            self.save(state)
+
+        return {"ok": True, "task": task}
 
     def reject_story(self, sid: str, reason: str = "") -> bool:
         """Mark a story as rejected by the Product Owner.
@@ -564,6 +632,48 @@ class SprintStateStore:
                     return True
         return False
 
+    def attach_gate_failures(self, task_id: str, items: list[dict]) -> bool:
+        """Persist a structured list of failing gates onto a task.
+
+        Each item should look like
+            {gate_id, title, status, reason, suggested_action}
+        so the cockpit can render human-readable failure detail under the
+        task card. Replaces any prior list (most recent failure wins).
+        """
+        with self.state_lock():
+            state = self.load()
+            for t in state.get("tasks", []):
+                if t.get("id") == task_id:
+                    t["last_gate_failures"] = list(items or [])[:8]
+                    t["updated_at"] = datetime.now().isoformat(timespec="seconds")
+                    self.save(state)
+                    return True
+        return False
+
+    def set_retry_count(self, task_id: str, n: int) -> bool:
+        """Persist the current reroute/retry attempt count for a task."""
+        with self.state_lock():
+            state = self.load()
+            for t in state.get("tasks", []):
+                if t.get("id") == task_id:
+                    t["retry_count"] = max(0, int(n))
+                    t["updated_at"] = datetime.now().isoformat(timespec="seconds")
+                    self.save(state)
+                    return True
+        return False
+
+    def set_phase(self, phase: str) -> None:
+        """Persist the current sprint phase to state.
+
+        The cockpit registry holds the live phase in memory; this method
+        mirrors it into the JSON file so a process restart does not lose
+        the terminal phase of a finished sprint.
+        """
+        with self.state_lock():
+            state = self.load()
+            state["phase"] = str(phase)[:40]
+            self.save(state)
+
     def apply_human_feedback(
         self,
         task_id: str,
@@ -702,11 +812,12 @@ class SprintStateStore:
         }
 
     def get_tasks_ready_for_review(self) -> list[dict]:
-        """Return tasks the Developer completed that are awaiting PO acceptance.
+        """Return tasks awaiting human review.
 
-        These are tasks with po_status == 'ready_for_review', meaning the
-        Developer called complete_task() and the story originated in the
-        PO backlog (has a source_story_id).
+        Includes both:
+        - po_status == 'ready_for_review': human_required mode or low-confidence
+          PO Agent escalation (needs_human_review=True on the task).
+        - Excludes agent_accepted / human_accepted tasks (already resolved).
         """
         with self.state_lock():
             state = self.load()
@@ -831,9 +942,10 @@ class SprintStateStore:
             po       = task.get("po_status", "")
             ac_valid = bool(task.get("ac_validated"))
 
+            _ACCEPTED_STATUSES = {"accepted", "agent_accepted", "human_accepted"}
             if not (
                 status == "done"
-                and po in ("accepted", "human_accepted")
+                and po in _ACCEPTED_STATUSES
                 and (ac_valid or not ac)
             ):
                 logger.warning(

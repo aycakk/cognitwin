@@ -29,10 +29,48 @@ Reuse
 from __future__ import annotations
 
 import logging
+import os
 import re as _re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+
+# HUMAN_TASK_REVIEW_MODE — controls task-level story acceptance.
+#
+#   False (default) — PO Agent reviews every task after gates pass.
+#                     accept  → agent_accepted → Done
+#                     reject  → Developer retry → blocked
+#                     Tasks never sit in waiting_review during normal execution.
+#
+#   True  (debug)   — Gate PASS → waiting_review → Human Supervisor acts.
+#                     Set HUMAN_TASK_REVIEW_MODE=true in the environment.
+#                     For experiments and manual inspection only.
+#
+# Human involvement in the sprint is limited to the Sprint Review stage (end of sprint).
+def _resolve_human_task_review_mode() -> bool:
+    """Return True only when HUMAN_TASK_REVIEW_MODE=true is set explicitly.
+
+    AUTO_PO_ACCEPT is deprecated and ignored.  Setting it will emit a warning
+    so operators know to migrate, but it will NOT enable task-level human review.
+    """
+    raw = os.getenv("HUMAN_TASK_REVIEW_MODE", "").strip().lower()
+    if raw in ("true", "1", "yes"):
+        return True
+    if raw in ("false", "0", "no"):
+        return False
+    # Warn about deprecated flag but do NOT honour it.
+    if os.getenv("AUTO_PO_ACCEPT", "").strip():
+        logger.warning(
+            "sprint_loop: AUTO_PO_ACCEPT is deprecated and has no effect. "
+            "Use HUMAN_TASK_REVIEW_MODE=true to enable task-level human review."
+        )
+    return False  # default: PO Agent handles story acceptance, no human task review
+
+
+_HUMAN_TASK_REVIEW_MODE: bool = _resolve_human_task_review_mode()
+# Aliases kept for external callers that import the old names.
+_ACCEPTANCE_MODE: str  = "human_required" if _HUMAN_TASK_REVIEW_MODE else "supervised"
+_AUTO_PO_ACCEPT:  bool = not _HUMAN_TASK_REVIEW_MODE
 
 from src.agents.composer_orchestrator import (
     ComposerOrchestrator,
@@ -70,6 +108,13 @@ _GATED_DOMAINS: tuple[frozenset[str], ...] = (
     }),
     frozenset({                                            # payments / billing
         "stripe", "invoice", "billing", "subscription",
+    }),
+    frozenset({                                            # backend / server-side API
+        # Reject stories whose dominant subject is server-side infra when the goal
+        # is frontend-only.  Only use unambiguous infrastructure nouns; avoid auth
+        # terms (jwt, session) because they legitimately appear in frontend stories.
+        "endpoint", "persistence", "backend",
+        "postgres", "mysql", "sqlite", "mongodb",
     }),
 )
 
@@ -436,9 +481,10 @@ def run_sprint(
         )
 
         # ── Reroute loop ──────────────────────────────────────────────
-        task_completed = False
-        final_result   = ""
-        reroute_count  = 0
+        task_completed       = False
+        final_result         = ""
+        reroute_count        = 0
+        _agent_review_result: dict | None = None
 
         while reroute_count <= MAX_REROUTE_PER_TASK and step_count < MAX_STEPS_PER_SPRINT:
             dev_task = AgentTask(
@@ -476,24 +522,33 @@ def run_sprint(
                 if story and story.get("acceptance_criteria"):
                     state_store.mark_ac_validated(task_id)
 
-                # PO review: gate-pass alone is not acceptance.
-                # The PO must confirm the task output evidences the criteria.
-                _emit("po", "thought", f"Reviewing output for {task_id}", task_id)
-                review = po_agent.review_story(
+                # Gate passed.
+                if _HUMAN_TASK_REVIEW_MODE:
+                    # Debug / experiment mode: route to Human Supervisor.
+                    _emit("po", "thought", f"Task {task_id} passed gates — awaiting Human Supervisor review [debug mode]", task_id)
+                    conf_scores.append(conf)
+                    task_completed = True
+                    final_result   = response.draft
+                    break
+
+                # Default: PO Agent reviews immediately — no human involvement.
+                _emit("po", "thought", f"Product Owner Agent reviewing output for {task_id}", task_id)
+                _agent_review_result = po_agent.review_story(
                     story               = story or {},
                     task_output         = response.draft,
                     acceptance_criteria = story.get("acceptance_criteria", []) if story else [],
                     sprint_goal         = state_store.get_sprint_goal(),
                 )
+                review = _agent_review_result
                 if review.get("accepted"):
-                    _emit("po", "action", f"PO accepted {task_id}", task_id)
+                    _emit("po", "action", f"Product Owner Agent accepted {task_id}", task_id)
                     conf_scores.append(conf)
                     task_completed = True
                     final_result   = response.draft
                     break
 
                 # PO rejected — route back to Developer with the rejection reason.
-                _emit("po", "action", f"PO rejected {task_id}: {review.get('reason', 'AC not met')[:80]}", task_id)
+                _emit("po", "action", f"Product Owner Agent rejected {task_id}: {review.get('reason', 'AC not met')[:80]}", task_id)
                 if reroute_count >= MAX_REROUTE_PER_TASK:
                     # Budget exhausted — treat as escalation
                     if story_id:
@@ -510,6 +565,10 @@ def run_sprint(
 
                 reroute_count += 1
                 step_count    += 1
+                try:
+                    state_store.set_retry_count(task_id, reroute_count)
+                except Exception:
+                    pass
                 missing = review.get("missing_criteria") or []
                 dev_query = dev_query + (
                     f"\n[PO REJECTED — {review.get('reason', 'AC not met')}]"
@@ -521,9 +580,44 @@ def run_sprint(
                 )
                 continue
 
-            # Gate failed
+            # Gate failed — build human-readable detail records.
             failing = [gid for gid, info in gate_report["gates"].items() if not info.get("pass", True)]
-            _emit("gate", "gate", f"Gate(s) failed for {task_id}: {', '.join(failing[:3])}", task_id)
+            from src.gates.gate_result import build_gate_result as _bgr_detail  # noqa: PLC0415
+            _GATE_TITLES = {
+                "A1": "REDO audit cycle integrity",
+                "C1": "PII leak detection",
+                "C2": "Vector memory grounding",
+                "C2_DEV": "Codebase grounding",
+                "C3": "Ontology compliance",
+                "C4": "Hallucination check",
+                "C5": "Role permission scope",
+                "C6": "Anti-sycophancy",
+                "C7": "Blindspot disclosure",
+                "C8": "Acceptance criteria coverage",
+            }
+            gate_detail_items: list[dict] = []
+            for gid in failing[:5]:
+                info = gate_report["gates"].get(gid, {})
+                evidence = (info.get("evidence") or "")[:300]
+                gr = _bgr_detail(gid, False, evidence)
+                gate_detail_items.append({
+                    "gate_id":          gid,
+                    "title":            _GATE_TITLES.get(gid, gid),
+                    "status":           "fail",
+                    "reason":           evidence or "Gate evaluation failed.",
+                    "suggested_action": gr.revision_hint,
+                })
+            try:
+                state_store.attach_gate_failures(task_id, gate_detail_items)
+            except Exception:
+                pass
+            _emit(
+                "gate", "gate",
+                f"Gate(s) failed for {task_id}: " + ", ".join(
+                    f"{d['gate_id']} — {d['title']}" for d in gate_detail_items[:3]
+                ),
+                task_id,
+            )
 
             # Ask orchestrator what to do with the failure
             reroute = orchestrator.reroute(story_id, gate_report, reroute_count)
@@ -535,6 +629,10 @@ def run_sprint(
             if reroute.action == RerouteAction.RETRY:
                 reroute_count += 1
                 step_count    += 1
+                try:
+                    state_store.set_retry_count(task_id, reroute_count)
+                except Exception:
+                    pass
                 # Inject revision hint into the query for the next attempt
                 failing = [
                     gid for gid, info in gate_report["gates"].items()
@@ -594,17 +692,30 @@ def run_sprint(
                 })
                 _emit("dev", "action", f"Task {task_id} blocked — acceptance criteria not validated", task_id)
             else:
-                # PO already accepted inside the loop — finalise increment.
-                if story_id:
-                    state_store.accept_story(story_id)
-                    state_store.add_to_increment(task_id)
-                completed_stories.append({
-                    "story_id": story_id,
-                    "task_id":  task_id,
-                    "title":    story_title,
-                })
-                _emit("dev", "artifact", f"Task {task_id} done — moved to Done", task_id)
-                logger.info("sprint_loop: ✓ completed story=%s task=%s", story_id, task_id)
+                if _HUMAN_TASK_REVIEW_MODE:
+                    # Debug mode: complete_task already set po_status="ready_for_review";
+                    # the board shows this in "Waiting Review" until a human acts.
+                    _emit("dev", "artifact", f"Task {task_id} in Waiting Review — Human Supervisor review needed [debug mode]", task_id)
+                    logger.info("sprint_loop: ⏳ waiting_review story=%s task=%s (debug)", story_id, task_id)
+                else:
+                    # Default: PO Agent accepted inside the reroute loop — record and close.
+                    _rev = _agent_review_result or {}
+                    if story_id:
+                        state_store.apply_agent_review(
+                            task_id          = task_id,
+                            accepted         = True,
+                            reason           = _rev.get("reason", "All acceptance criteria evidenced in task output."),
+                            confidence       = _rev.get("confidence", 1.0),
+                            missing_criteria = _rev.get("missing_criteria", []),
+                        )
+                        state_store.add_to_increment(task_id)
+                    completed_stories.append({
+                        "story_id": story_id,
+                        "task_id":  task_id,
+                        "title":    story_title,
+                    })
+                    _emit("dev", "artifact", f"Task {task_id} done — Product Owner Agent accepted", task_id)
+                    logger.info("sprint_loop: ✓ completed story=%s task=%s", story_id, task_id)
 
         elif not any(b.get("story_id") == story_id for b in blocked_stories):
             # Reroute budget or step budget exhausted without an explicit ESCALATE
@@ -654,14 +765,46 @@ def run_sprint(
     except Exception as _fe:
         logger.warning("sprint_loop: fallback artefact failed: %s", _fe)
 
-    if not completed_stories:
-        _emit("system", "status", f"Sprint blocked — 0 stories accepted, {len(blocked_stories)} blocked")
-    elif blocked_stories:
-        _emit("sm", "ceremony", f"Sprint Review — {len(completed_stories)} done, {len(blocked_stories)} blocked")
-        _emit("system", "status", f"Sprint complete — confidence {avg_conf:.0%}")
-    else:
-        _emit("sm", "ceremony", f"Sprint Review — {len(completed_stories)} done, {len(blocked_stories)} blocked")
-        _emit("system", "status", f"Sprint complete — confidence {avg_conf:.0%}")
+    # Canonical summary — read from state store so the event stream message
+    # matches the board API exactly (both use compute_summary on the same tasks).
+    from src.loop.sprint_phase import derive_phase      # noqa: PLC0415
+    from src.loop.sprint_summary import compute_summary  # noqa: PLC0415
+
+    try:
+        from src.loop.sprint_files import list_generated_files as _lgf  # noqa: PLC0415
+        _files_n = len(_lgf(sprint_id))
+    except Exception:
+        _files_n = 0
+
+    _tasks_now = state_store.load().get("tasks", [])
+    _cs = compute_summary(_tasks_now, generated_files_count=_files_n)
+    _done_n = _cs["done_tasks"]
+    _wr_n   = _cs["waiting_review_tasks"]
+    _blk_n  = _cs["blocked_tasks"]
+    _conf_n = _cs["confidence"]
+
+    final_counts = {
+        "total_tasks":          _cs["total_tasks"],
+        "done_tasks":           _done_n,
+        "blocked_tasks":        _blk_n,
+        "in_progress_tasks":    _cs.get("in_progress_tasks", 0),
+        "waiting_review_tasks": _wr_n,
+    }
+    final_phase = derive_phase(final_counts, run_finished=True)
+
+    if final_phase == "complete":
+        _emit("sm", "ceremony", f"Sprint Review — {_done_n} done, {_blk_n} blocked")
+        _emit("system", "status", f"Sprint complete — confidence {_conf_n}%")
+    elif final_phase == "blocked":
+        _emit("system", "status",
+              f"Sprint blocked — 0 stories accepted, {_blk_n} blocked — confidence {_conf_n}%")
+    else:  # waiting_sprint_review (partial increment or gate-pass tasks in waiting_review)
+        _emit("sm", "ceremony",
+              f"Sprint Review required — {_done_n} done, {_wr_n} waiting review, "
+              f"{_blk_n} blocked (Partial Increment)")
+        _emit("system", "status",
+              f"Sprint review required — partial increment ({_done_n} done, "
+              f"{_wr_n} waiting review, {_blk_n} blocked) — confidence {_conf_n}%")
 
     return _persist_and_build_result(
         sprint_id, goal, completed_stories, blocked_stories,
