@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CogniTwin — Workspace Seçimi</title>
+  <title>CogniTwin — Choose your workspace</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -154,7 +154,7 @@
 
   <header>
     <div class="brand">🧠 CogniTwin</div>
-    <div class="tagline">Devam etmek istediğiniz workspace'i seçin</div>
+    <div class="tagline">Choose the workspace you want to open</div>
   </header>
 
   <div class="cards">
@@ -162,60 +162,53 @@
     <!-- ── Student Workspace ─────────────────────────── -->
     <a class="card student" id="student-card" href="#">
       <span class="icon">🎓</span>
-      <span class="badge">Öğrenci</span>
+      <span class="badge">Student</span>
       <span class="card-title">Student Workspace</span>
 
       <p class="desc">
-        Akademik soru-cevap, araştırma ve<br />
-        bilgi edinme ortamı.
+        Your daily study companion — schedule,<br />
+        deadlines, mood check-in, and an AI study planner.
       </p>
 
       <p class="model-list">
-        Erişilen model:<br />
-        <strong>CogniTwin Student LLM</strong>
+        <strong>Lumi study coach</strong>
       </p>
 
-      <span class="cta">Öğrenci Workspace'e Gir →</span>
+      <span class="cta">Open Lumi →</span>
     </a>
 
-    <span class="or">ya da</span>
+    <span class="or">or</span>
 
     <!-- ── Agile Workspace ───────────────────────────── -->
     <a class="card agile" id="agile-card" href="#">
       <span class="icon">🚀</span>
-      <span class="badge">Proje / Agile</span>
+      <span class="badge">Project / Agile</span>
       <span class="card-title">Project / Agile Workspace</span>
 
       <p class="desc">
-        Proje planlama, sprint yönetimi ve<br />
-        agile workflow ortamı.
+        Project planning, sprint management,<br />
+        and agile workflow tools.
       </p>
 
       <p class="model-list">
-        Erişilen agent'lar:<br />
+        Agents available:<br />
         <strong>Composer · Product Owner</strong><br />
         <strong>Scrum Master · Developer</strong>
       </p>
 
-      <span class="cta">Agile Workspace'e Gir →</span>
+      <span class="cta">Open Agile Workspace →</span>
     </a>
 
   </div>
 
   <footer>
-    Seçiminiz sizi yalnızca o role ait modellerin görüneceği LibreChat instance'ına yönlendirir.<br />
-    Yanlış workspace'te erişim denemesi backend tarafından engellenir.
+    Each workspace is a self-contained tool. Pick one to get started.
   </footer>
 
-  <!--
-    Hostname dinamik okunuyor: localhost'ta da, sunucuda da ekstra yapılandırma olmadan çalışır.
-    Portları değiştirmek için docker-compose.yml içindeki PORTAL_PORT / LIBRECHAT_PORT / AGILE_PORT
-    değişkenlerini güncelleyin.
-  -->
   <script>
     (function () {
       var host = window.location.hostname;
-      document.getElementById('student-card').href = 'http://' + host + ':3900';
+      document.getElementById('student-card').href = '/lumi.html';
       document.getElementById('agile-card').href   = '/cockpit.html';
     })();
   </script>
