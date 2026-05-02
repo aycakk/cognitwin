@@ -273,7 +273,7 @@ def _build_board_response(sprint_id: str, entry) -> dict:
     from src.pipeline.scrum_team.sprint_state_store import SprintStateStore  # noqa: PLC0415
     from src.loop.sprint_summary import compute_summary  # noqa: PLC0415
     from src.agents.composer_orchestrator import MAX_REROUTE_PER_TASK  # noqa: PLC0415
-    state = SprintStateStore().load()
+    state = SprintStateStore.for_sprint(sprint_id).load()
 
     # Build a story map for estimate + source lookup
     story_map = {s.get("story_id"): s for s in state.get("backlog", [])}
@@ -394,7 +394,7 @@ def _run_sprint_background(sprint_id: str, goal: str,
         from src.pipeline.scrum_team.sprint_state_store import SprintStateStore  # noqa: PLC0415
 
         clean_goal = _clean_goal_for_po(goal)
-        store = SprintStateStore()
+        store = SprintStateStore.for_sprint(sprint_id)
         store.reset_for_isolated_sprint()
         seeded = _seed_selected_backlog(store, sprint_id, project_id, selected_item_ids or [])
         if seeded:
@@ -403,7 +403,7 @@ def _run_sprint_background(sprint_id: str, goal: str,
                 f"Sprint Planning — {seeded} item(s) selected from Product Backlog",
             )
 
-        result = run_sprint(clean_goal, sprint_id=sprint_id, event_callback=_cb)
+        result = run_sprint(clean_goal, sprint_id=sprint_id, event_callback=_cb, state_store=store)
 
         # Authoritative completion check — count buckets on the live board.
         # Phase decision uses sprint_phase.derive_phase so a partial sprint
@@ -456,6 +456,7 @@ def _run_sprint_background(sprint_id: str, goal: str,
             "total_tasks":          summary.get("total_tasks", 0),
             "generated_files_count": summary.get("generated_files_count", 0),
             "latest_event":         latest_ev,
+            "agile_compliance":     result.agile_compliance,
         })
         _refresh_project_counts((sprint_index.get_entry(sprint_id) or {}).get("project_id"))
 
@@ -757,7 +758,7 @@ async def sprint_task_review(sprint_id: str, req: TaskReviewRequest, request: Re
 
     def _apply():
         from src.pipeline.scrum_team.sprint_state_store import SprintStateStore  # noqa: PLC0415
-        store = SprintStateStore()
+        store = SprintStateStore.for_sprint(sprint_id)
         result = store.apply_human_feedback(
             task_id = req.task_id,
             action  = action,
@@ -814,7 +815,7 @@ async def rerun_po_review(sprint_id: str, request: Request):
         from src.pipeline.scrum_team.sprint_state_store import SprintStateStore  # noqa: PLC0415
         from src.agents.po_llm_agent import POLLMAgent  # noqa: PLC0415
 
-        store = SprintStateStore()
+        store = SprintStateStore.for_sprint(sprint_id)
         po_agent = POLLMAgent()
         state = store.load()
         sprint_goal = (state.get("sprint") or {}).get("goal", "")
@@ -926,7 +927,7 @@ def _load_sprint_state_dict(sprint_id: str) -> dict:
     """Load the live sprint state for a given sprint_id, or {} if unavailable."""
     try:
         from src.pipeline.scrum_team.sprint_state_store import SprintStateStore  # noqa: PLC0415
-        return SprintStateStore().load() or {}
+        return SprintStateStore.for_sprint(sprint_id).load() or {}
     except Exception:
         return {}
 
@@ -937,10 +938,12 @@ async def get_sprint_review(sprint_id: str, request: Request):
     user = _parse_user_header(request)
     _check_sprint_access(user, sprint_id)
     from src.services.api import sprint_review_store  # noqa: PLC0415
+    entry = sprint_index.get_entry(sprint_id) or {}
     return {
         "sprint_id":          sprint_id,
         "sprint_review":      sprint_review_store.get_review(sprint_id),
         "next_sprint_notes":  sprint_review_store.get_next_sprint_notes(sprint_id),
+        "agile_compliance":   entry.get("agile_compliance"),
     }
 
 
@@ -1050,7 +1053,7 @@ async def post_retro(sprint_id: str, req: RetroRequest, request: Request):
 
     try:
         from src.pipeline.scrum_team.sprint_state_store import SprintStateStore  # noqa: PLC0415
-        store = SprintStateStore()
+        store = SprintStateStore.for_sprint(sprint_id)
         with store.state_lock():
             data = store.load()
             data["retro_actions"] = payload

@@ -1009,6 +1009,17 @@
             </div>
           </section>
 
+          <!-- C3 Agile Compliance (advisory, non-blocking) -->
+          <section class="sr-section" data-section="agile-compliance">
+            <div class="sr-h">
+              <span>C3 Agile Compliance</span>
+              <span style="font-size:10px;color:var(--text-faint);font-weight:400;letter-spacing:.04em;">ADVISORY · NON-BLOCKING</span>
+            </div>
+            <div id="agileComplianceBody" class="sr-body">
+              <div class="sr-empty">Compliance data not available for this sprint.</div>
+            </div>
+          </section>
+
           <!-- Human Sprint Review Notes — only editable after sprint ends -->
           <section class="sr-section" data-section="human-review">
             <div class="sr-h">Human Sprint Review Notes</div>
@@ -3018,6 +3029,61 @@ function renderNextSprintNotes(notes) {
   if (actions) actions.style.display = 'flex';
 }
 
+function _escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderAgileCompliance(payload) {
+  const el = document.getElementById('agileComplianceBody');
+  if (!el) return;
+
+  if (!payload || typeof payload !== 'object') {
+    el.innerHTML = '<div class="sr-empty">Not evaluated — compliance data unavailable for this sprint.</div>';
+    return;
+  }
+
+  const gatePass   = payload.gate_pass;
+  const evidence   = _escapeHtml(payload.evidence || '');
+  const hint       = _escapeHtml(payload.revision_hint || '');
+  const isDegraded = gatePass && (payload.evidence || '').includes('DEGRADED PASS');
+
+  let borderColor, icon, headline;
+  if (isDegraded) {
+    borderColor = '#f3a64b';
+    icon        = '~';
+    headline    = 'Degraded Pass — ontology service unavailable.';
+  } else if (gatePass) {
+    borderColor = 'var(--done)';
+    icon        = '✓';
+    headline    = 'Scrum Compliance: Passed.';
+  } else {
+    borderColor = '#f3a64b';
+    icon        = '!';
+    headline    = 'Scrum compliance needs attention.';
+  }
+
+  el.innerHTML = `
+    <div style="border-left:3px solid ${borderColor};padding:8px 12px;border-radius:3px;background:var(--bg-elev-2);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="color:${borderColor};font-size:14px;">${icon}</span>
+      <span style="font-size:13px;flex:1;">${_escapeHtml(headline)}</span>
+      <button class="sr-btn" style="font-size:10px;padding:2px 8px;"
+              onclick="(function(d){d.style.display=d.style.display==='none'?'block':'none';})(document.getElementById('agile-compliance-details'))">
+        Details
+      </button>
+    </div>
+    <div id="agile-compliance-details" style="display:none;margin-top:8px;">
+      <div class="sr-label">EVIDENCE</div>
+      <pre class="sr-pre" style="max-height:120px;overflow-y:auto;margin-top:4px;">${evidence}</pre>
+      ${hint ? `<div class="sr-label" style="margin-top:8px;">RECOMMENDED ACTION</div>
+      <div class="sr-body" style="font-size:12px;color:var(--text-dim);margin-top:4px;">${hint}</div>` : ''}
+    </div>`;
+}
+
 async function loadSprintReview() {
   if (!state.sprintId) return;
   _clearInlineErr('systemReviewError');
@@ -3028,6 +3094,7 @@ async function loadSprintReview() {
     renderHumanReview(review.human_review);
     renderMergedNotes(review.merged_notes);
     renderNextSprintNotes(data.next_sprint_notes);
+    renderAgileCompliance(data.agile_compliance);
   } catch (err) {
     _showInlineErr('systemReviewError', err.endpoint || 'sprint-review', err.status || 0, err.message || err);
   }

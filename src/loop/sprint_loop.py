@@ -271,6 +271,7 @@ def run_sprint(
     goal: str,
     sprint_id: str | None = None,
     event_callback=None,  # Optional[Callable[[str, str, str, Optional[str]], None]]
+    state_store: SprintStateStore | None = None,
 ) -> SprintResult:
     """
     Run a single autonomous sprint from a high-level goal string.
@@ -305,12 +306,14 @@ def run_sprint(
         from src.pipeline.developer_runner import _process_developer_message as _pdm  # noqa: PLC0415
         _process_developer_message = _pdm
 
-    state_store  = SprintStateStore()
+    sprint_id  = sprint_id or f"sprint-auto-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
+    if state_store is None:
+        state_store = SprintStateStore.for_sprint(sprint_id)
     memory_store = SprintMemoryStore()
     po_agent     = POLLMAgent()
     orchestrator = ComposerOrchestrator(state_store)
 
-    sprint_id  = sprint_id or f"sprint-auto-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     step_count = 0
 
     completed_stories: list[dict[str, Any]] = []

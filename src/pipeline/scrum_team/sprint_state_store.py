@@ -45,6 +45,21 @@ logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_STATE_PATH = _PROJECT_ROOT / "data" / "sprint_state.json"
+_PER_SPRINT_STATE_DIR = _PROJECT_ROOT / "data" / "sprints" / "state"
+
+_SPRINT_ID_FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
+
+
+def per_sprint_state_path(sprint_id: str) -> Path:
+    """Return the per-sprint state file path for a given sprint_id.
+
+    Validates sprint_id to prevent path traversal: only alphanumerics,
+    dots, hyphens, and underscores are allowed; max 80 chars. Same
+    contract as cockpit_routes._validate_sprint_id.
+    """
+    if not isinstance(sprint_id, str) or not _SPRINT_ID_FILENAME_RE.match(sprint_id):
+        raise ValueError(f"invalid sprint_id for state file: {sprint_id!r}")
+    return _PER_SPRINT_STATE_DIR / f"{sprint_id}.json"
 
 DEFAULT_SPRINT_STATE: dict[str, Any] = {
     "sprint": {
@@ -88,6 +103,16 @@ class SprintStateStore:
         self._thread_lock: threading.RLock = threading.RLock()
         _lock_path = self._path.with_suffix(".json.lock")
         self._file_lock = _FileLock(str(_lock_path)) if _FILELOCK_AVAILABLE else None
+
+    @classmethod
+    def for_sprint(cls, sprint_id: str) -> "SprintStateStore":
+        """Construct a sprint-scoped store backed by a per-sprint file.
+
+        Each sprint_id maps to its own state file under data/sprints/state/.
+        This isolates task lists, backlog, and increment data so one sprint's
+        run cannot leak into another sprint's board, review, or PO loop.
+        """
+        return cls(state_path=per_sprint_state_path(sprint_id))
 
     @contextmanager
     def state_lock(self) -> Generator[None, None, None]:
