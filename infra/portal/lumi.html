@@ -90,6 +90,76 @@
 
     .greeting { color: var(--muted); font-size: 13px; }
 
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .focus-badge {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 12px;
+      font-size: 12px;
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .focus-badge.show { display: inline-flex; gap: 8px; align-items: center; }
+    .focus-badge .pts  { color: var(--accent); font-weight: 600; }
+    .focus-badge .sep  { color: var(--border); }
+
+    /* Personalization Signals + Weak Topics + Why-this-plan cards */
+    .signals-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .signal-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .signal-row:first-child { border-top: 0; }
+    .signal-row .v { color: var(--accent); font-weight: 600; }
+    .signal-empty { color: var(--muted); font-size: 12px; font-style: italic; }
+    .weak-topic-pill {
+      display: inline-block;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      margin-right: 6px;
+      margin-top: 4px;
+    }
+    .why-card .why-text {
+      font-style: italic;
+      color: #6b635a;
+      font-size: 13px;
+    }
+
+    .mark-done-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .mark-done-btn {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 5px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .mark-done-btn:hover { background: var(--surface); }
+    .mark-done-btn:disabled { opacity: 0.5; cursor: default; }
+
     /* ── Insight banner ────────────────────────────────────────────────── */
 
     .insight {
@@ -592,7 +662,10 @@
     <main>
       <header class="topbar">
         <div class="brand"><span class="glyph">✦</span>Lumi</div>
-        <div class="greeting" id="greeting">Good day</div>
+        <div class="topbar-right">
+          <span class="focus-badge" id="focus-badge" title="Focus points and streak"></span>
+          <div class="greeting" id="greeting">Good day</div>
+        </div>
       </header>
 
       <div class="insight" id="insight-banner">
@@ -638,6 +711,28 @@
           </div>
         </div>
       </section>
+
+      <section class="signals-grid">
+        <div class="card why-card">
+          <div class="card-title">Why this plan?</div>
+          <div class="why-text" id="why-text">
+            <span class="signal-empty">Ask Lumi for a plan and the reasoning will appear here.</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Personalization Signals</div>
+          <div id="signals-list">
+            <span class="signal-empty">Lumi will personalize as you use it.</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="card">
+        <div class="card-title">Weak Topics</div>
+        <div id="weak-topics">
+          <span class="signal-empty">No weak topics yet.</span>
+        </div>
+      </div>
 
       <div class="card">
         <div class="card-title">Courses</div>
@@ -1147,9 +1242,41 @@
         });
       m.appendChild(chips);
 
+      // Mark Done button — only when the reply contains a plan with blocks.
+      if ((payload.blocks || []).length > 0) {
+        var doneRow = el("div", "mark-done-row");
+        var doneBtn = el("button", "mark-done-btn", "Mark done");
+        doneBtn.addEventListener("click", function () {
+          markPlanDone(doneBtn);
+        });
+        doneRow.appendChild(doneBtn);
+        m.appendChild(doneRow);
+      }
+
       m.appendChild(el("span", "timestamp", nowStamp()));
       body.appendChild(m);
       body.scrollTop = body.scrollHeight;
+    }
+
+    function markPlanDone(btn) {
+      btn.disabled = true;
+      btn.textContent = "Marking…";
+      api("/api/student/plan/complete", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }).then(function (data) {
+        btn.textContent = "Done ✓";
+        if (state.profile && data.personalization) {
+          state.profile.personalization = data.personalization;
+        }
+        renderFocusBadge(state);
+        renderSignalsCard(state);
+        showToast("Plan marked done — focus points updated");
+      }).catch(function () {
+        btn.disabled = false;
+        btn.textContent = "Mark done";
+        showToast("Couldn't reach Lumi — try again");
+      });
     }
 
     function appendInfoMessage(text) {
@@ -1203,6 +1330,15 @@
       }).then(function (data) {
         applyDegraded(data.degraded);
         appendAgentMessage(data);
+        // Pull fresh signals + last_plan so the Why card and Personalization
+        // signals card reflect the just-applied chip click.
+        api("/api/student/dashboard").then(function (d) {
+          state.profile = d;
+          renderFocusBadge(state);
+          renderWhyCard(state);
+          renderSignalsCard(state);
+          renderWeakTopics(state);
+        }).catch(function () { /* non-fatal */ });
       }).catch(function (err) {
         // Backend itself unreachable.
         applyDegraded(true);
@@ -1224,10 +1360,88 @@
       renderTodaySchedule(state);
       renderDeadlineList(state);
       renderMoodCheck(state);
+      renderFocusBadge(state);
+      renderWhyCard(state);
+      renderSignalsCard(state);
+      renderWeakTopics(state);
       renderCourseCards(state);
       renderAssignmentList(state);
       renderExamList(state);
       renderGradeList(state);
+    }
+
+    // ── Render: focus-points / streak badge ────────────────────
+    function renderFocusBadge(s) {
+      var p = (s.profile && s.profile.personalization) || {};
+      var badge = $("focus-badge");
+      var pts = p.focus_points || 0;
+      var streak = p.streak_days || 0;
+      if (!pts && !streak) {
+        badge.classList.remove("show");
+        return;
+      }
+      badge.classList.add("show");
+      badge.innerHTML =
+        '<span class="pts">' + pts + ' focus pts</span>' +
+        (streak > 0
+          ? '<span class="sep">·</span><span>' + streak + '-day streak</span>'
+          : "");
+    }
+
+    // ── Render: Why this plan? ─────────────────────────────────
+    function renderWhyCard(s) {
+      var lp = s.profile && s.profile.last_plan;
+      var host = $("why-text");
+      if (!lp || !lp.why) {
+        host.innerHTML = '<span class="signal-empty">Ask Lumi for a plan and the reasoning will appear here.</span>';
+        return;
+      }
+      host.textContent = lp.why;
+    }
+
+    // ── Render: Personalization Signals ────────────────────────
+    function renderSignalsCard(s) {
+      var p = (s.profile && s.profile.personalization) || {};
+      var host = $("signals-list");
+      host.innerHTML = "";
+
+      var hasAny = (p.shortened_plan_count || 0) +
+                   (p.postponed_suggestions_count || 0) +
+                   (p.completed_plan_count || 0) +
+                   (p.accepted_suggestions_count || 0) > 0;
+
+      if (!hasAny) {
+        host.innerHTML = '<span class="signal-empty">Lumi will personalize as you use it.</span>';
+        return;
+      }
+
+      var rows = [
+        ["Preferred block", (p.preferred_study_block_minutes || 30) + " min"],
+        ["Postpones (last 7d)", (p.postpones_last_7d || 0)],
+        ["Shortenings (last 7d)", (p.shortenings_last_7d || 0)],
+        ["Plans completed", (p.completed_plan_count || 0)],
+      ];
+      rows.forEach(function (r) {
+        var row = el("div", "signal-row");
+        row.appendChild(el("span", "", escapeHtml(r[0])));
+        row.appendChild(el("span", "v", String(r[1])));
+        host.appendChild(row);
+      });
+    }
+
+    // ── Render: Weak Topics ────────────────────────────────────
+    function renderWeakTopics(s) {
+      var p = (s.profile && s.profile.personalization) || {};
+      var host = $("weak-topics");
+      host.innerHTML = "";
+      var topics = p.weak_topics || [];
+      if (!topics.length) {
+        host.innerHTML = '<span class="signal-empty">No weak topics yet.</span>';
+        return;
+      }
+      topics.forEach(function (t) {
+        host.appendChild(el("span", "weak-topic-pill", escapeHtml(t)));
+      });
     }
 
     function setGreeting() {

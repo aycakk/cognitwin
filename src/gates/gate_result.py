@@ -34,6 +34,13 @@ _REVISION_HINTS: dict[str, str] = {
         "Correct any ontology violations — verify Exam→Course relationships match "
         "the loaded ontology triples; do not invent or swap course assignments."
     ),
+    "C3_AGILE": (
+        "Align your output with Ontology4Agile: use canonical Scrum event names "
+        "(SprintPlanning, DailyScrum, SprintReview, SprintRetrospective), assign "
+        "the correct facilitator role, ensure every Sprint declares a SprintGoal "
+        "and SprintBacklog, and acknowledge the Definition of Done before claiming "
+        "an Increment is complete."
+    ),
     "C4": (
         "Remove speculative or weight-only language such as 'sanırım', 'galiba', "
         "'muhtemelen', 'I think', 'probably'. Only state what is directly "

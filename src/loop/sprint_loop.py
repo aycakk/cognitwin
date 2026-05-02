@@ -82,6 +82,7 @@ from src.agents.po_llm_agent import POLLMAgent
 from src.core.schemas import AgentTask, AgentRole
 from src.gates.evaluator import evaluate_all_gates
 from src.gates.gate_result import build_gate_result
+from src.loop.sprint_compliance import validate_sprint_compliance
 from src.memory.sprint_memory_store import SprintMemoryStore
 from src.pipeline.scrum_team.sprint_state_store import SprintStateStore
 
@@ -159,6 +160,7 @@ class SprintResult:
     total_steps:       int   = 0
     avg_confidence:    float = 0.0
     summary:           str   = ""
+    agile_compliance:  dict | None = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -227,14 +229,15 @@ def _format_summary(
 
 
 def _persist_and_build_result(
-    sprint_id:    str,
-    goal:         str,
-    completed:    list[dict],
-    blocked:      list[dict],
-    steps:        int,
-    conf_scores:  list[float],
-    memory_store: SprintMemoryStore,
-    prefix:       str = "",
+    sprint_id:        str,
+    goal:             str,
+    completed:        list[dict],
+    blocked:          list[dict],
+    steps:            int,
+    conf_scores:      list[float],
+    memory_store:     SprintMemoryStore,
+    prefix:           str = "",
+    agile_compliance: dict | None = None,
 ) -> SprintResult:
     avg_conf = round(sum(conf_scores) / len(conf_scores), 2) if conf_scores else 0.0
 
@@ -256,6 +259,7 @@ def _persist_and_build_result(
         total_steps=steps,
         avg_confidence=avg_conf,
         summary=summary,
+        agile_compliance=agile_compliance,
     )
 
 
@@ -806,7 +810,17 @@ def run_sprint(
               f"Sprint review required — partial increment ({_done_n} done, "
               f"{_wr_n} waiting review, {_blk_n} blocked) — confidence {_conf_n}%")
 
+    compliance = validate_sprint_compliance(state_store)
+    _emit(
+        "sm",
+        "gate",
+        f"C3_AGILE (advisory): "
+        f"{'PASS' if compliance.get('pass') else 'FAIL'} — "
+        f"{str(compliance.get('evidence', ''))[:120]}",
+    )
+
     return _persist_and_build_result(
         sprint_id, goal, completed_stories, blocked_stories,
         step_count, conf_scores, memory_store,
+        agile_compliance=compliance,
     )

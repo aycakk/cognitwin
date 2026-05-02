@@ -35,6 +35,38 @@ _lock = threading.Lock()
 VALID_STATUSES = ("Pending", "Planned", "In Progress", "Completed", "Submitted")
 VALID_MOODS = ("good", "ok", "meh", "tired", "stressed")
 
+CURRENT_SCHEMA_VERSION = 2
+
+# Sliding window for procrastination signals.
+_PROCRASTINATION_WINDOW_DAYS = 7
+
+# Adaptive block-length floor — Lumi never proposes blocks shorter than this.
+_MIN_BLOCK_MINUTES = 15
+
+# Recent plan history cap.
+_PLAN_HISTORY_MAX = 10
+
+
+def _default_personalization() -> dict:
+    return {
+        "preferred_study_block_minutes": 30,
+        "preferred_study_time": None,
+        "weak_topics": [],
+        "resource_preferences": {
+            "video": 0, "textbook": 0, "practice": 0, "reference": 0,
+        },
+        "postpone_timestamps": [],
+        "shortening_timestamps": [],
+        "accepted_suggestions_count": 0,
+        "postponed_suggestions_count": 0,
+        "shortened_plan_count": 0,
+        "completed_plan_count": 0,
+        "last_feedback": None,
+        "focus_points": 0,
+        "streak_days": 0,
+        "last_active_date": None,
+    }
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Seed
@@ -44,10 +76,13 @@ def _seed_profile() -> dict:
     """Seed data — all English. Dates expressed as days_offset from today so
     the dashboard never goes stale. Schedule items are time-of-day only."""
     return {
-        "schema_version": 1,
+        "schema_version": CURRENT_SCHEMA_VERSION,
         "updated_at": _now_iso(),
         "student_name": "Deniz",
         "mood": None,
+        "personalization": _default_personalization(),
+        "recent_plan_history": [],
+        "last_plan": None,
 
         # Time-of-day only; no calendar date stored.
         "today_schedule": [
@@ -155,10 +190,30 @@ def _read_disk() -> dict | None:
         with open(_PROFILE_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
-            return data
+            return _migrate(data)
     except Exception as exc:
         logger.warning("student_profile_store: load failed (%s); reseeding.", exc)
     return None
+
+
+def _migrate(data: dict) -> dict:
+    """Forward-compatible read-side migration. Fills missing v2 fields with
+    defaults but does not rewrite the file — that happens on the next save."""
+    if not isinstance(data.get("personalization"), dict):
+        data["personalization"] = _default_personalization()
+    else:
+        defaults = _default_personalization()
+        for k, v in defaults.items():
+            data["personalization"].setdefault(k, v)
+        # Nested resource_preferences.
+        rp_defaults = defaults["resource_preferences"]
+        rp = data["personalization"].setdefault("resource_preferences", {})
+        for k, v in rp_defaults.items():
+            rp.setdefault(k, v)
+    data.setdefault("recent_plan_history", [])
+    data.setdefault("last_plan", None)
+    data["schema_version"] = CURRENT_SCHEMA_VERSION
+    return data
 
 
 def _write_disk(data: dict) -> None:
@@ -218,6 +273,116 @@ def set_mood(mood: str) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  Personalization mutators — Phase 1 of the personal-agent layer.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _today() -> date:
+    return date.today()
+
+
+def _bump_streak(personalization: dict) -> None:
+    """Update streak_days based on last_active_date relative to today."""
+    today_obj = _today()
+    today_iso = today_obj.isoformat()
+    last = personalization.get("last_active_date")
+    if last == today_iso:
+        return
+    if last is None:
+        personalization["streak_days"] = 1
+    else:
+        try:
+            prev = date.fromisoformat(last)
+        except (TypeError, ValueError):
+            prev = None
+        if prev is not None and (today_obj - prev).days == 1:
+            personalization["streak_days"] = int(personalization.get("streak_days", 0)) + 1
+        else:
+            personalization["streak_days"] = 1
+    personalization["last_active_date"] = today_iso
+
+
+def _trim_window(timestamps: list, today: date) -> list:
+    """Keep only ISO-date strings within the last N days."""
+    cutoff = today - timedelta(days=_PROCRASTINATION_WINDOW_DAYS)
+    out: list[str] = []
+    for ts in timestamps or []:
+        try:
+            d = date.fromisoformat(ts[:10])
+        except (TypeError, ValueError):
+            continue
+        if d >= cutoff:
+            out.append(ts)
+    return out
+
+
+def apply_chat_signal(action: str | None, last_plan: dict | None = None) -> dict:
+    """Apply the side-effects of a chat action (chip click) to personalization.
+
+    Returns the updated profile so callers can keep their in-memory copy fresh.
+    Also records `last_plan` (the plan returned to the student) so the
+    dashboard can render a "Why this plan?" card.
+    """
+    with _lock:
+        data = _read_disk() or _seed_profile()
+        p = data.setdefault("personalization", _default_personalization())
+        today_iso = _today().isoformat()
+
+        _bump_streak(p)
+
+        if action == "shorter":
+            p["shortened_plan_count"] = int(p.get("shortened_plan_count", 0)) + 1
+            ts_list = p.setdefault("shortening_timestamps", [])
+            ts_list.append(today_iso)
+            p["shortening_timestamps"] = _trim_window(ts_list, _today())
+            current = int(p.get("preferred_study_block_minutes", 30))
+            p["preferred_study_block_minutes"] = max(_MIN_BLOCK_MINUTES, current - 5)
+        elif action == "postpone":
+            p["postponed_suggestions_count"] = int(p.get("postponed_suggestions_count", 0)) + 1
+            ts_list = p.setdefault("postpone_timestamps", [])
+            ts_list.append(today_iso)
+            p["postpone_timestamps"] = _trim_window(ts_list, _today())
+        elif action == "resources":
+            rp = p.setdefault("resource_preferences", {})
+            rp["reference"] = int(rp.get("reference", 0)) + 1
+        elif action in ("plan", "calendar"):
+            p["accepted_suggestions_count"] = int(p.get("accepted_suggestions_count", 0)) + 1
+
+        if last_plan is not None:
+            data["last_plan"] = last_plan
+            history = data.setdefault("recent_plan_history", [])
+            history.insert(0, last_plan)
+            del history[_PLAN_HISTORY_MAX:]
+
+        _write_disk(data)
+        return data
+
+
+def complete_plan(plan_id: str | None = None) -> dict:
+    """Mark the current plan complete: bumps focus points, completion count,
+    and streak. Returns the updated profile."""
+    with _lock:
+        data = _read_disk() or _seed_profile()
+        p = data.setdefault("personalization", _default_personalization())
+
+        _bump_streak(p)
+        p["completed_plan_count"] = int(p.get("completed_plan_count", 0)) + 1
+        p["focus_points"] = int(p.get("focus_points", 0)) + 5
+        if int(p.get("streak_days", 0)) >= 5:
+            p["focus_points"] += 10  # weekly bonus
+
+        last_plan = data.get("last_plan")
+        if last_plan is not None and isinstance(last_plan, dict):
+            last_plan["outcome"] = "completed"
+            last_plan["completed_at"] = _now_iso()
+            if plan_id and last_plan.get("id") and plan_id != last_plan["id"]:
+                # Caller passed a stale id; still mark current as completed.
+                pass
+
+        _write_disk(data)
+        return data
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  Date materialisation — called by routes before serializing to the client.
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -269,4 +434,17 @@ def materialize_dates(profile: dict, today: date | None = None) -> dict:
         if a.get("status") not in ("Completed", "Submitted")
     ) + len(out.get("exams", []))
 
+    # Personalization derived signals — sliding window counts + weak topics.
+    p = out.get("personalization") or _default_personalization()
+    p["postpones_last_7d"] = len(_trim_window(p.get("postpone_timestamps", []), today))
+    p["shortenings_last_7d"] = len(_trim_window(p.get("shortening_timestamps", []), today))
+
+    # Weak topics: lowest 2 courses by average. (v1: course names, not subtopics.)
+    courses_sorted = sorted(
+        out.get("courses", []),
+        key=lambda c: c.get("average", 100),
+    )
+    p["weak_topics"] = [c["name"] for c in courses_sorted[:2]] if courses_sorted else []
+
+    out["personalization"] = p
     return out

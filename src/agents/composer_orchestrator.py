@@ -20,9 +20,38 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from src.agents.capability_manifest import CapabilityManifest
 from src.pipeline.scrum_team.sprint_state_store import SprintStateStore
 
 logger = logging.getLogger(__name__)
+
+
+_COMPOSER_MANIFEST = CapabilityManifest(
+    role="ComposerOrchestrator",
+    intents=(
+        "analyze",
+        "reroute",
+        "synthesize_state",
+    ),
+    inputs=(
+        "product_goal",
+        "gate_failures",
+        "sprint_state",
+        "reroute_count",
+    ),
+    outputs=(
+        "route_decision",
+        "sprint_analysis",
+        "synthesized_state",
+    ),
+    gates_consumed=("A1",),
+    ontology_classes_referenced=(
+        "Sprint",
+        "SprintGoal",
+        "Impediment",
+        "AgileMetric",
+    ),
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Safety budgets — shared constants used by sprint_loop.py too
@@ -69,6 +98,10 @@ class ComposerOrchestrator:
 
     def __init__(self, state_store: SprintStateStore | None = None) -> None:
         self._store = state_store or SprintStateStore()
+
+    @classmethod
+    def capability_manifest(cls) -> CapabilityManifest:
+        return _COMPOSER_MANIFEST
 
     # ─────────────────────────────────────────────────────────────────────────
     #  analyze

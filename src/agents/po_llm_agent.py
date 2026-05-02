@@ -21,11 +21,42 @@ import logging
 import re
 from typing import Any
 
+from src.agents.capability_manifest import CapabilityManifest
 from src.core.llm_config import DEFAULT_MODEL
 
 logger = logging.getLogger(__name__)
 
 _MODEL = DEFAULT_MODEL
+
+
+_POLLM_MANIFEST = CapabilityManifest(
+    role="POLLMAgent",
+    intents=(
+        "decompose_goal",
+        "generate_stories",
+        "review_story",
+    ),
+    inputs=(
+        "product_goal",
+        "sprint_goal",
+        "development_output",
+        "acceptance_criteria",
+    ),
+    outputs=(
+        "epic",
+        "user_story",
+        "acceptance_criteria",
+        "po_review_decision",
+    ),
+    gates_consumed=("C1", "C2", "C4", "C5", "C7", "A1"),
+    ontology_classes_referenced=(
+        "ProductOwner",
+        "ProductBacklog",
+        "BacklogItem",
+        "UserStory",
+        "AcceptanceCriteria",
+    ),
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  System prompts
@@ -148,6 +179,10 @@ class POLLMAgent:
 
     def __init__(self, model: str = _MODEL) -> None:
         self._model = model
+
+    @classmethod
+    def capability_manifest(cls) -> CapabilityManifest:
+        return _POLLM_MANIFEST
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Public API

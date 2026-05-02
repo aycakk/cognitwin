@@ -46,6 +46,7 @@ def build_plan(
     try:
         result = _llm_plan(profile, message, mood, action)
         result.setdefault("actions", list(ACTION_CHIPS))
+        result.setdefault("blocks", [])
         result["degraded"] = False
         return result
     except Exception as exc:
@@ -69,6 +70,7 @@ def _rule_based_plan(
         key=lambda d: d.get("days_left", 999),
     )
     courses = {c["id"]: c for c in profile.get("courses", [])}
+    personalization = profile.get("personalization") or {}
 
     # Pick the top item (most urgent open assignment or exam).
     top = deadlines[0] if deadlines else None
@@ -85,8 +87,18 @@ def _rule_based_plan(
         course = courses.get(top.get("course_id"), {})
         return _resources_reply(top, course)
 
-    # Build the base block plan from the top item.
-    blocks = _initial_blocks(top, weakest)
+    # Build the base block plan from the top item, using converged block size.
+    base_minutes = int(personalization.get("preferred_study_block_minutes", 30))
+    blocks = _initial_blocks(top, weakest, base_minutes=base_minutes)
+
+    # Procrastination-aware sequencing — easy 15-min start when student
+    # has been postponing repeatedly.
+    procrastinating = int(personalization.get("postpones_last_7d", 0)) >= 3
+    if procrastinating and blocks and top is not None:
+        blocks[0] = {
+            "title": f"Easy start on {top['title']} (just begin)",
+            "minutes": 15,
+        }
 
     # Mood adjustment.
     empathy = ""
@@ -108,41 +120,58 @@ def _rule_based_plan(
         revised_due = max(int(top.get("days_left", 0)) + 1, 1)
 
     reply_text = empathy + _format_plan(blocks, top, revised=revised_due)
-    why_text = _format_why(top, weakest, blocks, mood, action)
+    why_text = _format_why(
+        top, weakest, blocks, mood, action,
+        procrastinating=procrastinating,
+    )
 
     return {
         "reply": reply_text,
         "why": why_text,
         "actions": list(ACTION_CHIPS),
+        "blocks": blocks,
     }
 
 
-def _initial_blocks(top: Optional[dict], weakest: Optional[dict]) -> list[dict]:
-    """Return a list of {title, minutes} blocks tied to the top deadline."""
+def _initial_blocks(
+    top: Optional[dict],
+    weakest: Optional[dict],
+    base_minutes: int = 30,
+) -> list[dict]:
+    """Return a list of {title, minutes} blocks tied to the top deadline.
+
+    `base_minutes` is the student's converged preferred block length. We scale
+    the canonical 30/40/45/25/20 block sizes proportionally so a student who
+    has shortened repeatedly gets shorter defaults across the board.
+    """
     blocks: list[dict] = []
+    scale = max(base_minutes, 15) / 30.0
+
+    def _scaled(canonical: int) -> int:
+        return max(10, int(round(canonical * scale / 5.0) * 5))
 
     if top is not None:
         days_left = int(top.get("days_left", 0))
         title = top["title"]
         if days_left <= 1:
             # Crunch — 3 sequenced blocks.
-            blocks.append({"title": f"Research for {title}",  "minutes": 45})
-            blocks.append({"title": f"Draft slides for {title}", "minutes": 30})
-            blocks.append({"title": f"Rehearse {title}",       "minutes": 20})
+            blocks.append({"title": f"Research for {title}",     "minutes": _scaled(45)})
+            blocks.append({"title": f"Draft slides for {title}", "minutes": _scaled(30)})
+            blocks.append({"title": f"Rehearse {title}",         "minutes": _scaled(20)})
         elif days_left <= 3:
-            blocks.append({"title": f"Outline {title}",       "minutes": 40})
-            blocks.append({"title": f"Draft for {title}",     "minutes": 30})
+            blocks.append({"title": f"Outline {title}",          "minutes": _scaled(40)})
+            blocks.append({"title": f"Draft for {title}",        "minutes": _scaled(30)})
         else:
-            blocks.append({"title": f"Start {title}",         "minutes": 30})
+            blocks.append({"title": f"Start {title}",            "minutes": _scaled(30)})
 
     if weakest is not None:
         blocks.append({
             "title": f"{weakest['name']} review",
-            "minutes": 25,
+            "minutes": _scaled(25),
         })
 
     if not blocks:
-        blocks.append({"title": "Light review of weakest course", "minutes": 25})
+        blocks.append({"title": "Light review of weakest course", "minutes": _scaled(25)})
 
     return blocks
 
@@ -181,6 +210,7 @@ def _format_why(
     blocks: list[dict],
     mood: Optional[str],
     action: Optional[str],
+    procrastinating: bool = False,
 ) -> str:
     parts: list[str] = []
     if action == "shorter":
@@ -199,6 +229,11 @@ def _format_why(
             )
         else:
             parts[-1] += "."
+    if procrastinating:
+        parts.append(
+            "Started with a small 15-minute block since you've been "
+            "postponing recently — easier to begin."
+        )
     if mood in ("tired", "stressed"):
         parts.append("I shortened the blocks so the plan fits your energy today.")
     return " ".join(parts) if parts else "No deadlines are pressing — keep your usual routine."
@@ -332,6 +367,14 @@ def _summarize_profile(profile: dict, mood: Optional[str], action: Optional[str]
         )
     if mood:
         lines.append(f"Mood: {mood}.")
+    p = profile.get("personalization") or {}
+    if p:
+        lines.append(
+            f"Student preference: ~{p.get('preferred_study_block_minutes', 30)}-min blocks, "
+            f"streak {p.get('streak_days', 0)}d, "
+            f"postpones (last 7d): {p.get('postpones_last_7d', 0)}, "
+            f"shortenings (last 7d): {p.get('shortenings_last_7d', 0)}."
+        )
     if action:
         lines.append(
             "Action requested: "
