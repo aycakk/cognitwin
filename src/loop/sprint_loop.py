@@ -814,8 +814,8 @@ def run_sprint(
     _emit(
         "sm",
         "gate",
-        f"C3_AGILE (advisory): "
-        f"{'PASS' if compliance.get('pass') else 'FAIL'} — "
+        f"C3_AGILE (advisory, non-blocking): "
+        f"{'PASS' if compliance.get('gate_pass') else 'FAIL'} — "
         f"{str(compliance.get('evidence', ''))[:120]}",
     )
 
