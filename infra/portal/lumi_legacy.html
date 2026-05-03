@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lumi — Student Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Tokens ─────────────────────────────────────────────────────────── */
+    :root {
+      --bg:        #f5efe6;
+      --surface:   #fbf7f0;
+      --surface-2: #f1e9dc;
+      --border:    #e8dfd1;
+      --ink:       #2a2620;
+      --muted:     #8a8378;
+      --accent:    #d97742;
+      --success:   #7a9e6b;
+      --warn:      #c89b3c;
+      --danger:    #c45a3f;
+      --info:      #5d8aa8;
+
+      --radius:    14px;
+      --radius-sm: 10px;
+
+      --font-serif: "Fraunces", Georgia, serif;
+      --font-sans:  "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: var(--font-sans);
+      color: var(--ink);
+      background: var(--bg);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    a { color: inherit; }
+
+    /* ── Layout: main column + sticky chat aside ───────────────────────── */
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 24px;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 18px 24px 80px;
+    }
+
+    main { min-width: 0; }
+
+    aside.chat-panel {
+      position: sticky;
+      top: 18px;
+      align-self: start;
+      max-height: calc(100vh - 36px);
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    /* ── Top bar ────────────────────────────────────────────────────────── */
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 4px 14px;
+    }
+
+    .brand {
+      font-family: var(--font-serif);
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+
+    .brand .glyph { color: var(--accent); margin-right: 4px; }
+
+    .greeting { color: var(--muted); font-size: 13px; }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .focus-badge {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 12px;
+      font-size: 12px;
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .focus-badge.show { display: inline-flex; gap: 8px; align-items: center; }
+    .focus-badge .pts  { color: var(--accent); font-weight: 600; }
+    .focus-badge .sep  { color: var(--border); }
+
+    /* Personalization Signals + Weak Topics + Why-this-plan cards */
+    .signals-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .signal-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .signal-row:first-child { border-top: 0; }
+    .signal-row .v { color: var(--accent); font-weight: 600; }
+    .signal-empty { color: var(--muted); font-size: 12px; font-style: italic; }
+    .weak-topic-pill {
+      display: inline-block;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      margin-right: 6px;
+      margin-top: 4px;
+    }
+    .why-card .why-text {
+      font-style: italic;
+      color: #6b635a;
+      font-size: 13px;
+    }
+
+    .mark-done-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .mark-done-btn {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 5px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .mark-done-btn:hover { background: var(--surface); }
+    .mark-done-btn:disabled { opacity: 0.5; cursor: default; }
+
+    /* ── Insight banner ────────────────────────────────────────────────── */
+
+    .insight {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-style: italic;
+      color: #6b635a;
+      margin-bottom: 18px;
+    }
+
+    .insight .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex: 0 0 8px;
+    }
+
+    /* ── Cards / sections ──────────────────────────────────────────────── */
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+    }
+
+    .card + .card { margin-top: 18px; }
+
+    .card-title {
+      font-family: var(--font-serif);
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .card-title .meta {
+      font-family: var(--font-sans);
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* ── Summary cards row ─────────────────────────────────────────────── */
+
+    .summary-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .summary-card .label {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .summary-card .value {
+      font-family: var(--font-serif);
+      font-size: 30px;
+      font-weight: 600;
+    }
+
+    .summary-card .value .unit {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--muted);
+      margin-left: 2px;
+    }
+
+    .summary-card .sub {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .summary-card .sub.up { color: var(--success); }
+
+    /* ── Two-column main row ───────────────────────────────────────────── */
+
+    .twocol {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    /* ── Today's schedule list ─────────────────────────────────────────── */
+
+    .schedule-row {
+      display: grid;
+      grid-template-columns: 56px 1fr auto;
+      gap: 10px;
+      padding: 8px 0;
+      border-top: 1px solid var(--border);
+      align-items: center;
+    }
+
+    .schedule-row:first-of-type { border-top: none; }
+
+    .schedule-row.past .title,
+    .schedule-row.past .detail { text-decoration: line-through; color: var(--muted); }
+
+    .schedule-row.past .time { color: var(--muted); }
+
+    .schedule-row .time { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    .schedule-row .title { font-weight: 600; }
+    .schedule-row .detail { font-size: 12px; color: var(--muted); margin-top: 1px; }
+
+    .pill {
+      font-size: 10.5px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 99px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .pill.kind-lesson     { background: #e7eef5; color: #496981; }
+    .pill.kind-assignment { background: #f1ebd9; color: #8e6f2c; }
+    .pill.kind-study      { background: #e3ecdb; color: #4d6a3f; }
+    .pill.kind-personal   { background: #ece1ee; color: #6c4e7e; }
+    .pill.kind-exam       { background: #f3dfdb; color: #8a3a26; }
+
+    /* ── Deadline list ─────────────────────────────────────────────────── */
+
+    .deadline-row {
+      display: grid;
+      grid-template-columns: 38px 1fr;
+      gap: 12px;
+      padding: 10px 0;
+      border-top: 1px solid var(--border);
+      align-items: center;
+    }
+
+    .deadline-row:first-of-type { border-top: none; }
+
+    .days-badge {
+      width: 38px;
+      text-align: center;
+      padding: 6px 0;
+      border-radius: 8px;
+      background: var(--surface-2);
+      font-family: var(--font-serif);
+      font-weight: 600;
+    }
+
+    .days-badge .label { display: block; font-size: 9px; letter-spacing: 0.1em; color: var(--muted); }
+
+    .days-badge.urgent     { background: #f4d8cf; color: #7a2c1a; }
+    .days-badge.soon       { background: #f1e3c8; color: #7a5a18; }
+    .days-badge.risk       { background: #ede4cf; color: #735c2c; }
+    .days-badge.calm       { background: #e2ead8; color: #4a5e3a; }
+
+    .deadline-row .title { font-weight: 600; }
+    .deadline-row .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Mood ──────────────────────────────────────────────────────────── */
+
+    .mood-buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 6px;
+    }
+
+    .mood-btn {
+      flex: 1;
+      font-size: 22px;
+      padding: 8px 0;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: transform 0.1s, border-color 0.1s, background 0.1s;
+    }
+
+    .mood-btn:hover { transform: translateY(-1px); border-color: var(--accent); }
+    .mood-btn.selected { border-color: var(--accent); background: #f8e8db; }
+
+    /* ── Courses grid ──────────────────────────────────────────────────── */
+
+    .course-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 14px;
+    }
+
+    .course-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+    }
+
+    .course-card .name { font-weight: 700; font-family: var(--font-serif); }
+    .course-card .teacher { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+
+    .course-bar {
+      height: 6px;
+      background: var(--border);
+      border-radius: 99px;
+      position: relative;
+      overflow: hidden;
+      margin: 10px 0 6px;
+    }
+
+    .course-bar > span {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      background: var(--accent);
+      border-radius: 99px;
+    }
+
+    .course-bar > .target {
+      position: absolute;
+      top: -2px; bottom: -2px;
+      width: 2px;
+      background: var(--ink);
+      opacity: 0.45;
+    }
+
+    .course-card .stats {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .course-card .insight {
+      margin-top: 10px;
+      font-size: 11.5px;
+      color: #6b635a;
+      font-style: italic;
+      border-top: 1px dashed var(--border);
+      padding-top: 8px;
+    }
+
+    /* ── Assignments ───────────────────────────────────────────────────── */
+
+    .assign-row {
+      display: grid;
+      grid-template-columns: 18px 1fr auto;
+      gap: 12px;
+      padding: 10px 0;
+      border-top: 1px solid var(--border);
+      align-items: center;
+    }
+
+    .assign-row:first-of-type { border-top: none; }
+
+    .assign-row .glyph {
+      width: 14px; height: 14px;
+      border: 1.5px solid var(--muted);
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .assign-row.done .glyph { background: var(--success); border-color: var(--success); }
+    .assign-row.done .title { color: var(--muted); text-decoration: line-through; }
+
+    .assign-row .title { font-weight: 600; }
+    .assign-row .sub   { font-size: 12px; color: var(--muted); }
+
+    .status-pill {
+      cursor: pointer;
+      user-select: none;
+      transition: transform 0.08s;
+    }
+    .status-pill:hover { transform: scale(1.04); }
+    .status-pill.s-Pending      { background: #ece8e0; color: #6e655a; }
+    .status-pill.s-Planned      { background: #d8e3ee; color: #355972; }
+    .status-pill.s-In           { background: #f1e2c4; color: #7d5a17; }
+    .status-pill.s-Completed    { background: #d8e6cd; color: #3f6131; }
+    .status-pill.s-Submitted    { background: #cfdcd0; color: #3d5a44; }
+
+    /* ── Exams ─────────────────────────────────────────────────────────── */
+
+    .exam-row {
+      display: grid;
+      grid-template-columns: 12px 1fr auto;
+      gap: 12px;
+      padding: 10px 0;
+      border-top: 1px solid var(--border);
+      align-items: center;
+    }
+    .exam-row:first-of-type { border-top: none; }
+    .exam-row .marker {
+      width: 8px; height: 8px; border-radius: 99px; background: var(--accent);
+    }
+
+    .exam-row .title { font-weight: 600; }
+    .exam-row .sub { font-size: 12px; color: var(--muted); }
+
+    /* ── Grades ────────────────────────────────────────────────────────── */
+
+    .grade-course {
+      padding: 10px 0;
+      border-top: 1px solid var(--border);
+    }
+    .grade-course:first-of-type { border-top: none; }
+
+    .grade-course-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .grade-course-head .marker { color: var(--accent); margin-right: 6px; }
+    .grade-course-head .avg { color: var(--muted); font-size: 12px; }
+
+    .grade-row {
+      display: grid;
+      grid-template-columns: 1fr 80px 100px;
+      gap: 12px;
+      align-items: center;
+      padding: 4px 0;
+    }
+    .grade-row .score { color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+    .grade-bar {
+      height: 6px;
+      background: var(--border);
+      border-radius: 99px;
+      position: relative;
+      overflow: hidden;
+    }
+    .grade-bar > span {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      background: var(--accent);
+    }
+    .grade-bar.ok > span { background: var(--success); }
+
+    /* ── Chat panel ────────────────────────────────────────────────────── */
+
+    .chat-head {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface);
+    }
+
+    .chat-brand {
+      font-family: var(--font-serif);
+      font-weight: 600;
+      font-size: 16px;
+    }
+    .chat-brand .glyph { color: var(--accent); margin-right: 4px; }
+
+    .mode-badge {
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 99px;
+      letter-spacing: 0.04em;
+    }
+    .mode-badge.success { background: #dde7d3; color: #3f6131; }
+    .mode-badge.warn    { background: #f1e3c8; color: #7a5a18; }
+
+    .chat-meta { font-size: 11px; color: var(--muted); margin-left: auto; }
+
+    .chat-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .chat-msg {
+      max-width: 90%;
+      padding: 10px 12px;
+      border-radius: 14px;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .chat-msg.user {
+      align-self: flex-end;
+      background: #2a2620;
+      color: var(--surface);
+    }
+
+    .chat-msg.agent {
+      align-self: flex-start;
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
+
+    .chat-msg.agent .why {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border);
+      font-size: 12px;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .chat-msg .timestamp {
+      display: block;
+      margin-top: 4px;
+      font-size: 10px;
+      color: var(--muted);
+      opacity: 0.8;
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .chip {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 99px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .chip:hover { background: #e3d7c2; }
+
+    .toast {
+      position: fixed;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--ink);
+      color: var(--surface);
+      padding: 8px 16px;
+      border-radius: 99px;
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 0.18s;
+      z-index: 999;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+
+    .chat-input-row {
+      border-top: 1px solid var(--border);
+      padding: 10px;
+      display: flex;
+      gap: 8px;
+      background: var(--surface);
+    }
+
+    .chat-input {
+      flex: 1;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      background: var(--bg);
+      color: var(--ink);
+      outline: none;
+    }
+
+    .chat-input:focus { border-color: var(--accent); }
+
+    .chat-send {
+      width: 36px; height: 36px;
+      border: none;
+      border-radius: 50%;
+      background: var(--ink);
+      color: var(--surface);
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Responsive: drop the aside under the main column ─────────────── */
+    @media (max-width: 980px) {
+      .app { grid-template-columns: minmax(0, 1fr); }
+      aside.chat-panel { position: relative; max-height: 60vh; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <main>
+      <header class="topbar">
+        <div class="brand"><span class="glyph">✦</span>Lumi</div>
+        <div class="topbar-right">
+          <span class="focus-badge" id="focus-badge" title="Focus points and streak"></span>
+          <div class="greeting" id="greeting">Good day</div>
+        </div>
+      </header>
+
+      <div class="insight" id="insight-banner">
+        <span class="dot"></span>
+        <span id="insight-text">Loading your day…</span>
+      </div>
+
+      <section class="summary-row">
+        <div class="card summary-card" id="sum-study">
+          <div class="label">Study This Week</div>
+          <div class="value">—</div>
+          <div class="sub"></div>
+        </div>
+        <div class="card summary-card" id="sum-avg">
+          <div class="label">Overall Average</div>
+          <div class="value">—</div>
+          <div class="sub"></div>
+        </div>
+        <div class="card summary-card" id="sum-pending">
+          <div class="label">Pending</div>
+          <div class="value">—</div>
+          <div class="sub"></div>
+        </div>
+      </section>
+
+      <section class="twocol">
+        <div class="card">
+          <div class="card-title">
+            Today's Schedule
+            <span class="meta" id="today-stamp"></span>
+          </div>
+          <div id="schedule-list"></div>
+        </div>
+
+        <div>
+          <div class="card">
+            <div class="card-title">Upcoming Deadlines</div>
+            <div id="deadline-list"></div>
+          </div>
+          <div class="card" style="margin-top:18px">
+            <div class="card-title">How are you today?</div>
+            <div class="mood-buttons" id="mood-buttons"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="signals-grid">
+        <div class="card why-card">
+          <div class="card-title">Why this plan?</div>
+          <div class="why-text" id="why-text">
+            <span class="signal-empty">Ask Lumi for a plan and the reasoning will appear here.</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Personalization Signals</div>
+          <div id="signals-list">
+            <span class="signal-empty">Lumi will personalize as you use it.</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="card">
+        <div class="card-title">Weak Topics</div>
+        <div id="weak-topics">
+          <span class="signal-empty">No weak topics yet.</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Courses</div>
+        <div class="course-grid" id="course-grid"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Assignments</div>
+        <div id="assign-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Exams</div>
+        <div id="exam-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Grades</div>
+        <div id="grade-list"></div>
+      </div>
+    </main>
+
+    <aside class="chat-panel">
+      <div class="chat-head">
+        <div class="chat-brand"><span class="glyph">✦</span>Lumi</div>
+        <span class="mode-badge success" id="mode-badge">llama3.2 · local</span>
+        <span class="chat-meta" id="chat-meta"></span>
+      </div>
+      <div class="chat-body" id="chat-body"></div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="chat-input" placeholder="Ask or type a command…" autocomplete="off" />
+        <button class="chat-send" id="chat-send" title="Send">→</button>
+      </div>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+  /* ============================================================
+     Lumi — Student Agent Dashboard
+     Plain vanilla JS. One IIFE, render-per-section functions.
+     All user-facing strings are English.
+     ============================================================ */
+  (function () {
+    "use strict";
+
+    // ── State ────────────────────────────────────────────────
+    var state = {
+      profile: null,
+      degraded: false,
+      lastUserMessage: "",
+      sending: false,
+    };
+
+    var STATUSES = ["Pending", "Planned", "In Progress", "Completed", "Submitted"];
+    var STATUS_CLASS = {
+      "Pending":     "s-Pending",
+      "Planned":     "s-Planned",
+      "In Progress": "s-In",
+      "Completed":   "s-Completed",
+      "Submitted":   "s-Submitted",
+    };
+
+    var MOODS = [
+      { key: "good",     emoji: "😄" },
+      { key: "ok",       emoji: "🙂" },
+      { key: "meh",      emoji: "😐" },
+      { key: "tired",    emoji: "😴" },
+      { key: "stressed", emoji: "😰" },
+    ];
+
+    // ── DOM helpers ──────────────────────────────────────────
+    function $(id) { return document.getElementById(id); }
+    function el(tag, cls, html) {
+      var n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (html != null) n.innerHTML = html;
+      return n;
+    }
+    function escapeHtml(s) {
+      return (s == null ? "" : String(s))
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+
+    function showToast(msg) {
+      var t = $("toast");
+      t.textContent = msg;
+      t.classList.add("show");
+      setTimeout(function () { t.classList.remove("show"); }, 1800);
+    }
+
+    // ── API ──────────────────────────────────────────────────
+    function api(path, opts) {
+      opts = opts || {};
+      opts.headers = Object.assign(
+        { "Content-Type": "application/json" },
+        opts.headers || {}
+      );
+      return fetch(path, opts).then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      });
+    }
+
+    // ── Render: insight banner ───────────────────────────────
+    function renderInsightBanner(s) {
+      var deadlines = (s.profile && s.profile.deadlines) || [];
+      var top = deadlines[0];
+      var msg;
+      if (!top) {
+        msg = "No urgent deadlines — a calm day. Use it for review or rest.";
+      } else if (top.days_left <= 0) {
+        msg = "Your " + top.title + " is due today. Want to start now?";
+      } else if (top.days_left === 1) {
+        msg = "Your " + top.title + " is due in 1 day. Want to start now?";
+      } else {
+        msg = "Your " + top.title + " is due in " + top.days_left + " days.";
+      }
+      $("insight-text").textContent = msg;
+    }
+
+    // ── Render: summary cards ────────────────────────────────
+    function renderSummaryCards(s) {
+      var p = s.profile || {};
+      var sumStudy = $("sum-study");
+      sumStudy.querySelector(".value").innerHTML =
+        (p.weekly_study_hours != null ? p.weekly_study_hours : "—") +
+        '<span class="unit">h</span>';
+      var delta = p.weekly_study_delta;
+      var sub = sumStudy.querySelector(".sub");
+      if (typeof delta === "number" && delta !== 0) {
+        sub.textContent = (delta > 0 ? "↑ " : "↓ ") + Math.abs(delta) +
+          "h vs. last week";
+        sub.className = "sub" + (delta > 0 ? " up" : "");
+      } else {
+        sub.textContent = "";
+        sub.className = "sub";
+      }
+
+      // Overall average — mean of course averages.
+      var courses = p.courses || [];
+      var avg = courses.length
+        ? courses.reduce(function (a, c) { return a + (c.average || 0); }, 0) / courses.length
+        : 0;
+      var sumAvg = $("sum-avg");
+      sumAvg.querySelector(".value").innerHTML =
+        avg.toFixed(2).replace(/\.?0+$/, "") +
+        '<span class="unit">/100</span>';
+      sumAvg.querySelector(".sub").textContent = courses.length + " courses";
+
+      // Pending count.
+      var pending = p.pending_count != null ? p.pending_count : 0;
+      var pendingAssigns = (p.assignments || []).filter(function (a) {
+        return a.status !== "Completed" && a.status !== "Submitted";
+      }).length;
+      var examCount = (p.exams || []).length;
+      var sumP = $("sum-pending");
+      sumP.querySelector(".value").innerHTML =
+        pending + '<span class="unit">items</span>';
+      sumP.querySelector(".sub").textContent =
+        pendingAssigns + " assignments · " + examCount + " exams";
+    }
+
+    // ── Render: today's schedule ─────────────────────────────
+    function renderTodaySchedule(s) {
+      var list = (s.profile && s.profile.today_schedule) || [];
+      var host = $("schedule-list");
+      host.innerHTML = "";
+
+      var now = new Date();
+      var nowMin = now.getHours() * 60 + now.getMinutes();
+
+      list.forEach(function (item) {
+        var endMin = parseTime(item.end || item.start);
+        var past = endMin < nowMin;
+        var row = el("div", "schedule-row" + (past ? " past" : ""));
+        row.appendChild(el("div", "time", escapeHtml(item.start)));
+        var mid = el("div");
+        mid.appendChild(el("div", "title", escapeHtml(item.title)));
+        if (item.detail) {
+          mid.appendChild(el("div", "detail", escapeHtml(item.detail)));
+        }
+        row.appendChild(mid);
+        row.appendChild(el(
+          "span", "pill kind-" + (item.kind || "lesson"),
+          kindLabel(item.kind)
+        ));
+        host.appendChild(row);
+      });
+
+      // Today's date stamp in the card title — e.g. "Wed · Apr 30 · 2026".
+      var d = new Date();
+      var weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
+      var month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
+      $("today-stamp").textContent =
+        weekday + " · " + month + " " + d.getDate() + " · " + d.getFullYear();
+    }
+
+    function parseTime(hhmm) {
+      var m = /(\d{1,2}):(\d{2})/.exec(hhmm || "");
+      return m ? +m[1] * 60 + +m[2] : 0;
+    }
+
+    function kindLabel(kind) {
+      switch (kind) {
+        case "lesson":     return "Lesson";
+        case "assignment": return "Assignment";
+        case "study":      return "Study";
+        case "personal":   return "Personal";
+        case "exam":       return "Exam";
+        default:           return (kind || "Lesson");
+      }
+    }
+
+    // ── Render: deadlines ────────────────────────────────────
+    function renderDeadlineList(s) {
+      var list = (s.profile && s.profile.deadlines) || [];
+      var host = $("deadline-list");
+      host.innerHTML = "";
+      list.slice(0, 5).forEach(function (d) {
+        var urgency = urgencyClass(d.days_left);
+        var courseName = courseLookup(s, d.course_id);
+        var kindLabel = d.kind === "exam" ? "Exam" : "Assignment";
+
+        var row = el("div", "deadline-row");
+        var badge = el(
+          "div", "days-badge " + urgency.cls,
+          (d.days_left <= 0 ? "0" : d.days_left) +
+          '<span class="label">DAY' + (d.days_left === 1 ? "" : "S") + '</span>'
+        );
+        row.appendChild(badge);
+
+        var mid = el("div");
+        mid.appendChild(el("div", "title", escapeHtml(d.title)));
+        mid.appendChild(el("div", "sub",
+          escapeHtml(courseName) + " · " + kindLabel + " · " + urgency.label
+        ));
+        row.appendChild(mid);
+        host.appendChild(row);
+      });
+
+      if (!list.length) {
+        host.appendChild(el("div", "sub", "No upcoming deadlines."));
+      }
+    }
+
+    function urgencyClass(days) {
+      if (days <= 1)  return { cls: "urgent", label: "Urgent" };
+      if (days <= 3)  return { cls: "soon",   label: "Study Today" };
+      if (days <= 7)  return { cls: "risk",   label: "At Risk" };
+      return            { cls: "calm",   label: "Can Wait" };
+    }
+
+    function courseLookup(s, id) {
+      var courses = (s.profile && s.profile.courses) || [];
+      for (var i = 0; i < courses.length; i++) {
+        if (courses[i].id === id) return courses[i].name;
+      }
+      return "—";
+    }
+
+    // ── Render: mood ─────────────────────────────────────────
+    function renderMoodCheck(s) {
+      var host = $("mood-buttons");
+      host.innerHTML = "";
+      var current = (s.profile && s.profile.mood) || null;
+      MOODS.forEach(function (m) {
+        var b = el("button", "mood-btn" + (current === m.key ? " selected" : ""), m.emoji);
+        b.title = m.key;
+        b.addEventListener("click", function () { setMood(m.key); });
+        host.appendChild(b);
+      });
+    }
+
+    function setMood(key) {
+      api("/api/student/mood", {
+        method: "POST",
+        body: JSON.stringify({ mood: key }),
+      }).then(function () {
+        state.profile.mood = key;
+        renderMoodCheck(state);
+      }).catch(function () {
+        // Local-only fallback so the UI still feels responsive.
+        state.profile.mood = key;
+        renderMoodCheck(state);
+      });
+    }
+
+    // ── Render: courses ──────────────────────────────────────
+    function renderCourseCards(s) {
+      var courses = (s.profile && s.profile.courses) || [];
+      var assigns = (s.profile && s.profile.assignments) || [];
+      var host = $("course-grid");
+      host.innerHTML = "";
+      courses.forEach(function (c) {
+        var pending = assigns.filter(function (a) {
+          return a.course_id === c.id &&
+                 a.status !== "Completed" &&
+                 a.status !== "Submitted";
+        }).length;
+
+        var card = el("div", "course-card");
+        card.appendChild(el("div", "name", escapeHtml(c.name)));
+        card.appendChild(el("div", "teacher", escapeHtml(c.teacher || "")));
+
+        var bar = el("div", "course-bar");
+        var fill = el("span"); fill.style.width = (c.average || 0) + "%";
+        bar.appendChild(fill);
+        if (c.target) {
+          var t = el("div", "target");
+          t.style.left = c.target + "%";
+          bar.appendChild(t);
+        }
+        card.appendChild(bar);
+
+        card.appendChild(el(
+          "div", "stats",
+          "<span>" + (c.average || 0) + " avg → goal " +
+          (c.target || "—") + "</span><span>" +
+          pending + " pending</span>"
+        ));
+
+        if (c.insight) {
+          card.appendChild(el("div", "insight", escapeHtml(c.insight)));
+        }
+        host.appendChild(card);
+      });
+    }
+
+    // ── Render: assignments ──────────────────────────────────
+    function renderAssignmentList(s) {
+      var assigns = (s.profile && s.profile.assignments) || [];
+      var host = $("assign-list");
+      host.innerHTML = "";
+      // Sort: open items first by days_left, completed/submitted last.
+      var sorted = assigns.slice().sort(function (a, b) {
+        var ao = (a.status === "Completed" || a.status === "Submitted") ? 1 : 0;
+        var bo = (b.status === "Completed" || b.status === "Submitted") ? 1 : 0;
+        if (ao !== bo) return ao - bo;
+        return (a.days_left || 0) - (b.days_left || 0);
+      });
+      sorted.forEach(function (a) {
+        var done = a.status === "Completed" || a.status === "Submitted";
+        var row = el("div", "assign-row" + (done ? " done" : ""));
+        row.appendChild(el("span", "glyph"));
+        var mid = el("div");
+        mid.appendChild(el("div", "title", escapeHtml(a.title)));
+        mid.appendChild(el(
+          "div", "sub",
+          escapeHtml(courseLookup(s, a.course_id)) + " · " +
+          dueLabel(a.days_left)
+        ));
+        row.appendChild(mid);
+
+        var pill = el(
+          "span",
+          "pill status-pill " + STATUS_CLASS[a.status],
+          escapeHtml(a.status || "Pending")
+        );
+        pill.title = "Click to change status";
+        pill.addEventListener("click", function () { cycleStatus(a); });
+        row.appendChild(pill);
+        host.appendChild(row);
+      });
+    }
+
+    function dueLabel(days) {
+      if (days == null) return "";
+      if (days < 0)   return Math.abs(days) + " day(s) overdue";
+      if (days === 0) return "Due today";
+      if (days === 1) return "Tomorrow";
+      return "Due in " + days + " day(s)";
+    }
+
+    function cycleStatus(assignment) {
+      var idx = STATUSES.indexOf(assignment.status);
+      if (idx < 0) idx = -1;
+      var next = STATUSES[(idx + 1) % STATUSES.length];
+      api("/api/student/assignments/" + encodeURIComponent(assignment.id), {
+        method: "PATCH",
+        body: JSON.stringify({ status: next }),
+      }).then(function (updated) {
+        assignment.status = updated.status;
+        renderAssignmentList(state);
+        renderSummaryCards(state);
+      }).catch(function () {
+        // Optimistic local fallback.
+        assignment.status = next;
+        renderAssignmentList(state);
+        renderSummaryCards(state);
+      });
+    }
+
+    // ── Render: exams ────────────────────────────────────────
+    function renderExamList(s) {
+      var exams = (s.profile && s.profile.exams) || [];
+      var host = $("exam-list");
+      host.innerHTML = "";
+      exams.slice().sort(function (a, b) {
+        return (a.days_left || 0) - (b.days_left || 0);
+      }).forEach(function (e) {
+        var row = el("div", "exam-row");
+        row.appendChild(el("span", "marker"));
+        var mid = el("div");
+        mid.appendChild(el("div", "title", escapeHtml(e.title)));
+        mid.appendChild(el(
+          "div", "sub",
+          escapeHtml(courseLookup(s, e.course_id)) + " · " +
+          (e.topics || []).map(escapeHtml).join(", ")
+        ));
+        row.appendChild(mid);
+        var u = urgencyClass(e.days_left);
+        row.appendChild(el(
+          "span", "pill kind-exam",
+          (e.days_left <= 0 ? "Today" : "in " + e.days_left + " day(s)")
+        ));
+        host.appendChild(row);
+      });
+    }
+
+    // ── Render: grades ───────────────────────────────────────
+    function renderGradeList(s) {
+      var grades = (s.profile && s.profile.grades) || [];
+      var courses = (s.profile && s.profile.courses) || [];
+      var host = $("grade-list");
+      host.innerHTML = "";
+
+      courses.forEach(function (c) {
+        var rows = grades.filter(function (g) { return g.course_id === c.id; });
+        if (!rows.length) return;
+        var avg = rows.reduce(function (a, g) { return a + (g.score || 0); }, 0) / rows.length;
+        var block = el("div", "grade-course");
+        block.appendChild(el(
+          "div", "grade-course-head",
+          '<span><span class="marker">●</span>' + escapeHtml(c.name) + "</span>" +
+          '<span class="avg">avg ' + avg.toFixed(0) + "</span>"
+        ));
+        rows.forEach(function (g) {
+          var ok = (g.score || 0) >= 80;
+          var row = el("div", "grade-row");
+          row.appendChild(el("div", "", escapeHtml(g.title)));
+          row.appendChild(el("div", "score", (g.score || 0) + "/100"));
+          var bar = el("div", "grade-bar" + (ok ? " ok" : ""));
+          var fill = el("span"); fill.style.width = (g.score || 0) + "%";
+          bar.appendChild(fill);
+          row.appendChild(bar);
+          block.appendChild(row);
+        });
+        host.appendChild(block);
+      });
+    }
+
+    // ── Render: chat ─────────────────────────────────────────
+
+    function setBadge(text, kind) {
+      var b = $("mode-badge");
+      b.textContent = text;
+      b.classList.remove("success", "warn");
+      b.classList.add(kind);
+    }
+
+    function applyDegraded(deg) {
+      state.degraded = !!deg;
+      if (deg) setBadge("basic planning mode", "warn");
+      else     setBadge("llama3.2 · local",    "success");
+    }
+
+    function nowStamp() {
+      var d = new Date();
+      return pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    }
+
+    function appendUserMessage(text) {
+      var body = $("chat-body");
+      var m = el("div", "chat-msg user");
+      m.appendChild(el("span", "", escapeHtml(text)));
+      m.appendChild(el("span", "timestamp", nowStamp()));
+      body.appendChild(m);
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function appendAgentMessage(payload) {
+      var body = $("chat-body");
+      var m = el("div", "chat-msg agent");
+
+      var prefix = payload.degraded
+        ? "Local model is currently unavailable. I'll continue in basic planning mode.\n\n"
+        : "";
+
+      var mainText = el("div");
+      mainText.textContent = prefix + (payload.reply || "");
+      m.appendChild(mainText);
+
+      if (payload.why) {
+        m.appendChild(el("div", "why", escapeHtml(payload.why)));
+      }
+
+      var chips = el("div", "chip-row");
+      (payload.actions || ["Plan", "Postpone", "Make Shorter", "Suggest Resources", "Add to Calendar"])
+        .forEach(function (label) {
+          var c = el("button", "chip", escapeHtml(label));
+          c.addEventListener("click", function () { onChipClick(label); });
+          chips.appendChild(c);
+        });
+      m.appendChild(chips);
+
+      // Mark Done button — only when the reply contains a plan with blocks.
+      if ((payload.blocks || []).length > 0) {
+        var doneRow = el("div", "mark-done-row");
+        var doneBtn = el("button", "mark-done-btn", "Mark done");
+        doneBtn.addEventListener("click", function () {
+          markPlanDone(doneBtn);
+        });
+        doneRow.appendChild(doneBtn);
+        m.appendChild(doneRow);
+      }
+
+      m.appendChild(el("span", "timestamp", nowStamp()));
+      body.appendChild(m);
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function markPlanDone(btn) {
+      btn.disabled = true;
+      btn.textContent = "Marking…";
+      api("/api/student/plan/complete", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }).then(function (data) {
+        btn.textContent = "Done ✓";
+        if (state.profile && data.personalization) {
+          state.profile.personalization = data.personalization;
+        }
+        renderFocusBadge(state);
+        renderSignalsCard(state);
+        showToast("Plan marked done — focus points updated");
+      }).catch(function () {
+        btn.disabled = false;
+        btn.textContent = "Mark done";
+        showToast("Couldn't reach Lumi — try again");
+      });
+    }
+
+    function appendInfoMessage(text) {
+      var body = $("chat-body");
+      var m = el("div", "chat-msg agent");
+      m.appendChild(el("div", "", escapeHtml(text)));
+      m.appendChild(el("span", "timestamp", nowStamp()));
+      body.appendChild(m);
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function onChipClick(label) {
+      // BACKEND-INTEGRATION: Plan / Add to Calendar are intentionally
+      // frontend-only acknowledgements for now. Wire them to a real
+      // calendar export endpoint when one exists.
+      if (label === "Plan") {
+        showToast("Saved to your day");
+        return;
+      }
+      if (label === "Add to Calendar") {
+        showToast("Calendar integration not connected yet");
+        return;
+      }
+      var actionMap = {
+        "Make Shorter":      "shorter",
+        "Postpone":          "postpone",
+        "Suggest Resources": "resources",
+      };
+      var action = actionMap[label];
+      if (!action) return;
+      sendChat(state.lastUserMessage || "What should I do today?", action);
+    }
+
+    function sendChat(message, action) {
+      if (state.sending) return;
+      state.sending = true;
+      $("chat-send").disabled = true;
+
+      if (!action) {
+        state.lastUserMessage = message;
+        appendUserMessage(message);
+      }
+
+      api("/api/student/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          message: message,
+          mood: (state.profile && state.profile.mood) || null,
+          action: action || null,
+        }),
+      }).then(function (data) {
+        applyDegraded(data.degraded);
+        appendAgentMessage(data);
+        // Pull fresh signals + last_plan so the Why card and Personalization
+        // signals card reflect the just-applied chip click.
+        api("/api/student/dashboard").then(function (d) {
+          state.profile = d;
+          renderFocusBadge(state);
+          renderWhyCard(state);
+          renderSignalsCard(state);
+          renderWeakTopics(state);
+        }).catch(function () { /* non-fatal */ });
+      }).catch(function (err) {
+        // Backend itself unreachable.
+        applyDegraded(true);
+        appendInfoMessage(
+          "Local model is currently unavailable. I'll continue in basic planning mode.\n\n" +
+          "Looking at your dashboard, your most urgent item is at the top of " +
+          "Upcoming Deadlines. Try a focused 25-minute block on it now."
+        );
+      }).finally(function () {
+        state.sending = false;
+        $("chat-send").disabled = false;
+      });
+    }
+
+    // ── Bootstrap ────────────────────────────────────────────
+    function renderAll() {
+      renderInsightBanner(state);
+      renderSummaryCards(state);
+      renderTodaySchedule(state);
+      renderDeadlineList(state);
+      renderMoodCheck(state);
+      renderFocusBadge(state);
+      renderWhyCard(state);
+      renderSignalsCard(state);
+      renderWeakTopics(state);
+      renderCourseCards(state);
+      renderAssignmentList(state);
+      renderExamList(state);
+      renderGradeList(state);
+    }
+
+    // ── Render: focus-points / streak badge ────────────────────
+    function renderFocusBadge(s) {
+      var p = (s.profile && s.profile.personalization) || {};
+      var badge = $("focus-badge");
+      var pts = p.focus_points || 0;
+      var streak = p.streak_days || 0;
+      if (!pts && !streak) {
+        badge.classList.remove("show");
+        return;
+      }
+      badge.classList.add("show");
+      badge.innerHTML =
+        '<span class="pts">' + pts + ' focus pts</span>' +
+        (streak > 0
+          ? '<span class="sep">·</span><span>' + streak + '-day streak</span>'
+          : "");
+    }
+
+    // ── Render: Why this plan? ─────────────────────────────────
+    function renderWhyCard(s) {
+      var lp = s.profile && s.profile.last_plan;
+      var host = $("why-text");
+      if (!lp || !lp.why) {
+        host.innerHTML = '<span class="signal-empty">Ask Lumi for a plan and the reasoning will appear here.</span>';
+        return;
+      }
+      host.textContent = lp.why;
+    }
+
+    // ── Render: Personalization Signals ────────────────────────
+    function renderSignalsCard(s) {
+      var p = (s.profile && s.profile.personalization) || {};
+      var host = $("signals-list");
+      host.innerHTML = "";
+
+      var hasAny = (p.shortened_plan_count || 0) +
+                   (p.postponed_suggestions_count || 0) +
+                   (p.completed_plan_count || 0) +
+                   (p.accepted_suggestions_count || 0) > 0;
+
+      if (!hasAny) {
+        host.innerHTML = '<span class="signal-empty">Lumi will personalize as you use it.</span>';
+        return;
+      }
+
+      var rows = [
+        ["Preferred block", (p.preferred_study_block_minutes || 30) + " min"],
+        ["Postpones (last 7d)", (p.postpones_last_7d || 0)],
+        ["Shortenings (last 7d)", (p.shortenings_last_7d || 0)],
+        ["Plans completed", (p.completed_plan_count || 0)],
+      ];
+      rows.forEach(function (r) {
+        var row = el("div", "signal-row");
+        row.appendChild(el("span", "", escapeHtml(r[0])));
+        row.appendChild(el("span", "v", String(r[1])));
+        host.appendChild(row);
+      });
+    }
+
+    // ── Render: Weak Topics ────────────────────────────────────
+    function renderWeakTopics(s) {
+      var p = (s.profile && s.profile.personalization) || {};
+      var host = $("weak-topics");
+      host.innerHTML = "";
+      var topics = p.weak_topics || [];
+      if (!topics.length) {
+        host.innerHTML = '<span class="signal-empty">No weak topics yet.</span>';
+        return;
+      }
+      topics.forEach(function (t) {
+        host.appendChild(el("span", "weak-topic-pill", escapeHtml(t)));
+      });
+    }
+
+    function setGreeting() {
+      var h = new Date().getHours();
+      var word;
+      if (h < 12)      word = "Good morning";
+      else if (h < 18) word = "Good afternoon";
+      else             word = "Good evening";
+      $("greeting").textContent = word;
+    }
+
+    function bootstrap() {
+      setGreeting();
+
+      // Probe Ollama in parallel; fall back to degraded badge on any failure.
+      api("/api/student/health").then(function (d) {
+        applyDegraded(d.degraded);
+      }).catch(function () { applyDegraded(true); });
+
+      api("/api/student/dashboard").then(function (data) {
+        state.profile = data;
+        renderAll();
+      }).catch(function (err) {
+        appendInfoMessage(
+          "I can't reach the dashboard service right now. Please refresh in a moment."
+        );
+      });
+
+      // Wire chat input.
+      var input = $("chat-input");
+      $("chat-send").addEventListener("click", function () {
+        var v = input.value.trim();
+        if (v) { sendChat(v, null); input.value = ""; }
+      });
+      input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          var v = input.value.trim();
+          if (v) { sendChat(v, null); input.value = ""; }
+        }
+      });
+
+      // Seed a friendly first message so the panel isn't empty.
+      appendInfoMessage(
+        "Hi! I'm Lumi. Ask me \"What should I do today?\" and I'll build a plan from your deadlines and schedule."
+      );
+    }
+
+    document.addEventListener("DOMContentLoaded", bootstrap);
+  })();
+  </script>
+</body>
+</html>

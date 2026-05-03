@@ -9,6 +9,7 @@ from src.services.api.cockpit_routes import cockpit_router
 from src.services.api.project_routes import project_router
 from src.services.api.product_backlog_routes import product_backlog_router
 from src.services.api.student_routes import student_router
+from src.services.api.student_agent_routes import student_agent_router
 from src.core.session_store import SESSION_STORE
 
 logger = logging.getLogger("cognitwin.bootstrap")
@@ -105,3 +106,4 @@ app.include_router(cockpit_router)
 app.include_router(project_router)
 app.include_router(product_backlog_router)
 app.include_router(student_router)
+app.include_router(student_agent_router)

@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>COGNITWIN Student Agent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-page: #0b0d14;
+      --bg-panel: #13161f;
+      --bg-card: #1a1d29;
+      --bg-card-2: #1e2130;
+      --border: #222637;
+      --border-hi: #3b3f56;
+      --accent: #a78bfa;
+      --accent-2: #8b6df7;
+      --text: #e5e7f0;
+      --muted: #94a3b8;
+      --faint: #64748b;
+      --ok: #4ade80;
+      --warn: #facc15;
+      --bad: #f87171;
+    }
+
+    html, body { background: var(--bg-page); color: var(--text); }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   Inter, sans-serif;
+      min-height: 100vh;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ── App shell ─────────────────────────────────────────── */
+    .app-shell {
+      display: grid;
+      grid-template-columns: 240px 1fr 320px;
+      gap: 1.25rem;
+      min-height: 100vh;
+      padding: 1.25rem;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    /* ── Sidebar ───────────────────────────────────────────── */
+    .sidebar {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      position: sticky;
+      top: 1.25rem;
+      align-self: start;
+      max-height: calc(100vh - 2.5rem);
+    }
+    .brand-block {
+      display: flex; gap: 0.6rem; align-items: center;
+      padding: 0.4rem 0.6rem 1rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 0.5rem;
+    }
+    .brand-logo {
+      font-size: 1.4rem; line-height: 1;
+      width: 36px; height: 36px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #a78bfa 0%, #6366f1 100%);
+      border-radius: 9px;
+    }
+    .brand-name { font-weight: 700; font-size: 0.92rem; letter-spacing: 0.04em; }
+    .brand-sub  { font-size: 0.72rem; color: var(--muted); margin-top: 1px; }
+
+    .sidebar-nav { display: flex; flex-direction: column; gap: 0.25rem; }
+    .nav-item {
+      display: flex; align-items: center; gap: 0.65rem;
+      padding: 0.55rem 0.7rem;
+      background: transparent; border: 1px solid transparent;
+      color: var(--muted); border-radius: 9px;
+      font: inherit; font-size: 0.86rem; text-align: left;
+      cursor: pointer; width: 100%;
+    }
+    .nav-item:hover { color: var(--text); background: var(--bg-card); }
+    .nav-item.active {
+      color: var(--text); background: rgba(167,139,250,0.12);
+      border-color: rgba(167,139,250,0.35);
+    }
+    .nav-item .nav-icon { font-size: 1rem; width: 18px; text-align: center; }
+    .nav-spacer { flex: 1; }
+
+    .profile-block {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.6rem 0.6rem;
+      border-top: 1px solid var(--border);
+      margin-top: 0.5rem;
+    }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, #4ade80, #2dd4bf);
+      color: #0b0d14; font-weight: 700;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.78rem;
+    }
+    .profile-name { font-size: 0.82rem; font-weight: 600; }
+    .profile-link {
+      display: block; font-size: 0.72rem; color: var(--faint);
+      margin-top: 1px; text-decoration: none;
+    }
+    .profile-link:hover { color: var(--muted); }
+
+    /* ── Main column ───────────────────────────────────────── */
+    .main {
+      display: flex; flex-direction: column; gap: 1rem;
+      min-width: 0;
+    }
+    .main-header {
+      display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+      padding: 0.25rem 0.25rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-title { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.01em; }
+    .header-spacer { flex: 1; }
+    .chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .chip {
+      font-size: 0.72rem; padding: 0.28rem 0.7rem; border-radius: 999px;
+      background: var(--bg-card); color: var(--muted);
+      border: 1px solid var(--border);
+      display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .chip .dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #475569;
+    }
+    .chip.ok    { color: var(--ok);   border-color: #14532d; }
+    .chip.ok    .dot { background: var(--ok); }
+    .chip.warn  { color: var(--warn); border-color: #713f12; }
+    .chip.warn  .dot { background: var(--warn); }
+    .chip.bad   { color: var(--bad);  border-color: #7f1d1d; }
+    .chip.bad   .dot { background: var(--bad); }
+
+    /* Section visibility — one section visible at a time */
+    .main [data-when] { display: none; }
+    .main[data-section="dashboard"] [data-when="dashboard"],
+    .main[data-section="new_task"]  [data-when="new_task"],
+    .main[data-section="activity"]  [data-when="activity"],
+    .main[data-section="evidence"]  [data-when="evidence"] { display: block; }
+
+    /* ── Panels ────────────────────────────────────────────── */
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+    }
+    .panel + .panel { margin-top: 1rem; }
+    .panel h2 {
+      font-size: 0.74rem; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.8rem;
+      font-weight: 600;
+    }
+    .panel.collapsible h2 { cursor: pointer; user-select: none; }
+    .panel.collapsible h2::after { content: " ▾"; color: var(--faint); }
+    .panel.collapsed .panel-body { display: none; }
+    .panel.collapsed h2::after { content: " ▸"; }
+
+    /* ── Dashboard summary cards ───────────────────────────── */
+    .summary-cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.85rem;
+      margin-bottom: 1rem;
+    }
+    @media (max-width: 720px) {
+      .summary-cards { grid-template-columns: 1fr; }
+    }
+    .summary-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+    }
+    .summary-card .label {
+      font-size: 0.72rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 0.4rem;
+    }
+    .summary-card .big {
+      font-size: 1.7rem; font-weight: 700; color: var(--text);
+      line-height: 1.1;
+    }
+    .summary-card .sub {
+      font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem;
+      line-height: 1.4;
+    }
+
+    /* ── Show Evidence button ──────────────────────────────── */
+    .show-evidence-btn {
+      background: var(--bg-card);
+      color: var(--accent);
+      border: 1px solid rgba(167,139,250,0.4);
+      padding: 0.45rem 0.9rem;
+      border-radius: 8px;
+      font: inherit; font-size: 0.8rem; font-weight: 600;
+      cursor: pointer;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .show-evidence-btn:hover {
+      background: rgba(167,139,250,0.12);
+      border-color: rgba(167,139,250,0.7);
+    }
+
+    /* ── Agenda board ──────────────────────────────────────── */
+    .agenda-board {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+    .agenda-section {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 0.9rem 1rem;
+    }
+    .agenda-section h3 {
+      font-size: 0.72rem; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted);
+      margin-bottom: 0.6rem; font-weight: 600;
+    }
+    .agenda-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.65rem 0.75rem;
+      margin-bottom: 0.55rem;
+      transition: border-color 0.15s ease;
+    }
+    .agenda-card:hover { border-color: var(--border-hi); }
+    .agenda-card:last-child { margin-bottom: 0; }
+
+    /* ── Task cards (New Task) ─────────────────────────────── */
+    .task-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-top: 0.5rem;
+    }
+    @media (max-width: 980px) {
+      .task-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .task-grid { grid-template-columns: 1fr; }
+    }
+    .task-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.4rem 1.2rem;
+      cursor: pointer;
+      text-align: left;
+      font: inherit; color: inherit;
+      display: flex; flex-direction: column;
+      gap: 0.55rem; min-height: 160px;
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .task-card:hover {
+      border-color: rgba(167,139,250,0.5);
+      box-shadow: 0 8px 28px rgba(167,139,250,0.08);
+      transform: translateY(-2px);
+    }
+    .task-icon {
+      font-size: 1.7rem; line-height: 1;
+      width: 44px; height: 44px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: rgba(167,139,250,0.12);
+      border-radius: 10px;
+    }
+    .task-title { font-size: 1rem; font-weight: 700; color: var(--text); }
+    .task-desc  { font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+
+    .back-to-tasks {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.7rem; border-radius: 8px;
+      font: inherit; font-size: 0.78rem; cursor: pointer;
+      margin-bottom: 0.8rem;
+    }
+    .back-to-tasks:hover { color: var(--text); border-color: var(--border-hi); }
+
+    /* ── Task workspace ────────────────────────────────────── */
+    .mode-helper {
+      font-size: 0.82rem; color: #cbd5e1;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 9px; padding: 0.55rem 0.8rem;
+      margin-bottom: 0.9rem;
+    }
+    textarea#question {
+      width: 100%; min-height: 96px; resize: vertical;
+      background: var(--bg-page); color: var(--text);
+      border: 1px solid var(--border); border-radius: 9px;
+      padding: 0.7rem 0.85rem; font: inherit; font-size: 0.9rem;
+    }
+    textarea#question:focus { outline: 2px solid var(--accent); }
+    .examples {
+      display: flex; gap: 0.4rem; flex-wrap: wrap;
+      margin-top: 0.7rem; margin-bottom: 0.7rem;
+    }
+    .example, .send-btn, .action-btn {
+      background: var(--bg-card); color: #cbd5e1;
+      border: 1px solid var(--border);
+      padding: 0.4rem 0.85rem; border-radius: 7px;
+      cursor: pointer; font-size: 0.78rem; font-family: inherit;
+    }
+    .example:hover, .action-btn:hover {
+      color: #fff; border-color: var(--border-hi);
+    }
+    .send-btn {
+      background: var(--accent); color: var(--bg-page); border: none;
+      padding: 0.55rem 1.6rem; font-weight: 600; font-size: 0.86rem;
+    }
+    .send-btn:hover { opacity: 0.9; }
+    .send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .answer-box {
+      background: var(--bg-page); border: 1px solid var(--border);
+      border-radius: 9px; padding: 0.9rem;
+      margin-top: 0.7rem; min-height: 40px;
+      white-space: pre-wrap; line-height: 1.55;
+    }
+    .lang-note { font-size: 0.72rem; color: var(--warn); margin-top: 0.4rem; }
+    .actions {
+      display: flex; gap: 0.4rem; flex-wrap: wrap;
+      margin-top: 0.8rem;
+    }
+
+    /* ── Student Output card ───────────────────────────────── */
+    .student-output-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.1rem;
+      margin-top: 1rem;
+    }
+    .student-output-card .so-header {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 0.6rem; margin-bottom: 0.7rem;
+    }
+    .student-output-card h2 {
+      font-size: 0.74rem; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted); font-weight: 600;
+      margin: 0;
+    }
+
+    /* ── Study output sub-grid ─────────────────────────────── */
+    .study-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem;
+      font-size: 0.82rem; margin-top: 1rem;
+    }
+    @media (max-width: 720px) { .study-grid { grid-template-columns: 1fr; } }
+    .study-grid > div {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.7rem 0.85rem;
+    }
+    .study-grid .label {
+      font-size: 0.7rem; color: var(--faint); text-transform: uppercase;
+      letter-spacing: 0.06em; margin-bottom: 0.3rem;
+    }
+    .study-grid ul { list-style: none; padding: 0; }
+    .study-grid li { padding: 0.15rem 0; }
+    .checklist label { cursor: pointer; }
+
+    /* ── Memory cards (Evidence) ───────────────────────────── */
+    .source-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 9px; padding: 0.7rem; margin-bottom: 0.55rem;
+      font-size: 0.82rem; line-height: 1.5;
+    }
+    .source-card.ignored { opacity: 0.35; }
+    .source-card.relevant { border-color: var(--ok); }
+    .source-meta {
+      display: flex; gap: 0.4rem; flex-wrap: wrap;
+      font-size: 0.7rem; color: var(--muted); margin-bottom: 0.35rem;
+    }
+    .source-meta .pill, .pill {
+      background: var(--bg-card-2); padding: 0.12rem 0.5rem;
+      border-radius: 4px; color: var(--muted);
+    }
+    .source-buttons { display: flex; gap: 0.35rem; margin-top: 0.5rem; flex-wrap: wrap; }
+    .source-buttons button {
+      background: var(--bg-card-2); color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 0.18rem 0.5rem; border-radius: 4px;
+      font-size: 0.7rem; cursor: pointer;
+    }
+    .source-buttons button:hover { color: var(--text); }
+
+    /* ── Gate panel ────────────────────────────────────────── */
+    .confidence {
+      display: flex; align-items: center; gap: 0.5rem;
+      margin-bottom: 0.5rem; font-size: 0.85rem;
+    }
+    .conf-pill {
+      padding: 0.2rem 0.6rem; border-radius: 6px;
+      font-size: 0.72rem; font-weight: 600;
+    }
+    .conf-pill.high   { background: #14532d; color: var(--ok); }
+    .conf-pill.medium { background: #713f12; color: var(--warn); }
+    .conf-pill.low    { background: #7f1d1d; color: var(--bad); }
+    .gate-warn  { font-size: 0.78rem; color: var(--warn); margin-bottom: 0.25rem; }
+    .gate-action { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.6rem; }
+    .gate-row {
+      display: grid; grid-template-columns: 1.3fr auto 2fr;
+      gap: 0.5rem; padding: 0.3rem 0;
+      border-top: 1px solid var(--border);
+      font-size: 0.78rem; align-items: start;
+    }
+    .gate-row:first-child { border-top: none; }
+    .status-pill {
+      font-size: 0.65rem; font-weight: 700;
+      padding: 0.12rem 0.5rem; border-radius: 4px;
+    }
+    .status-pill.PASS { background: #14532d; color: var(--ok); }
+    .status-pill.FAIL { background: #7f1d1d; color: var(--bad); }
+    .status-pill.WARN { background: #713f12; color: var(--warn); }
+    .status-pill.SKIP { background: var(--bg-card-2); color: var(--faint); }
+    .gate-evidence { color: var(--muted); font-size: 0.74rem; }
+
+    .kv { font-size: 0.8rem; line-height: 1.55; }
+    .kv .k { color: var(--faint); }
+    .kv ul { margin: 0.25rem 0 0.5rem 1.1rem; }
+    .kv li { font-size: 0.78rem; color: #cbd5e1; padding: 0.1rem 0; }
+
+    .degraded-banner {
+      background: #713f12; color: #fef3c7;
+      border-radius: 9px; padding: 0.6rem 0.9rem;
+      margin-bottom: 1rem; font-size: 0.82rem;
+      border: 1px solid #92400e;
+    }
+    .empty-note { color: var(--faint); font-size: 0.78rem; font-style: italic; }
+    .toast {
+      position: fixed; bottom: 1.5rem; right: 1.5rem;
+      background: var(--bg-card-2); border: 1px solid var(--ok);
+      color: var(--ok); padding: 0.6rem 1rem; border-radius: 9px;
+      font-size: 0.82rem; opacity: 0; transform: translateY(8px);
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    /* ── Model Answer (collapsed by default) ───────────────── */
+    .summary-h2 {
+      font-size: 0.74rem; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted);
+      cursor: pointer; user-select: none;
+      padding: 0.5rem 0; outline: none; font-weight: 600;
+    }
+    .summary-h2::-webkit-details-marker { color: var(--faint); }
+
+    /* ── Activity Story rows ───────────────────────────────── */
+    .activity-row {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 9px; padding: 0.55rem 0.65rem;
+      margin-bottom: 0.5rem; font-size: 0.8rem;
+    }
+    .activity-row:last-child { margin-bottom: 0; }
+    .activity-meta {
+      display: flex; gap: 0.4rem; flex-wrap: wrap;
+      align-items: center; margin-bottom: 0.3rem;
+    }
+    .activity-meta .pill {
+      background: var(--bg-card-2); padding: 0.12rem 0.5rem;
+      border-radius: 4px; font-size: 0.68rem; color: var(--muted);
+    }
+    .activity-time, .activity-status {
+      font-size: 0.68rem; color: var(--faint);
+    }
+    .activity-status { text-transform: uppercase; letter-spacing: 0.06em; }
+    .activity-title {
+      color: var(--text); margin-bottom: 0.4rem; line-height: 1.45;
+      font-size: 0.86rem;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .activity-buttons { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .activity-buttons button {
+      background: var(--bg-card-2); color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 0.18rem 0.55rem; border-radius: 4px;
+      font-size: 0.7rem; cursor: pointer; font-family: inherit;
+    }
+    .activity-buttons button:hover {
+      color: var(--text); border-color: var(--border-hi);
+    }
+    .agenda-card .activity-extras {
+      font-size: 0.74rem; color: var(--muted); margin-top: 0.35rem;
+    }
+    .agenda-card .activity-extras ul {
+      list-style: none; padding-left: 0.6rem; margin-top: 0.2rem;
+    }
+    .agenda-card .activity-extras li { padding: 0.1rem 0; }
+
+    /* ── Right column ──────────────────────────────────────── */
+    .right-column {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+      position: sticky;
+      top: 1.25rem;
+      align-self: start;
+      max-height: calc(100vh - 2.5rem);
+      overflow: auto;
+    }
+    .rc-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+    .rc-header h2 {
+      font-size: 0.74rem; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted); font-weight: 600;
+    }
+    .link-btn {
+      background: transparent; border: none;
+      color: var(--accent); font: inherit; font-size: 0.76rem;
+      cursor: pointer; padding: 0;
+    }
+    .link-btn:hover { text-decoration: underline; }
+
+    /* ── Restore banner ────────────────────────────────────── */
+    .restore-banner {
+      font-size: 0.78rem; color: var(--muted);
+      margin-bottom: 0.6rem;
+      padding: 0.4rem 0.7rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    /* ── Legacy link & buttons ─────────────────────────────── */
+    .legacy-link {
+      color: var(--faint); font-size: 0.74rem; text-decoration: none;
+      border: 1px solid var(--border); padding: 0.28rem 0.7rem;
+      border-radius: 6px;
+    }
+    .legacy-link:hover { color: var(--muted); border-color: var(--border-hi); }
+
+    /* ── Responsive ────────────────────────────────────────── */
+    @media (max-width: 1100px) {
+      .app-shell {
+        grid-template-columns: 80px 1fr;
+        gap: 1rem;
+        padding: 1rem;
+      }
+      .right-column {
+        grid-column: 1 / -1; order: 3;
+        position: static; max-height: none;
+      }
+      .sidebar-label { display: none; }
+      .brand-block { padding: 0.4rem 0; justify-content: center; }
+      .brand-name, .brand-sub { display: none; }
+      .nav-item { justify-content: center; padding: 0.55rem; }
+      .profile-block .profile-name, .profile-block .profile-link { display: none; }
+      .profile-block { justify-content: center; }
+    }
+    @media (max-width: 720px) {
+      .app-shell { grid-template-columns: 1fr; padding: 0.75rem; }
+      .sidebar { display: none; }
+      .summary-cards { grid-template-columns: 1fr; }
+      .task-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!--
+    Hidden legacy mode-tab markup. Kept so existing JS handlers
+    (handleTabClick on #tabs / #view-tabs) and existing test substrings
+    (aria-labels, helper lines, "Validation View", etc.) continue to
+    resolve. The visible UI uses the sidebar nav and the .task-card grid
+    instead.
+  -->
+  <div id="legacy-tabs" hidden style="display:none;">
+    <div class="tab-row-label">Choose what you want the Student Agent to do.</div>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-mode="ask" aria-label="Ask Agent">Ask a question</button>
+      <button class="tab" data-mode="study_plan" aria-label="Study Plan">Make study plan</button>
+      <button class="tab" data-mode="exam_prep" aria-label="Exam Prep">Prepare for exam</button>
+      <button class="tab" data-mode="assignment_help" aria-label="Assignment Help">Get assignment help</button>
+      <button class="tab" data-mode="email_draft" aria-label="Email Draft">Draft email</button>
+      <button class="tab" data-mode="course_memory" aria-label="Course Memory">Review course memory</button>
+      <button class="tab" data-mode="resources" aria-label="Resources">Find resources</button>
+    </div>
+    <div class="tab-row-label">Or open a workspace view.</div>
+    <div class="tabs" id="view-tabs">
+      <button class="tab" data-mode="dashboard" aria-label="Dashboard">Dashboard</button>
+      <button class="tab" data-mode="validation" aria-label="Validation View">Validation / Evidence view</button>
+    </div>
+  </div>
+
+  <div class="app-shell">
+
+    <!-- ── SIDEBAR ───────────────────────────────────────── -->
+    <aside class="sidebar">
+      <div class="brand-block">
+        <span class="brand-logo">🧠</span>
+        <div>
+          <div class="brand-name">COGNITWIN</div>
+          <div class="brand-sub">Student Agent</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav" id="sidebar-nav">
+        <button class="nav-item active" data-section="dashboard">
+          <span class="nav-icon">🏠</span>
+          <span class="sidebar-label">Dashboard</span>
+        </button>
+        <button class="nav-item" data-section="new_task">
+          <span class="nav-icon">＋</span>
+          <span class="sidebar-label">New Task</span>
+        </button>
+        <button class="nav-item" data-section="activity">
+          <span class="nav-icon">📜</span>
+          <span class="sidebar-label">Activity Story</span>
+        </button>
+        <button class="nav-item" data-section="evidence">
+          <span class="nav-icon">🔎</span>
+          <span class="sidebar-label">Evidence</span>
+        </button>
+      </nav>
+
+      <div class="nav-spacer"></div>
+
+      <div class="profile-block">
+        <span class="avatar">S</span>
+        <div>
+          <div class="profile-name">Student</div>
+          <a class="profile-link" href="#">Settings</a>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── MAIN COLUMN ───────────────────────────────────── -->
+    <main class="main" id="main" data-section="dashboard">
+
+      <header class="main-header">
+        <div class="page-title" id="page-title">Dashboard</div>
+        <div class="header-spacer"></div>
+        <div class="chips" id="chips">
+          <span class="chip" id="chip-footprints"><span class="dot"></span>Footprints</span>
+          <span class="chip" id="chip-chroma"><span class="dot"></span>Chroma memory</span>
+          <span class="chip" id="chip-ontology"><span class="dot"></span>Ontology</span>
+          <span class="chip" id="chip-gates"><span class="dot"></span>Gate validation</span>
+        </div>
+        <button type="button" class="legacy-link" id="clear-history-btn"
+                title="Clear stored workspace history">Clear workspace history</button>
+        <a class="legacy-link" href="/lumi_legacy.html">Open legacy ↗</a>
+      </header>
+
+      <div id="restore-banner" class="restore-banner" style="display:none;">
+        Restored latest workspace result.
+      </div>
+
+      <div id="degraded-banner-host"></div>
+
+      <!-- ── DASHBOARD ─────────────────────────────────── -->
+      <div data-when="dashboard">
+        <div class="summary-cards">
+          <div class="summary-card">
+            <div class="label">Today</div>
+            <div class="big" id="sum-today">0</div>
+            <div class="sub">Items created today</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Upcoming</div>
+            <div class="big" id="sum-upcoming">0</div>
+            <div class="sub">Marked planned</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Focus</div>
+            <div class="big" id="sum-focus" style="font-size:1rem;line-height:1.4;">—</div>
+            <div class="sub">Next study or assignment</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;">
+          <button class="show-evidence-btn" data-act="show-evidence">
+            🔎 Show Evidence
+          </button>
+        </div>
+
+        <section class="panel" id="dashboard-panel">
+          <h2>Agenda &amp; Today</h2>
+          <div class="panel-body" id="dashboard-body">
+            <div class="empty-note">Loading agenda…</div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ── NEW TASK ─────────────────────────────────── -->
+      <div data-when="new_task">
+        <div id="task-chooser">
+          <div class="mode-helper" style="margin-bottom:1rem;">
+            Pick a task to start. Each task opens a focused workspace.
+          </div>
+          <div class="task-grid" id="task-grid">
+            <button class="task-card" data-mode="study_plan" aria-label="Study Plan">
+              <span class="task-icon">📅</span>
+              <span class="task-title">Make Study Plan</span>
+              <span class="task-desc">Create a daily or weekly study plan.</span>
+            </button>
+            <button class="task-card" data-mode="exam_prep" aria-label="Exam Prep">
+              <span class="task-icon">📝</span>
+              <span class="task-title">Prepare for Exam</span>
+              <span class="task-desc">Focus on quiz, midterm, and exam preparation.</span>
+            </button>
+            <button class="task-card" data-mode="assignment_help" aria-label="Assignment Help">
+              <span class="task-icon">📚</span>
+              <span class="task-title">Get Assignment Help</span>
+              <span class="task-desc">Break an assignment into steps, outline, and checklist.</span>
+            </button>
+            <button class="task-card" data-mode="email_draft" aria-label="Email Draft">
+              <span class="task-icon">✉️</span>
+              <span class="task-title">Draft Email</span>
+              <span class="task-desc">Prepare an email draft. Nothing is sent automatically.</span>
+            </button>
+            <button class="task-card" data-mode="course_memory" aria-label="Course Memory">
+              <span class="task-icon">🧠</span>
+              <span class="task-title">Review Course Memory</span>
+              <span class="task-desc">Summarize recent footprint and course history.</span>
+            </button>
+            <button class="task-card" data-mode="resources" aria-label="Resources">
+              <span class="task-icon">🔗</span>
+              <span class="task-title">Find Resources</span>
+              <span class="task-desc">Recommend notes, practice, and resources.</span>
+            </button>
+          </div>
+        </div>
+
+        <section class="panel" id="task-workspace" style="display:none;">
+          <button class="back-to-tasks" id="back-to-tasks">← Back to tasks</button>
+          <h2>Student Work Area</h2>
+          <div class="panel-body">
+            <div id="mode-helper" class="mode-helper">Ask any school-related question.</div>
+            <textarea id="question" placeholder="Ask the Student Agent…"></textarea>
+            <div class="examples" id="examples">
+              <button class="example">What do I need to focus on for my physics exam?</button>
+              <button class="example">Summarize my recent course-related footprint.</button>
+              <button class="example">Which topics look weak based on my memory?</button>
+              <button class="example">Explain this assignment using my course context.</button>
+            </div>
+            <button class="send-btn" id="send-btn">Send</button>
+
+            <div class="student-output-card">
+              <div class="so-header">
+                <h2>Student Output</h2>
+                <button class="show-evidence-btn" data-act="show-evidence">
+                  🔎 Show Evidence
+                </button>
+              </div>
+              <div id="student-output-host">
+                <div class="empty-note">Output adapts to the selected task — ask a question to populate.</div>
+              </div>
+            </div>
+
+            <div class="study-grid" id="study-output">
+              <div>
+                <div class="label">Focus topics</div>
+                <ul id="focus-topics"><li class="empty-note">—</li></ul>
+              </div>
+              <div>
+                <div class="label">Suggested next steps</div>
+                <ul id="next-steps"><li class="empty-note">—</li></ul>
+              </div>
+              <div>
+                <div class="label">Mini checklist</div>
+                <ul class="checklist" id="checklist"><li class="empty-note">—</li></ul>
+              </div>
+              <div>
+                <div class="label">Risk / confidence summary</div>
+                <div id="risk-summary" class="empty-note">—</div>
+              </div>
+            </div>
+
+            <details style="margin-top: 1.2rem;">
+              <summary class="summary-h2">Model Answer</summary>
+              <div class="answer-box" id="answer-box">
+                <span class="empty-note">No answer yet — ask a question above.</span>
+              </div>
+              <div class="lang-note" id="lang-note" style="display:none;">
+                Answer rendered in Turkish (model default).
+              </div>
+              <div class="actions" id="action-row" style="display:none;">
+                <button class="action-btn" data-act="checklist">Create study checklist</button>
+                <button class="action-btn" data-act="summarize">Summarize sources</button>
+                <button class="action-btn" data-act="validated">Show validated claims</button>
+                <button class="action-btn" data-act="ontology">Explain with ontology</button>
+                <button class="action-btn" data-act="followups">Generate follow-up questions</button>
+                <button class="action-btn" data-act="save">Save as study note</button>
+              </div>
+            </details>
+          </div>
+        </section>
+      </div>
+
+      <!-- ── ACTIVITY STORY (full) ─────────────────────── -->
+      <div data-when="activity">
+        <section class="panel" id="activity-story-section">
+          <h2>Activity Story</h2>
+          <div class="panel-body" id="activity-story-body" data-activity-host>
+            <div class="empty-note">Your asked questions, plans, and drafts will appear here.</div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ── EVIDENCE DRAWER ───────────────────────────── -->
+      <div data-when="evidence">
+        <div class="evidence-drawer" id="evidence-drawer" hidden>
+          <details style="margin-bottom: 1rem;">
+            <summary class="summary-h2">Model Answer</summary>
+            <div class="answer-box" id="evidence-answer-box">
+              <span class="empty-note">No answer yet.</span>
+            </div>
+          </details>
+
+          <section class="panel">
+            <h2>Retrieved Memory</h2>
+            <div class="panel-body" id="sources-list">
+              <div class="empty-note">Memory snippets will appear after you ask a question.</div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Gate Validation</h2>
+            <div class="panel-body" id="gates-panel">
+              <div class="empty-note">Gate report will appear after you ask a question.</div>
+            </div>
+          </section>
+
+          <section class="panel collapsible" id="ontology-panel">
+            <h2 onclick="this.parentElement.classList.toggle('collapsed')">Ontology Context</h2>
+            <div class="panel-body" id="ontology-body">
+              <div class="empty-note">Ontology context will appear after you ask a question.</div>
+            </div>
+          </section>
+
+          <section class="panel collapsible" id="footprint-panel">
+            <h2 onclick="this.parentElement.classList.toggle('collapsed')">Footprint Summary</h2>
+            <div class="panel-body" id="footprint-body">
+              <div class="empty-note">Loading footprint summary…</div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Why this answer?</h2>
+            <div class="panel-body" id="why-body">
+              <div class="empty-note">Explanation will appear after you ask a question.</div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ── RIGHT COLUMN — Activity Story (compact) ───────── -->
+    <aside class="right-column">
+      <div class="rc-header">
+        <h2>Activity Story</h2>
+        <button class="link-btn" id="activity-view-all">View all →</button>
+      </div>
+      <div id="activity-story-body-rc" data-activity-host data-limit="5">
+        <div class="empty-note">Recent activity will appear here.</div>
+      </div>
+    </aside>
+
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const STATE = {
+      mode: 'ask',
+      section: 'dashboard',
+      lastResponse: null,
+      relevant: new Set(),
+      ignored: new Set(),
+    };
+
+    const MODE_META = {
+      ask: {
+        helper: 'Ask any school-related question.',
+        placeholder: 'Ask the Student Agent…',
+        examples: [
+          'What do I need to focus on for my physics exam?',
+          'Summarize my recent course-related footprint.',
+          'Which topics look weak based on my memory?',
+          'Explain this assignment using my course context.',
+        ],
+      },
+      study_plan: {
+        helper: 'Create a daily or weekly study plan.',
+        placeholder: 'Describe the period or course you want to plan for…',
+        examples: [
+          'Plan my next week for Physics 101.',
+          'Build a daily 60-minute schedule.',
+          'Plan two-week midterm prep.',
+          'Plan around my upcoming deadlines.',
+        ],
+      },
+      exam_prep: {
+        helper: 'Focus on quiz, midterm, and exam preparation.',
+        placeholder: 'Which exam, course, and date?',
+        examples: [
+          'Prepare me for the Physics 101 midterm.',
+          'Focus on weak thermodynamics topics.',
+          'Build a one-week exam schedule.',
+          "Practice questions for Newton's laws.",
+        ],
+      },
+      assignment_help: {
+        helper: 'Break an assignment into steps, outline, and checklist.',
+        placeholder: 'Describe the assignment…',
+        examples: [
+          'Outline an essay for my history assignment.',
+          'Break my CS homework into steps.',
+          'Pre-submission checklist for my lab report.',
+          'What sources should I cite?',
+        ],
+      },
+      email_draft: {
+        helper: 'Prepare an email draft. Nothing is sent automatically.',
+        placeholder: 'Who is the recipient and what is it about?',
+        examples: [
+          'Email my professor about a deadline extension.',
+          'Email my TA about a grading question.',
+          'Email my advisor to schedule a meeting.',
+          'Polite follow-up after a missed class.',
+        ],
+      },
+      course_memory: {
+        helper: 'Summarize recent footprint and course history.',
+        placeholder: 'Which course or time window?',
+        examples: [
+          'Summarize my last two weeks of Physics.',
+          'Show recent assignments and quizzes.',
+          'What topics keep recurring in my memory?',
+          'Surface upcoming deadlines from my footprint.',
+        ],
+      },
+      resources: {
+        helper: 'Recommend notes, practice, and resources.',
+        placeholder: 'Topic or course you need resources for…',
+        examples: [
+          'Recommend resources for thermodynamics.',
+          "Find practice problems on Newton's laws.",
+          'Suggest readings for chapter 4.',
+          'Open-courseware on linear algebra.',
+        ],
+      },
+      dashboard: {
+        helper: 'Workspace overview.',
+        placeholder: '',
+        examples: [],
+      },
+      validation: {
+        helper: 'Inspect gate validation and evidence for the latest answer.',
+        placeholder: '',
+        examples: [],
+      },
+    };
+
+    const SECTION_TITLES = {
+      dashboard: 'Dashboard',
+      new_task:  'New Task',
+      activity:  'Activity Story',
+      evidence:  'Evidence',
+    };
+
+    // ── Helpers ────────────────────────────────────────────
+    function el(id) { return document.getElementById(id); }
+    function showToast(msg) {
+      const t = el('toast'); t.textContent = msg; t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1800);
+    }
+    function escapeHtml(s) {
+      return (s || '').replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[c]));
+    }
+
+    // ── Section switching ─────────────────────────────────
+    function applySection(section) {
+      STATE.section = section;
+      const main = el('main');
+      if (main) main.dataset.section = section;
+      const title = el('page-title');
+      if (title) title.textContent = SECTION_TITLES[section] || 'Dashboard';
+      document.querySelectorAll('#sidebar-nav .nav-item').forEach(b => {
+        b.classList.toggle('active', b.dataset.section === section);
+      });
+      if (section === 'dashboard') {
+        loadAgenda();
+      } else if (section === 'evidence') {
+        const drawer = el('evidence-drawer');
+        if (drawer) drawer.hidden = false;
+        // Re-paint evidence panels from last response (if any).
+        if (STATE.lastResponse) {
+          renderEvidencePanels(STATE.lastResponse);
+        }
+      } else if (section === 'activity') {
+        loadActivity();
+      } else if (section === 'new_task') {
+        // Reset to chooser (unless workspace is already open from a prior click).
+      }
+    }
+
+    function showTaskWorkspace() {
+      el('task-chooser').style.display = 'none';
+      el('task-workspace').style.display = 'block';
+    }
+    function showTaskChooser() {
+      el('task-workspace').style.display = 'none';
+      el('task-chooser').style.display = 'block';
+    }
+
+    // ── Sidebar nav ────────────────────────────────────────
+    document.querySelectorAll('#sidebar-nav .nav-item').forEach(b => {
+      b.addEventListener('click', () => applySection(b.dataset.section));
+    });
+
+    // ── Task cards ─────────────────────────────────────────
+    document.querySelectorAll('.task-card').forEach(card => {
+      card.addEventListener('click', () => {
+        STATE.mode = card.dataset.mode;
+        applyMode(STATE.mode);
+        showTaskWorkspace();
+      });
+    });
+    el('back-to-tasks').addEventListener('click', showTaskChooser);
+
+    // ── Show Evidence buttons ──────────────────────────────
+    document.querySelectorAll('[data-act="show-evidence"]').forEach(b => {
+      b.addEventListener('click', () => applySection('evidence'));
+    });
+
+    // ── View-all (right column → activity section) ─────────
+    el('activity-view-all').addEventListener('click', () => {
+      applySection('activity');
+    });
+
+    // ── Status chips on load ───────────────────────────────
+    async function loadStatus() {
+      try {
+        const r = await fetch('/api/student/agent/status');
+        if (!r.ok) throw new Error('status ' + r.status);
+        const data = await r.json();
+        applyStatus(data);
+      } catch (e) {
+        console.warn('status load failed', e);
+        for (const id of ['chip-footprints','chip-chroma','chip-ontology','chip-gates']) {
+          const node = el(id);
+          if (node) node.classList.add('bad');
+        }
+      }
+    }
+    function applyStatus(data) {
+      const set = (id, sub, label) => {
+        const node = el(id);
+        if (!node) return;
+        const ok = sub && sub.available;
+        node.classList.remove('ok','warn','bad');
+        node.classList.add(ok ? 'ok' : 'bad');
+        node.lastChild.textContent = ' ' + label + (ok ? '' : ' (unavailable)');
+      };
+      set('chip-footprints', data.footprints, 'Footprints');
+      set('chip-chroma',     data.chroma,     'Chroma memory');
+      set('chip-ontology',   data.ontology,   'Ontology');
+      set('chip-gates',      data.gates,      'Gate validation');
+      renderFootprint({
+        ...data.footprints,
+        recent_course_signals: [],
+        weak_hints: [],
+        upcoming_mentions: [],
+      });
+    }
+
+    // ── Mode helper / examples ─────────────────────────────
+    function applyMode(mode) {
+      STATE.mode = mode;
+      const meta = MODE_META[mode] || MODE_META.ask;
+      const helperEl = el('mode-helper');
+      if (helperEl) helperEl.textContent = meta.helper;
+      const q = el('question');
+      if (q && meta.placeholder !== undefined) q.placeholder = meta.placeholder;
+      const ex = el('examples');
+      if (ex) {
+        ex.innerHTML = '';
+        (meta.examples || []).forEach(text => {
+          const b = document.createElement('button');
+          b.className = 'example';
+          b.textContent = text;
+          ex.appendChild(b);
+        });
+      }
+    }
+
+    // Hidden legacy tab handler kept for back-compat (no-op effects).
+    function handleTabClick(e) {
+      if (!e.target.classList.contains('tab')) return;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      e.target.classList.add('active');
+      applyMode(e.target.dataset.mode);
+    }
+    el('tabs').addEventListener('click', handleTabClick);
+    el('view-tabs').addEventListener('click', handleTabClick);
+
+    // ── Examples ───────────────────────────────────────────
+    el('examples').addEventListener('click', (e) => {
+      if (e.target.classList.contains('example')) {
+        el('question').value = e.target.textContent;
+      }
+    });
+
+    // ── Send ───────────────────────────────────────────────
+    el('send-btn').addEventListener('click', sendChat);
+    async function sendChat() {
+      const msg = el('question').value.trim();
+      if (!msg) return;
+      const btn = el('send-btn');
+      btn.disabled = true; btn.textContent = 'Thinking…';
+      el('answer-box').textContent = '…';
+      try {
+        const r = await fetch('/api/student/agent/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg, mode: STATE.mode }),
+        });
+        const data = await r.json();
+        STATE.lastResponse = data;
+        renderResponse(data);
+        loadActivity();
+      } catch (err) {
+        el('answer-box').textContent = 'Network error: ' + err.message;
+      } finally {
+        btn.disabled = false; btn.textContent = 'Send';
+      }
+    }
+
+    // ── Render ─────────────────────────────────────────────
+    function renderResponse(data) {
+      el('answer-box').textContent = data.answer || '(no answer)';
+      const evAns = el('evidence-answer-box');
+      if (evAns) evAns.textContent = data.answer || '(no answer)';
+      el('lang-note').style.display = (data.language_detected === 'tr') ? 'block' : 'none';
+      el('action-row').style.display = 'flex';
+
+      renderDegraded(data);
+      renderEvidencePanels(data);
+      renderStudentOutput(data.student_output || {});
+      renderStudyOutput(data.study_output || {});
+    }
+
+    function renderEvidencePanels(data) {
+      renderSources(data.sources || []);
+      renderGates(data.gate_report || {});
+      renderOntology(data.ontology_context || {});
+      renderFootprint(data.footprint_summary || {});
+      const why = el('why-body');
+      if (why) why.textContent = data.why || '';
+    }
+
+    // ── Student Output (intent-aware) ─────────────────────────
+    function renderStudentOutput(out) {
+      const host = el('student-output-host');
+      if (!out || !out.intent) {
+        host.innerHTML = '<div class="empty-note">Output adapts to the selected task — ask a question to populate.</div>';
+        return;
+      }
+      const head =
+        '<div class="kv"><span class="k">Intent:</span> <span class="pill">' + escapeHtml(out.intent) + '</span>' +
+        ' <span class="conf-pill ' + (out.confidence || 'low') + '">' + (out.confidence || 'low').toUpperCase() + '</span></div>' +
+        (out.title ? '<div style="font-weight:600;margin-top:0.4rem;font-size:1rem;">' + escapeHtml(out.title) + '</div>' : '') +
+        (out.summary ? '<div style="margin-top:0.4rem;">' + escapeHtml(out.summary) + '</div>' : '');
+
+      let body = '';
+      if (out.intent === 'email_draft') {
+        body = renderEmailDraft(out);
+      } else if (out.intent === 'assignment_help') {
+        body = renderAssignmentHelp(out);
+      } else if (out.intent === 'study_plan' || out.intent === 'exam_prep') {
+        body = renderPlanBlocks(out);
+      } else if (out.intent === 'resource_recommendation') {
+        body = renderResources(out);
+      } else if (out.intent === 'course_memory') {
+        body = renderCourseMemory(out);
+      } else {
+        body = renderQA(out);
+      }
+      const risks = (out.risks || []).map(r => '<li>⚠ ' + escapeHtml(r) + '</li>').join('');
+      const risksHtml = risks
+        ? '<div style="margin-top:0.7rem;"><div class="label">Risks / missing info</div><ul>' + risks + '</ul></div>'
+        : '';
+      host.innerHTML = head + body + risksHtml;
+      const copyBtn = host.querySelector('[data-act="copy-email"]');
+      if (copyBtn) copyBtn.addEventListener('click', () => copyEmailDraft(out.email));
+    }
+
+    function bullets(items) {
+      if (!items || !items.length) return '<li class="empty-note">—</li>';
+      return items.map(i => '<li>' + escapeHtml(i) + '</li>').join('');
+    }
+
+    function renderEmailDraft(out) {
+      const e = out.email || {};
+      return (
+        '<div style="margin-top:0.8rem;">' +
+          '<div class="label">Subject</div>' +
+          '<div class="answer-box" style="margin:0.2rem 0;">' + escapeHtml(e.subject || '—') + '</div>' +
+          '<div class="label">Body</div>' +
+          '<div class="answer-box" style="margin:0.2rem 0;">' + escapeHtml(e.body || '—') + '</div>' +
+          '<div class="kv"><span class="k">Tone:</span> ' + escapeHtml(e.tone || '—') + '</div>' +
+          '<div class="actions">' +
+            '<button class="action-btn" data-act="copy-email">Copy email</button>' +
+          '</div>' +
+          '<div class="lang-note" style="display:block;color:#94a3b8;">Drafts are never sent automatically — review and send yourself.</div>' +
+        '</div>' +
+        '<div style="margin-top:0.7rem;"><div class="label">Pre-send checklist</div><ul>' + bullets(out.checklist) + '</ul></div>'
+      );
+    }
+
+    function renderAssignmentHelp(out) {
+      return (
+        '<div style="margin-top:0.7rem;"><div class="label">Suggested outline</div><ul>' + bullets(out.schedule_blocks) + '</ul></div>' +
+        '<div style="margin-top:0.7rem;"><div class="label">Steps to complete</div><ul>' + bullets(out.next_steps) + '</ul></div>' +
+        '<div style="margin-top:0.7rem;"><div class="label">Pre-submission checklist</div><ul>' + bullets(out.checklist) + '</ul></div>'
+      );
+    }
+
+    function renderPlanBlocks(out) {
+      const priority = (out.focus_topics && out.focus_topics[0]) || '—';
+      return (
+        '<div class="kv"><span class="k">Priority:</span> ' + escapeHtml(priority) + '</div>' +
+        '<div style="margin-top:0.7rem;"><div class="label">Focus topics</div><ul>' + bullets(out.focus_topics) + '</ul></div>' +
+        '<div style="margin-top:0.7rem;"><div class="label">Schedule blocks</div><ul>' + bullets(out.schedule_blocks) + '</ul></div>' +
+        '<div style="margin-top:0.7rem;"><div class="label">Next steps</div><ul>' + bullets(out.next_steps) + '</ul></div>' +
+        '<div style="margin-top:0.7rem;"><div class="label">Checklist</div><ul>' + bullets(out.checklist) + '</ul></div>'
+      );
+    }
+
+    function renderResources(out) {
+      const items = (out.resources || []).map(r =>
+        '<li><span class="pill">' + escapeHtml(r.type || 'resource') + '</span> ' +
+        escapeHtml(r.label || '') +
+        (r.note ? ' <span class="empty-note">— ' + escapeHtml(r.note) + '</span>' : '') +
+        '</li>'
+      ).join('');
+      return (
+        '<div style="margin-top:0.7rem;"><div class="label">Suggested resources</div>' +
+          '<ul>' + (items || '<li class="empty-note">—</li>') + '</ul></div>' +
+        '<div style="margin-top:0.7rem;"><div class="label">Next steps</div><ul>' + bullets(out.next_steps) + '</ul></div>'
+      );
+    }
+
+    function renderCourseMemory(out) {
+      return (
+        '<div style="margin-top:0.7rem;"><div class="label">Topics from your memory</div><ul>' + bullets(out.focus_topics) + '</ul></div>' +
+        '<div style="margin-top:0.7rem;"><div class="label">Next steps</div><ul>' + bullets(out.next_steps) + '</ul></div>' +
+        '<div style="margin-top:0.7rem;"><div class="label">Checklist</div><ul>' + bullets(out.checklist) + '</ul></div>'
+      );
+    }
+
+    function renderQA(out) {
+      return (
+        '<div style="margin-top:0.7rem;"><div class="label">Focus topics</div><ul>' + bullets(out.focus_topics) + '</ul></div>' +
+        '<div style="margin-top:0.7rem;"><div class="label">Next steps</div><ul>' + bullets(out.next_steps) + '</ul></div>'
+      );
+    }
+
+    function copyEmailDraft(email) {
+      if (!email) { showToast('Nothing to copy'); return; }
+      const txt = 'Subject: ' + (email.subject || '') + '\n\n' + (email.body || '');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(
+          () => showToast('Email draft copied'),
+          () => showToast('Copy failed — select and copy manually'),
+        );
+      } else {
+        showToast('Clipboard API unavailable');
+      }
+    }
+
+    function renderDegraded(data) {
+      const host = el('degraded-banner-host');
+      host.innerHTML = '';
+      if (data.degraded) {
+        const div = document.createElement('div');
+        div.className = 'degraded-banner';
+        div.textContent = 'Working in degraded mode — ' + (data.fallback_mode || 'partial subsystems') +
+                          '. The answer may be less reliable.';
+        host.appendChild(div);
+      }
+    }
+
+    function renderSources(sources) {
+      const list = el('sources-list');
+      if (!list) return;
+      list.innerHTML = '';
+      if (!sources.length) {
+        list.innerHTML = '<div class="empty-note">No memory available right now. Reconnect ChromaDB to enable grounded answers.</div>';
+        return;
+      }
+      sources.forEach(src => {
+        const card = document.createElement('div');
+        card.className = 'source-card';
+        const id = 'src-' + src.rank;
+        if (STATE.ignored.has(id)) card.classList.add('ignored');
+        if (STATE.relevant.has(id)) card.classList.add('relevant');
+        const meta = ['<span class="pill">#' + src.rank + '</span>',
+                      '<span class="pill">' + escapeHtml(src.source_type || 'memory') + '</span>'];
+        if (src.timestamp) meta.push('<span class="pill">' + escapeHtml(src.timestamp) + '</span>');
+        if (src.course_or_topic) meta.push('<span class="pill">' + escapeHtml(src.course_or_topic) + '</span>');
+        card.innerHTML =
+          '<div class="source-meta">' + meta.join('') + '</div>' +
+          '<div>' + escapeHtml(src.snippet || '') + '</div>' +
+          '<div class="source-buttons">' +
+            '<button data-act="use" data-id="' + id + '">Use in answer</button>' +
+            '<button data-act="relevant" data-id="' + id + '">Mark relevant</button>' +
+            '<button data-act="ignore" data-id="' + id + '">Ignore</button>' +
+          '</div>';
+        card.querySelectorAll('button').forEach(b => {
+          b.addEventListener('click', () => handleSourceAction(b.dataset.act, id, src));
+        });
+        list.appendChild(card);
+      });
+    }
+    function handleSourceAction(act, id, src) {
+      if (act === 'use') {
+        el('question').value = (el('question').value + ' [Using rank ' + src.rank + ']').trim();
+        showToast('Snippet hint added to your question');
+      } else if (act === 'relevant') {
+        STATE.relevant.add(id); STATE.ignored.delete(id);
+      } else if (act === 'ignore') {
+        STATE.ignored.add(id); STATE.relevant.delete(id);
+      }
+      renderSources(STATE.lastResponse ? STATE.lastResponse.sources || [] : []);
+    }
+
+    function renderGates(report) {
+      const host = el('gates-panel');
+      if (!host) return;
+      host.innerHTML = '';
+      const conf = report.overall_confidence || 'low';
+      const dots = { high: '●●●', medium: '●●○', low: '●○○' }[conf] || '●○○';
+      const head = document.createElement('div');
+      head.innerHTML =
+        '<div class="confidence">Confidence: ' +
+          '<span class="conf-pill ' + conf + '">' + dots + ' ' + conf.toUpperCase() + '</span>' +
+        '</div>' +
+        (report.main_warning ? '<div class="gate-warn">⚠ ' + escapeHtml(report.main_warning) + '</div>' : '') +
+        (report.recommended_user_action ? '<div class="gate-action">→ ' + escapeHtml(report.recommended_user_action) + '</div>' : '');
+      host.appendChild(head);
+      const gates = report.gates || {};
+      const order = ['C1','C2','C4','C5','C6','C7','C3','A1'];
+      const seen = new Set();
+      const rows = [];
+      order.forEach(code => { if (gates[code]) { rows.push([code, gates[code]]); seen.add(code); } });
+      Object.entries(gates).forEach(([code, g]) => { if (!seen.has(code)) rows.push([code, g]); });
+      if (!rows.length) {
+        host.innerHTML += '<div class="empty-note">Gate report unavailable.</div>';
+        return;
+      }
+      rows.forEach(([code, g]) => {
+        const row = document.createElement('div');
+        row.className = 'gate-row';
+        row.innerHTML =
+          '<div>' + escapeHtml(g.label || code) + '</div>' +
+          '<div><span class="status-pill ' + g.status + '">' + g.status + '</span></div>' +
+          '<div class="gate-evidence">' + escapeHtml(g.evidence || '') + '</div>';
+        host.appendChild(row);
+      });
+    }
+
+    function renderOntology(ctx) {
+      const host = el('ontology-body');
+      if (!host) return;
+      if (!ctx.available) {
+        host.innerHTML = '<div class="empty-note">Ontology not loaded — answer relies on memory and prompt only.</div>';
+        return;
+      }
+      const concepts = (ctx.concepts_used || []).map(c => '<span class="pill">' + escapeHtml(c) + '</span>').join(' ');
+      const relations = (ctx.relations_used || []).map(r => '<span class="pill">' + escapeHtml(r) + '</span>').join(' ');
+      const blocks = (ctx.blocks || []).map(b => '<li>' + escapeHtml(b) + '</li>').join('');
+      host.innerHTML =
+        '<div class="kv"><span class="k">Concepts used:</span> ' + (concepts || '—') + '</div>' +
+        '<div class="kv"><span class="k">Relations:</span> ' + (relations || '—') + '</div>' +
+        '<div class="kv"><span class="k">Blocks:</span><ul>' + blocks + '</ul></div>';
+    }
+
+    function renderFootprint(fp) {
+      const host = el('footprint-body');
+      if (!host) return;
+      if (!fp || !fp.available) {
+        host.innerHTML = '<div class="empty-note">No footprint file detected. Add one at <code>src/data/masked/footprints_masked.txt</code> to enable memory grounding.</div>';
+        return;
+      }
+      const recent = (fp.recent_course_signals || []).map(s => '<li>' + escapeHtml(s) + '</li>').join('');
+      const upcoming = (fp.upcoming_mentions || []).map(s => '<li>' + escapeHtml(s) + '</li>').join('');
+      const weak = (fp.weak_hints || []).map(s => '<li>' + escapeHtml(s) + '</li>').join('');
+      host.innerHTML =
+        '<div class="kv"><span class="k">File:</span> ' + escapeHtml(fp.file || '—') +
+            (fp.masked ? ' <span class="pill" style="background:#14532d;color:#4ade80;">masked ✓</span>'
+                       : ' <span class="pill" style="background:#7f1d1d;color:#f87171;">unmasked ✗</span>') + '</div>' +
+        '<div class="kv"><span class="k">Records:</span> ' + (fp.record_count || 0) + '</div>' +
+        '<div class="kv"><span class="k">Recent course signals:</span><ul>' + (recent || '<li class="empty-note">—</li>') + '</ul></div>' +
+        '<div class="kv"><span class="k">Weak hints:</span><ul>' + (weak || '<li class="empty-note">—</li>') + '</ul></div>' +
+        '<div class="kv"><span class="k">Upcoming mentions:</span><ul>' + (upcoming || '<li class="empty-note">—</li>') + '</ul></div>';
+    }
+
+    function renderStudyOutput(s) {
+      const list = (id, items) => {
+        const node = el(id); if (!node) return;
+        node.innerHTML = '';
+        if (!items || !items.length) { node.innerHTML = '<li class="empty-note">—</li>'; return; }
+        items.forEach(it => {
+          const li = document.createElement('li');
+          li.textContent = it;
+          node.appendChild(li);
+        });
+      };
+      list('focus-topics', s.focus_topics);
+      list('next-steps', s.suggested_next_steps);
+      const cl = el('checklist'); if (cl) {
+        cl.innerHTML = '';
+        (s.checklist || []).forEach((it, i) => {
+          const li = document.createElement('li');
+          li.innerHTML = '<label><input type="checkbox" id="cl-' + i + '"> ' + escapeHtml(it) + '</label>';
+          cl.appendChild(li);
+        });
+        if (!(s.checklist || []).length) cl.innerHTML = '<li class="empty-note">—</li>';
+      }
+      const rs = el('risk-summary');
+      if (rs) {
+        rs.textContent = s.risk_summary || '—';
+        rs.classList.remove('empty-note');
+      }
+    }
+
+    // ── Action buttons ─────────────────────────────────────
+    el('action-row').addEventListener('click', (e) => {
+      const act = e.target.dataset.act;
+      if (!act || !STATE.lastResponse) return;
+      const r = STATE.lastResponse;
+      if (act === 'checklist') {
+        showToast('Checklist already shown in Study Output');
+      } else if (act === 'summarize') {
+        const lines = (r.sources || []).map(s => '#' + s.rank + ' — ' + (s.snippet || '').slice(0, 80));
+        el('answer-box').textContent = lines.join('\n') || '(no sources)';
+      } else if (act === 'validated') {
+        el('answer-box').textContent =
+          (r.gate_report && r.gate_report.conjunction)
+            ? '✓ All active gates passed for the answer above.'
+            : '⚠ Some gates did not pass. See Gate Validation panel for details.';
+      } else if (act === 'ontology') {
+        const blocks = (r.ontology_context && r.ontology_context.blocks) || [];
+        el('answer-box').textContent =
+          (r.answer || '') + '\n\n— Ontology used —\n' + blocks.join('\n');
+      } else if (act === 'followups') {
+        const topics = (r.study_output && r.study_output.focus_topics) || [];
+        const qs = topics.length
+          ? topics.slice(0, 3).map(t => '• What are the key formulas in ' + t + '?')
+          : ['• Can you list specific topics from my recent footprint?'];
+        el('answer-box').textContent = 'Follow-up questions:\n' + qs.join('\n');
+      } else if (act === 'save') {
+        saveAsNote(r);
+      }
+    });
+    async function saveAsNote(r) {
+      const title = (el('question').value || 'Study note').slice(0, 80);
+      try {
+        const resp = await fetch('/api/student/agent/note', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ title, body: r.answer || '' }),
+        });
+        if (resp.ok) showToast('Note saved');
+        else showToast('Could not save note');
+      } catch { showToast('Could not save note'); }
+    }
+
+    // ── Workspace history restore ──────────────────────────
+    async function loadLatest() {
+      try {
+        const r = await fetch('/api/student/agent/history/latest');
+        if (!r.ok) return;
+        const item = await r.json();
+        if (!item) return;
+        if (item.message) el('question').value = item.message;
+        STATE.lastResponse = item;
+        renderResponse(item);
+        const banner = el('restore-banner');
+        if (banner) banner.style.display = 'block';
+      } catch (e) {
+        console.warn('history restore failed', e);
+      }
+    }
+
+    el('clear-history-btn').addEventListener('click', async () => {
+      try {
+        await fetch('/api/student/agent/history', { method: 'DELETE' });
+        showToast('Workspace history cleared');
+        const banner = el('restore-banner');
+        if (banner) banner.style.display = 'none';
+        loadActivity();
+      } catch {
+        showToast('Could not clear history');
+      }
+    });
+
+    // ── Activity Story ────────────────────────────────────
+    async function loadActivity() {
+      try {
+        const r = await fetch('/api/student/agent/history');
+        if (!r.ok) return;
+        const data = await r.json();
+        renderActivity(data.items || []);
+      } catch (e) { console.warn('activity load failed', e); }
+    }
+
+    function renderActivity(items) {
+      document.querySelectorAll('[data-activity-host]').forEach(host => {
+        const limit = parseInt(host.dataset.limit || '0', 10) || items.length;
+        const slice = items.slice(0, limit);
+        if (!slice.length) {
+          host.innerHTML = '<div class="empty-note">Your asked questions, plans, and drafts will appear here.</div>';
+          return;
+        }
+        host.innerHTML = slice.map(activityRowHtml).join('');
+        host.querySelectorAll('[data-history-id]').forEach(row => {
+          const id = row.dataset.historyId;
+          const open = row.querySelector('[data-act="open"]');
+          const planned = row.querySelector('[data-act="planned"]');
+          const done = row.querySelector('[data-act="done"]');
+          if (open) open.addEventListener('click', () => restoreItem(id));
+          if (planned) planned.addEventListener('click', () => markStatus(id, 'planned'));
+          if (done) done.addEventListener('click', () => markStatus(id, 'done'));
+        });
+      });
+    }
+
+    function activityRowHtml(item) {
+      const conf = (item.gate_report && item.gate_report.overall_confidence) || 'low';
+      const intent = item.intent || 'academic_qa';
+      const title = item.title || (item.message || '').slice(0, 80);
+      const t = (item.created_at || item.timestamp || '');
+      const time = t.length >= 16 ? t.slice(11, 16) : '';
+      const status = item.status || 'saved';
+      return (
+        '<div class="activity-row" data-history-id="' + escapeHtml(item.id || '') + '">' +
+          '<div class="activity-meta">' +
+            '<span class="pill">' + escapeHtml(intent) + '</span>' +
+            '<span class="conf-pill ' + conf + '">' + conf.toUpperCase() + '</span>' +
+            (time ? '<span class="activity-time">' + escapeHtml(time) + '</span>' : '') +
+            '<span class="activity-status">' + escapeHtml(status) + '</span>' +
+          '</div>' +
+          '<div class="activity-title">' + escapeHtml(title) + '</div>' +
+          '<div class="activity-buttons">' +
+            '<button data-act="open">Open</button>' +
+            '<button data-act="planned">Mark planned</button>' +
+            '<button data-act="done">Mark done</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }
+
+    async function restoreItem(id) {
+      try {
+        const r = await fetch('/api/student/agent/history');
+        const data = await r.json();
+        const item = (data.items || []).find(x => x.id === id);
+        if (!item) { showToast('Item not found'); return; }
+        if (item.message) el('question').value = item.message;
+        STATE.lastResponse = item;
+        renderResponse(item);
+        showToast('Workspace restored');
+      } catch { showToast('Could not restore'); }
+    }
+
+    async function markStatus(id, status) {
+      try {
+        const r = await fetch('/api/student/agent/history/' + encodeURIComponent(id), {
+          method: 'PATCH', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ status }),
+        });
+        if (r.ok) {
+          showToast('Marked ' + status);
+          loadActivity();
+          if (STATE.section === 'dashboard') loadAgenda();
+        } else {
+          showToast('Update failed');
+        }
+      } catch { showToast('Update failed'); }
+    }
+
+    // ── Agenda / Dashboard ────────────────────────────────
+    async function loadAgenda() {
+      try {
+        const r = await fetch('/api/student/agent/agenda');
+        if (!r.ok) return;
+        const data = await r.json();
+        renderAgenda(data);
+      } catch (e) { console.warn('agenda load failed', e); }
+    }
+
+    function renderAgenda(data) {
+      const host = el('dashboard-body');
+      if (!host) return;
+
+      // Summary cards
+      const today = (data.today || []).length;
+      const upcoming = (data.upcoming || []).length;
+      el('sum-today').textContent = String(today);
+      el('sum-upcoming').textContent = String(upcoming);
+      const focusSrc = (data.study_blocks && data.study_blocks[0]) ||
+                       (data.assignment_tasks && data.assignment_tasks[0]) ||
+                       (data.today && data.today[0]) || null;
+      el('sum-focus').textContent = focusSrc ? (focusSrc.title || '—') : '—';
+
+      const buckets = [
+        ['Today',            data.today,            'today'],
+        ['Upcoming',         data.upcoming,         'upcoming'],
+        ['Study Blocks',     data.study_blocks,     'study_blocks'],
+        ['Assignment Tasks', data.assignment_tasks, 'assignment_tasks'],
+        ['Saved Drafts',     data.saved_drafts,     'saved_drafts'],
+        ['Resources',        data.resources,        'resources'],
+        ['Completed',        data.completed,        'completed'],
+      ];
+      host.innerHTML =
+        '<div class="agenda-board">' +
+        buckets.map(([title, items, key]) =>
+          agendaSectionHtml(title, items || [], key)
+        ).join('') +
+        '</div>';
+      host.querySelectorAll('[data-history-id]').forEach(row => {
+        const id = row.dataset.historyId;
+        const open = row.querySelector('[data-act="open"]');
+        const done = row.querySelector('[data-act="done"]');
+        if (open) open.addEventListener('click', () => restoreItem(id));
+        if (done) done.addEventListener('click', () => markStatus(id, 'done'));
+      });
+    }
+
+    function agendaSectionHtml(title, items, key) {
+      if (!items.length) {
+        return '<div class="agenda-section"><h3>' + escapeHtml(title) + '</h3>' +
+               '<div class="empty-note">No items.</div></div>';
+      }
+      const rows = items.map(card => {
+        const conf = card.confidence || 'low';
+        const extras = renderAgendaExtras(key, card.extras || {});
+        return (
+          '<div class="agenda-card" data-history-id="' + escapeHtml(card.id || '') + '">' +
+            '<div class="activity-meta">' +
+              '<span class="pill">' + escapeHtml(card.intent || '') + '</span>' +
+              '<span class="conf-pill ' + conf + '">' + conf.toUpperCase() + '</span>' +
+              '<span class="activity-status">' + escapeHtml(card.status || 'saved') + '</span>' +
+            '</div>' +
+            '<div class="activity-title">' + escapeHtml(card.title || '') + '</div>' +
+            (extras ? '<div class="activity-extras">' + extras + '</div>' : '') +
+            '<div class="activity-buttons">' +
+              '<button data-act="open">Open</button>' +
+              '<button data-act="done">Mark done</button>' +
+            '</div>' +
+          '</div>'
+        );
+      }).join('');
+      return '<div class="agenda-section"><h3>' + escapeHtml(title) + '</h3>' + rows + '</div>';
+    }
+
+    function renderAgendaExtras(key, extras) {
+      if (key === 'study_blocks' && extras.blocks && extras.blocks.length) {
+        return '<ul>' + extras.blocks.map(b => '<li>' + escapeHtml(b) + '</li>').join('') + '</ul>';
+      }
+      if (key === 'assignment_tasks' && extras.checklist && extras.checklist.length) {
+        return '<ul>' + extras.checklist.map(b => '<li>' + escapeHtml(b) + '</li>').join('') + '</ul>';
+      }
+      if (key === 'saved_drafts' && (extras.subject || extras.tone)) {
+        return 'Subject: ' + escapeHtml(extras.subject || '—') +
+               ' · Tone: ' + escapeHtml(extras.tone || '—');
+      }
+      if (key === 'resources' && extras.resources && extras.resources.length) {
+        return '<ul>' + extras.resources.map(r =>
+          '<li>' + escapeHtml((r && r.label) || '') + '</li>'
+        ).join('') + '</ul>';
+      }
+      return '';
+    }
+
+    // ── Init ──────────────────────────────────────────────
+    applyMode(STATE.mode);
+    applySection(STATE.section);
+    loadStatus();
+    loadLatest();
+    loadActivity();
+  </script>
+
+</body>
+</html>
