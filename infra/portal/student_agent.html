@@ -195,6 +195,72 @@
       line-height: 1.4;
     }
 
+    /* ── Dashboard hero card (first-time student CTA) ──────── */
+    .hero-card {
+      background: linear-gradient(135deg,
+                  rgba(167,139,250,0.18) 0%,
+                  rgba(99,102,241,0.10) 100%);
+      border: 1px solid rgba(167,139,250,0.35);
+      border-radius: 14px;
+      padding: 1.2rem 1.3rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .hero-card .hero-text { flex: 1; min-width: 240px; }
+    .hero-card .hero-title {
+      font-size: 1.05rem; font-weight: 700; color: var(--text);
+      margin-bottom: 0.3rem;
+    }
+    .hero-card .hero-sub {
+      font-size: 0.85rem; color: var(--muted); line-height: 1.5;
+    }
+    .hero-card .cta {
+      background: var(--accent); color: var(--bg-page);
+      border: none; padding: 0.6rem 1.2rem; border-radius: 8px;
+      font: inherit; font-size: 0.86rem; font-weight: 700;
+      cursor: pointer; white-space: nowrap;
+    }
+    .hero-card .cta:hover { opacity: 0.9; }
+
+    /* ── System health (collapsed status chips) ────────────── */
+    .system-health {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.18rem 0.8rem;
+    }
+    .system-health[open] {
+      border-radius: 12px;
+      padding: 0.5rem 0.85rem;
+    }
+    .system-health summary {
+      cursor: pointer;
+      font-size: 0.74rem;
+      color: var(--muted);
+      list-style: none;
+      user-select: none;
+      display: inline-flex; align-items: center; gap: 0.35rem;
+    }
+    .system-health summary::-webkit-details-marker { display: none; }
+    .system-health summary::before {
+      content: "▸"; font-size: 0.7rem; color: var(--faint);
+      transition: transform 0.15s ease;
+    }
+    .system-health[open] summary::before { content: "▾"; }
+    .system-health .chips { margin-top: 0.5rem; }
+
+    /* ── Friendly empty-state ──────────────────────────────── */
+    .empty-friendly {
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.5;
+      padding: 0.6rem 0;
+      font-style: normal;
+    }
+
     /* ── Show Evidence button ──────────────────────────────── */
     .show-evidence-btn {
       background: var(--bg-card);
@@ -649,12 +715,15 @@
       <header class="main-header">
         <div class="page-title" id="page-title">Dashboard</div>
         <div class="header-spacer"></div>
-        <div class="chips" id="chips">
-          <span class="chip" id="chip-footprints"><span class="dot"></span>Footprints</span>
-          <span class="chip" id="chip-chroma"><span class="dot"></span>Chroma memory</span>
-          <span class="chip" id="chip-ontology"><span class="dot"></span>Ontology</span>
-          <span class="chip" id="chip-gates"><span class="dot"></span>Gate validation</span>
-        </div>
+        <details class="system-health">
+          <summary>System health</summary>
+          <div class="chips" id="chips">
+            <span class="chip" id="chip-footprints"><span class="dot"></span>Footprints</span>
+            <span class="chip" id="chip-chroma"><span class="dot"></span>Chroma memory</span>
+            <span class="chip" id="chip-ontology"><span class="dot"></span>Ontology</span>
+            <span class="chip" id="chip-gates"><span class="dot"></span>Gate validation</span>
+          </div>
+        </details>
         <button type="button" class="legacy-link" id="clear-history-btn"
                 title="Clear stored workspace history">Clear workspace history</button>
         <a class="legacy-link" href="/lumi_legacy.html">Open legacy ↗</a>
@@ -668,6 +737,17 @@
 
       <!-- ── DASHBOARD ─────────────────────────────────── -->
       <div data-when="dashboard">
+        <div class="hero-card" id="dashboard-hero">
+          <div class="hero-text">
+            <div class="hero-title">Start your first task</div>
+            <div class="hero-sub">
+              Create a study plan, prepare for an exam, get assignment help,
+              draft an email, review course memory, or find resources.
+            </div>
+          </div>
+          <button type="button" class="cta" id="hero-start-btn">Start New Task</button>
+        </div>
+
         <div class="summary-cards">
           <div class="summary-card">
             <div class="label">Today</div>
@@ -688,14 +768,14 @@
 
         <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;">
           <button class="show-evidence-btn" data-act="show-evidence">
-            🔎 Show Evidence
+            📎 View sources / Show Evidence
           </button>
         </div>
 
         <section class="panel" id="dashboard-panel">
           <h2>Agenda &amp; Today</h2>
           <div class="panel-body" id="dashboard-body">
-            <div class="empty-note">Loading agenda…</div>
+            <div class="empty-friendly">No tasks yet. Start with New Task.</div>
           </div>
         </section>
       </div>
@@ -811,7 +891,7 @@
         <section class="panel" id="activity-story-section">
           <h2>Activity Story</h2>
           <div class="panel-body" id="activity-story-body" data-activity-host>
-            <div class="empty-note">Your asked questions, plans, and drafts will appear here.</div>
+            <div class="empty-friendly">No activity yet. Your created plans, drafts, and study tasks will appear here.</div>
           </div>
         </section>
       </div>
@@ -872,7 +952,7 @@
         <button class="link-btn" id="activity-view-all">View all →</button>
       </div>
       <div id="activity-story-body-rc" data-activity-host data-limit="5">
-        <div class="empty-note">Recent activity will appear here.</div>
+        <div class="empty-friendly">No activity yet. Your recent work will show up here.</div>
       </div>
     </aside>
 
@@ -1050,6 +1130,12 @@
     el('activity-view-all').addEventListener('click', () => {
       applySection('activity');
     });
+
+    // ── Dashboard hero CTA → New Task ──────────────────────
+    const heroBtn = el('hero-start-btn');
+    if (heroBtn) {
+      heroBtn.addEventListener('click', () => applySection('new_task'));
+    }
 
     // ── Status chips on load ───────────────────────────────
     async function loadStatus() {

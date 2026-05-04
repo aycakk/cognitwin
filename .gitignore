@@ -53,3 +53,16 @@ models/scrum_model/*
 *.safetensors
 *.bin
 training_args.bin
+
+# Runtime live footprint events (PII-masked, regenerated per session)
+src/data/masked/footprints_live.jsonl
+
+# Runtime sprint state, backups, history, and agent storage
+data/sprint_state.backup.json
+data/sprint_state.json.bak-*
+data/sprint_history.json
+data/student_agent_history.json
+data/student_notes.json
+data/student/profile.json
+data/sprints/state/*.json
+data/*.bak-*
