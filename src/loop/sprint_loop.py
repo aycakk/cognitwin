@@ -29,10 +29,48 @@ Reuse
 from __future__ import annotations
 
 import logging
+import os
 import re as _re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+
+# HUMAN_TASK_REVIEW_MODE — controls task-level story acceptance.
+#
+#   False (default) — PO Agent reviews every task after gates pass.
+#                     accept  → agent_accepted → Done
+#                     reject  → Developer retry → blocked
+#                     Tasks never sit in waiting_review during normal execution.
+#
+#   True  (debug)   — Gate PASS → waiting_review → Human Supervisor acts.
+#                     Set HUMAN_TASK_REVIEW_MODE=true in the environment.
+#                     For experiments and manual inspection only.
+#
+# Human involvement in the sprint is limited to the Sprint Review stage (end of sprint).
+def _resolve_human_task_review_mode() -> bool:
+    """Return True only when HUMAN_TASK_REVIEW_MODE=true is set explicitly.
+
+    AUTO_PO_ACCEPT is deprecated and ignored.  Setting it will emit a warning
+    so operators know to migrate, but it will NOT enable task-level human review.
+    """
+    raw = os.getenv("HUMAN_TASK_REVIEW_MODE", "").strip().lower()
+    if raw in ("true", "1", "yes"):
+        return True
+    if raw in ("false", "0", "no"):
+        return False
+    # Warn about deprecated flag but do NOT honour it.
+    if os.getenv("AUTO_PO_ACCEPT", "").strip():
+        logger.warning(
+            "sprint_loop: AUTO_PO_ACCEPT is deprecated and has no effect. "
+            "Use HUMAN_TASK_REVIEW_MODE=true to enable task-level human review."
+        )
+    return False  # default: PO Agent handles story acceptance, no human task review
+
+
+_HUMAN_TASK_REVIEW_MODE: bool = _resolve_human_task_review_mode()
+# Aliases kept for external callers that import the old names.
+_ACCEPTANCE_MODE: str  = "human_required" if _HUMAN_TASK_REVIEW_MODE else "supervised"
+_AUTO_PO_ACCEPT:  bool = not _HUMAN_TASK_REVIEW_MODE
 
 from src.agents.composer_orchestrator import (
     ComposerOrchestrator,
@@ -44,6 +82,7 @@ from src.agents.po_llm_agent import POLLMAgent
 from src.core.schemas import AgentTask, AgentRole
 from src.gates.evaluator import evaluate_all_gates
 from src.gates.gate_result import build_gate_result
+from src.loop.sprint_compliance import validate_sprint_compliance
 from src.memory.sprint_memory_store import SprintMemoryStore
 from src.pipeline.scrum_team.sprint_state_store import SprintStateStore
 
@@ -65,28 +104,27 @@ _SCOPE_STOP_WORDS: frozenset[str] = frozenset({
 # Domain keyword sets — a story using any of these is ONLY in-scope when the
 # product goal also mentions at least one term from the same set.
 _GATED_DOMAINS: tuple[frozenset[str], ...] = (
-    frozenset({                                            # auth / identity
-        "login", "logout", "register", "signup", "password",
-        "authentication", "credential", "oauth", "jwt",
-        "session", "profile", "account",
-    }),
     frozenset({                                            # infra / devops
-        "docker", "kubernetes", "nginx", "devops",
-        "cicd", "pipeline", "migration",
+        "kubernetes", "devops", "cicd", "terraform",
     }),
     frozenset({                                            # payments / billing
-        "payment", "checkout", "stripe", "invoice",
-        "billing", "subscription", "pricing",
+        "stripe", "invoice", "billing", "subscription",
+    }),
+    frozenset({                                            # backend / server-side API
+        # Reject stories whose dominant subject is server-side infra when the goal
+        # is frontend-only.  Only use unambiguous infrastructure nouns; avoid auth
+        # terms (jwt, session) because they legitimately appear in frontend stories.
+        "endpoint", "persistence", "backend",
+        "postgres", "mysql", "sqlite", "mongodb",
     }),
 )
 
 
 def _story_aligns_with_goal(story: dict, goal: str) -> bool:
-    """Return False when the story is clearly off-scope for the product goal.
-
-    Two checks:
-    1. Domain gate — story uses auth/infra/payment terms the goal does not.
-    2. Keyword overlap — story shares ≥1 content word with the goal.
+    """Permissive scope check: only reject stories whose dominant subject is
+    a clearly unrelated technical domain (devops, billing) the goal never
+    mentions. Keyword-overlap rejection has been removed — the PO's review
+    step is the proper place to reject off-topic work.
     """
     def _words(text: str) -> frozenset[str]:
         return frozenset(_re.findall(r"\b[a-z]{3,}\b", (text or "").lower()))
@@ -99,18 +137,13 @@ def _story_aligns_with_goal(story: dict, goal: str) -> bool:
             story.get("epic", ""),
         ])
     )
-
-    # 1. Domain gate
     for term_set in _GATED_DOMAINS:
         if story_words & term_set and not (goal_words & term_set):
+            logger.warning(
+                "sprint_loop: story off-domain (gated terms %s): %r",
+                story_words & term_set, story.get("title", "?")[:60],
+            )
             return False
-
-    # 2. Keyword overlap — at least one shared content word
-    goal_content  = goal_words  - _SCOPE_STOP_WORDS
-    story_content = story_words - _SCOPE_STOP_WORDS
-    if goal_content and story_content and not (goal_content & story_content):
-        return False
-
     return True
 
 
@@ -127,6 +160,7 @@ class SprintResult:
     total_steps:       int   = 0
     avg_confidence:    float = 0.0
     summary:           str   = ""
+    agile_compliance:  dict | None = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -195,14 +229,15 @@ def _format_summary(
 
 
 def _persist_and_build_result(
-    sprint_id:    str,
-    goal:         str,
-    completed:    list[dict],
-    blocked:      list[dict],
-    steps:        int,
-    conf_scores:  list[float],
-    memory_store: SprintMemoryStore,
-    prefix:       str = "",
+    sprint_id:        str,
+    goal:             str,
+    completed:        list[dict],
+    blocked:          list[dict],
+    steps:            int,
+    conf_scores:      list[float],
+    memory_store:     SprintMemoryStore,
+    prefix:           str = "",
+    agile_compliance: dict | None = None,
 ) -> SprintResult:
     avg_conf = round(sum(conf_scores) / len(conf_scores), 2) if conf_scores else 0.0
 
@@ -224,6 +259,7 @@ def _persist_and_build_result(
         total_steps=steps,
         avg_confidence=avg_conf,
         summary=summary,
+        agile_compliance=agile_compliance,
     )
 
 
@@ -231,7 +267,12 @@ def _persist_and_build_result(
 #  Public entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
+def run_sprint(
+    goal: str,
+    sprint_id: str | None = None,
+    event_callback=None,  # Optional[Callable[[str, str, str, Optional[str]], None]]
+    state_store: SprintStateStore | None = None,
+) -> SprintResult:
     """
     Run a single autonomous sprint from a high-level goal string.
 
@@ -251,18 +292,28 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
         Summary of what was completed, what was blocked, step count, and
         average gate confidence.
     """
+    # Shorthand so we don't repeat None-guard throughout
+    def _emit(agent: str, etype: str, message: str, task_id=None) -> None:
+        if event_callback is not None:
+            try:
+                event_callback(agent, etype, message, task_id)
+            except Exception:
+                pass  # never let event emission crash the sprint
+
     # Lazy import — avoids pulling ollama into the module namespace at import time
     global _process_developer_message
     if _process_developer_message is None:
         from src.pipeline.developer_runner import _process_developer_message as _pdm  # noqa: PLC0415
         _process_developer_message = _pdm
 
-    state_store  = SprintStateStore()
+    sprint_id  = sprint_id or f"sprint-auto-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
+    if state_store is None:
+        state_store = SprintStateStore.for_sprint(sprint_id)
     memory_store = SprintMemoryStore()
     po_agent     = POLLMAgent()
     orchestrator = ComposerOrchestrator(state_store)
 
-    sprint_id  = sprint_id or f"sprint-auto-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     step_count = 0
 
     completed_stories: list[dict[str, Any]] = []
@@ -270,10 +321,12 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
     conf_scores:       list[float]          = []
 
     logger.info("sprint_loop: ── START sprint=%s goal=%r", sprint_id, goal[:60])
+    _emit("system", "status", f"Sprint started — goal: {goal[:120]}")
 
     # ─────────────────────────────────────────────────────────────────
     #  PHASE 1 — ANALYZE
     # ─────────────────────────────────────────────────────────────────
+    _emit("po", "thought", f"Analyzing product goal: {goal[:100]}")
     history_context = memory_store.get_history_context()
     analysis        = orchestrator.analyze(goal, history_context)
 
@@ -302,6 +355,7 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
     # ─────────────────────────────────────────────────────────────────
     #  PHASE 2 — PLAN
     # ─────────────────────────────────────────────────────────────────
+    _emit("po", "action", "Decomposing goal into epics and user stories")
     logger.info("sprint_loop: PLAN — decomposing goal into epics")
     # Inject retrospective actions and roadmap into the PO planning context
     # so the next sprint actually learns from the previous one.
@@ -324,6 +378,7 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
     plan_context = "\n\n".join(extra_context_parts)
     epics = po_agent.decompose_goal(goal, plan_context)
     step_count += 1
+    _emit("po", "action", f"Decomposed into {len(epics)} epic(s) — generating user stories")
 
     logger.info("sprint_loop: PLAN — %d epics; generating stories", len(epics))
 
@@ -337,6 +392,7 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
 
     stories = po_agent.generate_stories(epics)
     step_count += 1
+    _emit("po", "action", f"{len(stories)} user story/stories generated — adding to backlog")
 
     logger.info("sprint_loop: PLAN — %d stories generated", len(stories))
 
@@ -359,11 +415,14 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
                 "sprint_loop: PLAN — story rejected (out of scope): %r",
                 story_data.get("title", "?")[:60],
             )
+            _emit("po", "action", f"Story rejected (out of scope): {story_data.get('title', '?')[:60]}")
             continue  # do not execute; do not count as a planning step
         story_ids.append(sid)
+        _emit("po", "action", f"Backlog: [{sid}] {story_data.get('title', 'Untitled')[:70]}")
         step_count += 1
 
     logger.info("sprint_loop: PLAN done — %d in-scope stories queued (step=%d)", len(story_ids), step_count)
+    _emit("sm", "ceremony", f"Sprint Planning — {len(story_ids)} story/stories queued for this sprint")
 
     # Prefer pre-existing backlog items whose target_sprint matches this
     # sprint id (roadmap-driven planning). When no such items exist,
@@ -417,6 +476,8 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
         state_store.assign_task(task_id, "developer-default")
         state_store.start_task(task_id)
         step_count += 1
+        _emit("sm", "action", f"Task {task_id} assigned — Developer starting work", task_id)
+        _emit("dev", "thought", f"Working on [{task_id}]: {story_title[:70]}", task_id)
 
         dev_query      = _build_dev_query(story, task_id)
         sprint_context = state_store.read_context_block()
@@ -427,9 +488,10 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
         )
 
         # ── Reroute loop ──────────────────────────────────────────────
-        task_completed = False
-        final_result   = ""
-        reroute_count  = 0
+        task_completed       = False
+        final_result         = ""
+        reroute_count        = 0
+        _agent_review_result: dict | None = None
 
         while reroute_count <= MAX_REROUTE_PER_TASK and step_count < MAX_STEPS_PER_SPRINT:
             dev_task = AgentTask(
@@ -462,25 +524,38 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
             )
 
             if gate_report["conjunction"]:
+                _emit("gate", "gate", f"All gates passed for {task_id}", task_id)
                 # All gates passed — mark AC validated so complete_task allows done
                 if story and story.get("acceptance_criteria"):
                     state_store.mark_ac_validated(task_id)
 
-                # PO review: gate-pass alone is not acceptance.
-                # The PO must confirm the task output evidences the criteria.
-                review = po_agent.review_story(
+                # Gate passed.
+                if _HUMAN_TASK_REVIEW_MODE:
+                    # Debug / experiment mode: route to Human Supervisor.
+                    _emit("po", "thought", f"Task {task_id} passed gates — awaiting Human Supervisor review [debug mode]", task_id)
+                    conf_scores.append(conf)
+                    task_completed = True
+                    final_result   = response.draft
+                    break
+
+                # Default: PO Agent reviews immediately — no human involvement.
+                _emit("po", "thought", f"Product Owner Agent reviewing output for {task_id}", task_id)
+                _agent_review_result = po_agent.review_story(
                     story               = story or {},
                     task_output         = response.draft,
                     acceptance_criteria = story.get("acceptance_criteria", []) if story else [],
                     sprint_goal         = state_store.get_sprint_goal(),
                 )
+                review = _agent_review_result
                 if review.get("accepted"):
+                    _emit("po", "action", f"Product Owner Agent accepted {task_id}", task_id)
                     conf_scores.append(conf)
                     task_completed = True
                     final_result   = response.draft
                     break
 
                 # PO rejected — route back to Developer with the rejection reason.
+                _emit("po", "action", f"Product Owner Agent rejected {task_id}: {review.get('reason', 'AC not met')[:80]}", task_id)
                 if reroute_count >= MAX_REROUTE_PER_TASK:
                     # Budget exhausted — treat as escalation
                     if story_id:
@@ -497,6 +572,10 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
 
                 reroute_count += 1
                 step_count    += 1
+                try:
+                    state_store.set_retry_count(task_id, reroute_count)
+                except Exception:
+                    pass
                 missing = review.get("missing_criteria") or []
                 dev_query = dev_query + (
                     f"\n[PO REJECTED — {review.get('reason', 'AC not met')}]"
@@ -508,6 +587,45 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
                 )
                 continue
 
+            # Gate failed — build human-readable detail records.
+            failing = [gid for gid, info in gate_report["gates"].items() if not info.get("pass", True)]
+            from src.gates.gate_result import build_gate_result as _bgr_detail  # noqa: PLC0415
+            _GATE_TITLES = {
+                "A1": "REDO audit cycle integrity",
+                "C1": "PII leak detection",
+                "C2": "Vector memory grounding",
+                "C2_DEV": "Codebase grounding",
+                "C3": "Ontology compliance",
+                "C4": "Hallucination check",
+                "C5": "Role permission scope",
+                "C6": "Anti-sycophancy",
+                "C7": "Blindspot disclosure",
+                "C8": "Acceptance criteria coverage",
+            }
+            gate_detail_items: list[dict] = []
+            for gid in failing[:5]:
+                info = gate_report["gates"].get(gid, {})
+                evidence = (info.get("evidence") or "")[:300]
+                gr = _bgr_detail(gid, False, evidence)
+                gate_detail_items.append({
+                    "gate_id":          gid,
+                    "title":            _GATE_TITLES.get(gid, gid),
+                    "status":           "fail",
+                    "reason":           evidence or "Gate evaluation failed.",
+                    "suggested_action": gr.revision_hint,
+                })
+            try:
+                state_store.attach_gate_failures(task_id, gate_detail_items)
+            except Exception:
+                pass
+            _emit(
+                "gate", "gate",
+                f"Gate(s) failed for {task_id}: " + ", ".join(
+                    f"{d['gate_id']} — {d['title']}" for d in gate_detail_items[:3]
+                ),
+                task_id,
+            )
+
             # Ask orchestrator what to do with the failure
             reroute = orchestrator.reroute(story_id, gate_report, reroute_count)
             logger.info(
@@ -518,6 +636,10 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
             if reroute.action == RerouteAction.RETRY:
                 reroute_count += 1
                 step_count    += 1
+                try:
+                    state_store.set_retry_count(task_id, reroute_count)
+                except Exception:
+                    pass
                 # Inject revision hint into the query for the next attempt
                 failing = [
                     gid for gid, info in gate_report["gates"].items()
@@ -548,6 +670,15 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
 
         # ── Finalise task state ───────────────────────────────────────
         if task_completed:
+            # Write any code files produced by the developer
+            try:
+                from src.loop.sprint_files import write_developer_files  # noqa: PLC0415
+                written = write_developer_files(sprint_id, task_id, final_result)
+                if written:
+                    _emit("dev", "artifact", f"Generated files: {', '.join(written)}", task_id)
+            except Exception as _fe:
+                logger.warning("sprint_loop: sprint_files write failed: %s", _fe)
+
             ok = state_store.complete_task(
                 task_id,
                 final_result[:500],
@@ -566,17 +697,32 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
                     "title":    story_title,
                     "reason":   "Acceptance criteria not validated",
                 })
+                _emit("dev", "action", f"Task {task_id} blocked — acceptance criteria not validated", task_id)
             else:
-                # PO already accepted inside the loop — finalise increment.
-                if story_id:
-                    state_store.accept_story(story_id)
-                    state_store.add_to_increment(task_id)
-                completed_stories.append({
-                    "story_id": story_id,
-                    "task_id":  task_id,
-                    "title":    story_title,
-                })
-                logger.info("sprint_loop: ✓ completed story=%s task=%s", story_id, task_id)
+                if _HUMAN_TASK_REVIEW_MODE:
+                    # Debug mode: complete_task already set po_status="ready_for_review";
+                    # the board shows this in "Waiting Review" until a human acts.
+                    _emit("dev", "artifact", f"Task {task_id} in Waiting Review — Human Supervisor review needed [debug mode]", task_id)
+                    logger.info("sprint_loop: ⏳ waiting_review story=%s task=%s (debug)", story_id, task_id)
+                else:
+                    # Default: PO Agent accepted inside the reroute loop — record and close.
+                    _rev = _agent_review_result or {}
+                    if story_id:
+                        state_store.apply_agent_review(
+                            task_id          = task_id,
+                            accepted         = True,
+                            reason           = _rev.get("reason", "All acceptance criteria evidenced in task output."),
+                            confidence       = _rev.get("confidence", 1.0),
+                            missing_criteria = _rev.get("missing_criteria", []),
+                        )
+                        state_store.add_to_increment(task_id)
+                    completed_stories.append({
+                        "story_id": story_id,
+                        "task_id":  task_id,
+                        "title":    story_title,
+                    })
+                    _emit("dev", "artifact", f"Task {task_id} done — Product Owner Agent accepted", task_id)
+                    logger.info("sprint_loop: ✓ completed story=%s task=%s", story_id, task_id)
 
         elif not any(b.get("story_id") == story_id for b in blocked_stories):
             # Reroute budget or step budget exhausted without an explicit ESCALATE
@@ -605,7 +751,79 @@ def run_sprint(goal: str, sprint_id: str | None = None) -> SprintResult:
         step_count, MAX_STEPS_PER_SPRINT,
     )
 
+    # Fallback artefact — guarantees cockpit Preview/Code panes always render
+    # something when developer output produced no parsable code blocks.
+    try:
+        from src.loop.sprint_files import (  # noqa: PLC0415
+            list_generated_files, write_fallback_artefact,
+        )
+        if not list_generated_files(sprint_id) and completed_stories:
+            accepted_payload = [
+                {
+                    "title": s.get("title", ""),
+                    "story_id": s.get("story_id", ""),
+                    "description": (state_store.get_story(s.get("story_id", "")) or {}).get("description", ""),
+                }
+                for s in completed_stories
+            ]
+            written = write_fallback_artefact(sprint_id, goal, accepted_payload)
+            if written:
+                _emit("dev", "artifact", f"Fallback artefact: {', '.join(written)}")
+    except Exception as _fe:
+        logger.warning("sprint_loop: fallback artefact failed: %s", _fe)
+
+    # Canonical summary — read from state store so the event stream message
+    # matches the board API exactly (both use compute_summary on the same tasks).
+    from src.loop.sprint_phase import derive_phase      # noqa: PLC0415
+    from src.loop.sprint_summary import compute_summary  # noqa: PLC0415
+
+    try:
+        from src.loop.sprint_files import list_generated_files as _lgf  # noqa: PLC0415
+        _files_n = len(_lgf(sprint_id))
+    except Exception:
+        _files_n = 0
+
+    _tasks_now = state_store.load().get("tasks", [])
+    _cs = compute_summary(_tasks_now, generated_files_count=_files_n)
+    _done_n = _cs["done_tasks"]
+    _wr_n   = _cs["waiting_review_tasks"]
+    _blk_n  = _cs["blocked_tasks"]
+    _conf_n = _cs["confidence"]
+
+    final_counts = {
+        "total_tasks":          _cs["total_tasks"],
+        "done_tasks":           _done_n,
+        "blocked_tasks":        _blk_n,
+        "in_progress_tasks":    _cs.get("in_progress_tasks", 0),
+        "waiting_review_tasks": _wr_n,
+    }
+    final_phase = derive_phase(final_counts, run_finished=True)
+
+    if final_phase == "complete":
+        _emit("sm", "ceremony", f"Sprint Review — {_done_n} done, {_blk_n} blocked")
+        _emit("system", "status", f"Sprint complete — confidence {_conf_n}%")
+    elif final_phase == "blocked":
+        _emit("system", "status",
+              f"Sprint blocked — 0 stories accepted, {_blk_n} blocked — confidence {_conf_n}%")
+    else:  # waiting_sprint_review (partial increment or gate-pass tasks in waiting_review)
+        _emit("sm", "ceremony",
+              f"Sprint Review required — {_done_n} done, {_wr_n} waiting review, "
+              f"{_blk_n} blocked (Partial Increment)")
+        _emit("system", "status",
+              f"Sprint review required — partial increment ({_done_n} done, "
+              f"{_wr_n} waiting review, {_blk_n} blocked) — confidence {_conf_n}%")
+
+    compliance = validate_sprint_compliance(state_store)
+    _emit(
+        "sm",
+        "gate",
+        f"C3_AGILE (advisory, non-blocking): "
+        f"{'PASS' if compliance.get('gate_pass') else 'FAIL'} — "
+        f"{str(compliance.get('evidence', ''))[:120]}",
+    )
+
     return _persist_and_build_result(
         sprint_id, goal, completed_stories, blocked_stories,
         step_count, conf_scores, memory_store,
+        agile_compliance=compliance,
     )

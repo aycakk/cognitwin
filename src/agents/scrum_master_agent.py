@@ -17,9 +17,54 @@ import re
 from datetime import date, datetime
 from typing import Any
 
+from src.agents.capability_manifest import CapabilityManifest
 from src.pipeline.scrum_team.sprint_state_store import SprintStateStore
 
 logger = logging.getLogger(__name__)
+
+
+_SM_MANIFEST = CapabilityManifest(
+    role="ScrumMasterAgent",
+    intents=(
+        "assign",
+        "blockers",
+        "sprint_status",
+        "standup",
+        "retrospective",
+        "review",
+        "delegate",
+        "promote_story",
+        "add_task",
+        "update_task",
+        "set_goal",
+        "sprint_planning",
+        "sprint_analysis",
+    ),
+    inputs=(
+        "sprint_goal",
+        "sprint_backlog",
+        "task_status",
+        "impediment",
+        "team_capacity",
+    ),
+    outputs=(
+        "standup_summary",
+        "impediment_action",
+        "retrospective_action",
+        "sprint_health_signal",
+        "task_assignment",
+    ),
+    gates_consumed=("C1", "C4", "C5", "C7", "A1"),
+    ontology_classes_referenced=(
+        "ScrumMaster",
+        "SprintPlanning",
+        "DailyScrum",
+        "SprintReview",
+        "SprintRetrospective",
+        "Impediment",
+        "SprintGoal",
+    ),
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Intent detection — Turkish + English keywords
@@ -91,6 +136,10 @@ class ScrumMasterAgent:
 
     def __init__(self, state_store: SprintStateStore | None = None) -> None:
         self._store = state_store or SprintStateStore()
+
+    @classmethod
+    def capability_manifest(cls) -> CapabilityManifest:
+        return _SM_MANIFEST
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Public API (called by scrum_master_runner and external callers)

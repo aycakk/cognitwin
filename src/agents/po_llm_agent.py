@@ -21,11 +21,42 @@ import logging
 import re
 from typing import Any
 
+from src.agents.capability_manifest import CapabilityManifest
 from src.core.llm_config import DEFAULT_MODEL
 
 logger = logging.getLogger(__name__)
 
 _MODEL = DEFAULT_MODEL
+
+
+_POLLM_MANIFEST = CapabilityManifest(
+    role="POLLMAgent",
+    intents=(
+        "decompose_goal",
+        "generate_stories",
+        "review_story",
+    ),
+    inputs=(
+        "product_goal",
+        "sprint_goal",
+        "development_output",
+        "acceptance_criteria",
+    ),
+    outputs=(
+        "epic",
+        "user_story",
+        "acceptance_criteria",
+        "po_review_decision",
+    ),
+    gates_consumed=("C1", "C2", "C4", "C5", "C7", "A1"),
+    ontology_classes_referenced=(
+        "ProductOwner",
+        "ProductBacklog",
+        "BacklogItem",
+        "UserStory",
+        "AcceptanceCriteria",
+    ),
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  System prompts
@@ -39,6 +70,14 @@ STRICT RULES:
 - title: max 80 characters
 - description: max 200 characters
 - 1 to 4 items total
+
+SCOPE DISCIPLINE — CRITICAL:
+- Only create epics for capabilities the goal explicitly mentions or directly implies.
+- Do NOT invent backend API endpoints, database schemas, server-side services, JWT/OAuth,
+  or infrastructure unless the goal explicitly says "API", "backend", "database", or "server".
+- If the goal says "web form", deliver HTML/CSS/JS forms only — no backend.
+- If the goal says "validation", deliver client-side validation only unless server-side is named.
+- Fewer focused epics are better than many speculative ones.
 
 EXAMPLE:
 [
@@ -60,6 +99,13 @@ STRICT RULES:
   "deployment_package": short release package name, max 40 chars (string, can be empty "")
 - 1 to 6 items total across all epics.
 - acceptance_criteria MUST NOT be an empty list. Every story needs at least 2 criteria.
+
+SCOPE DISCIPLINE — CRITICAL:
+- Only generate stories for what the user explicitly asked for.
+- No API endpoints, no database persistence, no server-side code, no JWT/OAuth/sessions
+  unless the goal explicitly says "API", "backend", "database", "server", or "auth service".
+- "web form" → HTML form + CSS + JS validation only. No POST endpoint. No DB insert.
+- Deduplicate: if two stories cover the same user-visible behaviour, merge them into one.
 
 EXAMPLE:
 [
@@ -133,6 +179,10 @@ class POLLMAgent:
 
     def __init__(self, model: str = _MODEL) -> None:
         self._model = model
+
+    @classmethod
+    def capability_manifest(cls) -> CapabilityManifest:
+        return _POLLM_MANIFEST
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Public API
@@ -256,6 +306,9 @@ class POLLMAgent:
         logger.warning("po_llm: using fallback story generation (%d epics)", len(epics))
         return self._fallback_stories(epics)
 
+    # Confidence below this threshold routes an agent-accepted task to human review.
+    HUMAN_REVIEW_CONFIDENCE_THRESHOLD: float = 0.7
+
     def review_story(
         self,
         story:               dict[str, Any],
@@ -268,58 +321,70 @@ class POLLMAgent:
         Returns
         -------
         {
-          "accepted":          bool,
-          "reason":            str,
-          "missing_criteria":  list[str],
+          "accepted":           bool,
+          "reason":             str,
+          "missing_criteria":   list[str],
+          "confidence":         float,   # 0.0–1.0
+          "needs_human_review": bool,    # True when accepted but confidence is low
         }
 
-        Deterministic implementation (no LLM):
-          - If there are no acceptance_criteria, the story is auto-accepted
-            (legacy behaviour — matches complete_task() empty-AC bypass).
-          - Otherwise, each criterion must share at least one significant
-            keyword (≥4 chars, alphanumeric) with the task output, case-
-            insensitive. Criteria that fail are listed in missing_criteria.
-          - Rejection reason is a short, human-readable summary.
+        Confidence scoring:
+          - 1.0  all AC keywords evidenced in output
+          - 0.5  no AC defined (auto-accept, cannot verify)
+          - 0.0  output empty, or task rejected
+          - proportional when some AC pass and some fail (rejection case only)
 
-        A deterministic check keeps the acceptance step auditable and
-        reproducible; an LLM-backed variant can subclass and override.
+        needs_human_review is True when accepted=True but confidence is below
+        HUMAN_REVIEW_CONFIDENCE_THRESHOLD (default 0.7). The sprint loop will
+        then route the task to the human review queue instead of auto-completing.
         """
         ac = [c for c in (acceptance_criteria or story.get("acceptance_criteria") or []) if isinstance(c, str) and c.strip()]
         if not ac:
             return {
-                "accepted":         True,
-                "reason":           "No acceptance criteria defined (legacy auto-accept).",
-                "missing_criteria": [],
+                "accepted":           True,
+                "reason":             "No acceptance criteria defined — auto-accepted, cannot verify.",
+                "missing_criteria":   [],
+                "confidence":         0.5,
+                "needs_human_review": True,
             }
 
         output_lc = (task_output or "").lower()
         if not output_lc.strip():
             return {
-                "accepted":         False,
-                "reason":           "Task output is empty.",
-                "missing_criteria": list(ac),
+                "accepted":           False,
+                "reason":             "Task output is empty.",
+                "missing_criteria":   list(ac),
+                "confidence":         0.0,
+                "needs_human_review": False,
             }
 
         missing: list[str] = []
         for criterion in ac:
             words = [w for w in re.findall(r"[A-Za-z0-9]+", criterion.lower()) if len(w) >= 4]
             if not words:
-                # No significant words to match — skip like C8 does
                 continue
             if not any(w in output_lc for w in words):
                 missing.append(criterion)
 
         if missing:
+            passed = len(ac) - len(missing)
+            confidence = round(passed / len(ac), 2) if ac else 0.0
             return {
-                "accepted":         False,
-                "reason":           f"{len(missing)} acceptance criterion(a) not evidenced in task output.",
-                "missing_criteria": missing,
+                "accepted":           False,
+                "reason":             f"{len(missing)} acceptance criterion(a) not evidenced in task output.",
+                "missing_criteria":   missing,
+                "confidence":         confidence,
+                "needs_human_review": False,
             }
 
+        confidence = 1.0
+        needs_human = confidence < self.HUMAN_REVIEW_CONFIDENCE_THRESHOLD
         return {
-            "accepted":         True,
-            "reason":           "All acceptance criteria evidenced in task output.",
-            "missing_criteria": [],
+            "accepted":           True,
+            "reason":             "All acceptance criteria evidenced in task output.",
+            "missing_criteria":   [],
+            "confidence":         confidence,
+            "needs_human_review": needs_human,
         }
 
     def _fallback_stories(

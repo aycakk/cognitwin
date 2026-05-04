@@ -1,0 +1,15 @@
+{
+  "sprint_id": "sprint-scope-test",
+  "goal": "Build a simple notes app where users can create, edit, delete, and search notes.",
+  "accepted_stories": [
+    {
+      "title": "User can create a note",
+      "story_id": "S-001"
+    },
+    {
+      "title": "User can log in with email and password",
+      "story_id": "S-002"
+    }
+  ],
+  "note": "Fallback artefact generated because developer output contained no parsable code blocks."
+}

@@ -97,7 +97,10 @@ services:
     ports:
       - "${PORTAL_PORT:-8080}:80"
     volumes:
-      - ./infra/portal/index.html:/usr/share/nginx/html/index.html:ro
+      # Mount the whole portal directory so newly-added pages
+      # (student_agent.html, lumi_legacy.html, future ones) are picked up
+      # without editing this file each time.
+      - ./infra/portal:/usr/share/nginx/html:ro
       - ./infra/portal/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/health"]

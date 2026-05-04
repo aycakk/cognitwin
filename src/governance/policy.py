@@ -72,15 +72,25 @@ GATE_POLICY: dict[str, list[str]] = {
     "ScrumMasterAgent": [
         # Rule-based deterministic agent — only hallucination guard needed.
         "C4",
+        # Phase 6: Scrum-shape contract — facilitates events and emits
+        # Sprint/Increment/Impediment artefacts. Safe when no agile_payload
+        # is supplied (gate returns "not applicable").
+        "C3_AGILE",
     ],
     "ProductOwnerAgent": [
         # Rule-based deterministic agent — same gate profile as ScrumMaster.
+        # C3_AGILE intentionally NOT added in Phase 6: the rule-based PO
+        # currently does not emit Scrum-shaped facilitation payloads;
+        # POLLMAgent is the LLM-backed PO that does.
         "C4",
     ],
     "POLLMAgent": [
         # LLM-backed PO used by the autonomous sprint loop.
         # Produces goal/story text — hallucination guard applies.
         "C4",
+        # Phase 6: Scrum-shape contract — emits SprintGoal / Increment /
+        # SprintReview-shaped output. Safe when no agile_payload is supplied.
+        "C3_AGILE",
     ],
 }
 

@@ -5,9 +5,44 @@ from dataclasses import dataclass
 from textwrap import dedent
 from typing import Callable, Iterable, Optional
 
+from src.agents.capability_manifest import CapabilityManifest
 from src.core.llm_config import DEFAULT_MODEL
 
 logger = logging.getLogger(__name__)
+
+
+_DEV_MANIFEST = CapabilityManifest(
+    role="DeveloperAgent",
+    intents=(
+        "process",
+        "build_role_packet",
+        "render_role_packet",
+        "build_agent_spec",
+        "generate_restructured_prompt",
+        "generate_execution_plan",
+    ),
+    inputs=(
+        "sprint_backlog_item",
+        "acceptance_criteria",
+        "technical_context",
+        "target_role",
+    ),
+    outputs=(
+        "implementation_artifact",
+        "execution_plan",
+        "product_increment_candidate",
+        "dod_evidence",
+        "role_packet",
+    ),
+    gates_consumed=("C1", "C2_DEV", "C4", "C5", "C8", "A1"),
+    ontology_classes_referenced=(
+        "Developer",
+        "SprintBacklog",
+        "ProductIncrement",
+        "DefinitionOfDone",
+        "AcceptanceCriteria",
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -66,6 +101,10 @@ class DeveloperAgent:
 
     def supported_roles(self) -> list[str]:
         return sorted(self._role_library.keys())
+
+    @classmethod
+    def capability_manifest(cls) -> CapabilityManifest:
+        return _DEV_MANIFEST
 
     # ------------------------------------------------------------------
     # LLM agent entry point

@@ -24,6 +24,7 @@ from src.gates.c8_acceptance_criteria import check_acceptance_criteria as _check
 from src.gates.c2_grounding import check_grounding as _check_c2
 from src.gates.c2_dev_grounding import check_dev_grounding as _check_c2_dev
 from src.gates.c3_ontology_compliance import check_ontology_compliance as _check_c3
+from src.gates.c3_agile_compliance import check_agile_compliance as _check_c3_agile
 from src.gates.c4_hallucination import check_hallucination as _check_c4
 from src.gates.c5_role_permission import check_role_permission as _check_c5
 from src.gates.c6_anti_sycophancy import check_anti_sycophancy as _check_c6
@@ -175,6 +176,17 @@ def gate_c3_ontology_compliance(draft: str) -> tuple[bool, str]:
     )
 
 
+def gate_c3_agile_compliance(agile_payload: dict | None) -> tuple[bool, str]:
+    """C3_AGILE — Ontology4Agile-backed Scrum-shape gate (Phase 5; inactive).
+
+    Wraps src.gates.c3_agile_compliance.check_agile_compliance. The gate
+    is invokable by name through the dispatch table in evaluate_all_gates,
+    but no role's GATE_POLICY currently includes 'C3_AGILE' — so this
+    function is dormant in production until Phase 6 wires it in.
+    """
+    return _check_c3_agile(agile_payload)
+
+
 def gate_c4_hallucination(draft: str) -> tuple[bool, str]:
     """C4 — No weight-only or hallucinatory claim markers.
 
@@ -274,6 +286,7 @@ def evaluate_all_gates(
     *,
     codebase_context: str = "",
     acceptance_criteria: list[str] | None = None,
+    agile_payload: dict | None = None,
 ) -> dict:
     """
     Execute the gate set defined in GATE_POLICY[agent_role] and return a
@@ -314,6 +327,8 @@ def evaluate_all_gates(
         _gate_dispatch["C2_DEV"] = gate_c2_dev_grounding(draft, codebase_context, ctx_empty)
     if "C3" in role_gates:
         _gate_dispatch["C3"] = gate_c3_ontology_compliance(draft)
+    if "C3_AGILE" in role_gates:
+        _gate_dispatch["C3_AGILE"] = gate_c3_agile_compliance(agile_payload)
     if "C4" in role_gates:
         _gate_dispatch["C4"] = gate_c4_hallucination(draft)
     if "C5" in role_gates:
@@ -353,6 +368,7 @@ def evaluate_all_gates_rich(
     *,
     codebase_context: str = "",
     acceptance_criteria: list[str] | None = None,
+    agile_payload: dict | None = None,
 ) -> dict:
     """
     Same as evaluate_all_gates() but attaches revision_hint and confidence_score
@@ -377,6 +393,7 @@ def evaluate_all_gates_rich(
         redo_log,
         codebase_context=codebase_context,
         acceptance_criteria=acceptance_criteria,
+        agile_payload=agile_payload,
     )
 
     enriched: dict[str, dict] = {}

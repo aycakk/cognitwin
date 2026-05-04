@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
+from typing import Optional
+
+from src.agents.capability_manifest import CapabilityManifest
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Ortak PII tarama pattern'leri — tüm agent'lar bu kapıyı kullanır
@@ -165,3 +168,18 @@ class BaseAgent(ABC):
             f"Query: {query[:80]}\n"
             "Resolution: No matching records found in memory.\n"
         )
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Phase 2: optional capability contract (no runtime wiring yet)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def capability_manifest(self) -> Optional[CapabilityManifest]:
+        return None
+
+    def record_decision(
+        self,
+        decision: str,
+        rationale: str,
+        evidence: Optional[dict] = None,
+    ) -> None:
+        return None

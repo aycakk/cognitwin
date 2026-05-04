@@ -21,9 +21,44 @@ import logging
 import re
 from typing import Any
 
+from src.agents.capability_manifest import CapabilityManifest
 from src.pipeline.scrum_team.sprint_state_store import SprintStateStore
 
 logger = logging.getLogger(__name__)
+
+
+_PO_MANIFEST = CapabilityManifest(
+    role="ProductOwnerAgent",
+    intents=(
+        "create_story",
+        "list_backlog",
+        "prioritize",
+        "define_criteria",
+        "accept_story",
+        "reject_story",
+        "backlog_status",
+        "review_completed",
+    ),
+    inputs=(
+        "product_goal",
+        "stakeholder_feedback",
+        "completed_story",
+        "acceptance_criteria",
+    ),
+    outputs=(
+        "product_backlog_item",
+        "ordered_backlog",
+        "po_review_decision",
+    ),
+    gates_consumed=("C1", "C4", "C5", "C7", "A1"),
+    ontology_classes_referenced=(
+        "ProductOwner",
+        "ProductBacklog",
+        "BacklogItem",
+        "SprintReview",
+        "ProductGoal",
+    ),
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Intent detection — Turkish + English keywords
@@ -82,6 +117,10 @@ class ProductOwnerAgent:
 
     def __init__(self, state_store: SprintStateStore | None = None) -> None:
         self._store = state_store or SprintStateStore()
+
+    @classmethod
+    def capability_manifest(cls) -> CapabilityManifest:
+        return _PO_MANIFEST
 
     # ─────────────────────────────────────────────────────────────────────────
     #  Public API

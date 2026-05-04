@@ -1,0 +1,23 @@
+{
+  "sprint_id": "sprint-notes-test",
+  "goal": "Build a simple notes app where users can create, edit, delete, and search notes.",
+  "accepted_stories": [
+    {
+      "title": "User can create a note",
+      "story_id": "S-001"
+    },
+    {
+      "title": "User can edit a note",
+      "story_id": "S-002"
+    },
+    {
+      "title": "User can delete a note",
+      "story_id": "S-003"
+    },
+    {
+      "title": "User can search notes",
+      "story_id": "S-004"
+    }
+  ],
+  "note": "Fallback artefact generated because developer output contained no parsable code blocks."
+}
